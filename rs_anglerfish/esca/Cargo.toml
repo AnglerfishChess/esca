@@ -1,0 +1,18 @@
+[package]
+name = "esca"
+version = "0.1.0"
+description = "A chess model that answers what is true about a position: variants, positions, games, and move text."
+keywords = ["chess", "chess960", "fen", "san", "position"]
+categories = ["games", "game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cozy-chess = "0.3.4"
+
+[dev-dependencies]
+proptest = "1"

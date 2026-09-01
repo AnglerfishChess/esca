@@ -65,7 +65,9 @@ pub enum CastlingOutput {
     /// `e1h1`. Correct in every variant.
     #[default]
     KingToRook,
-    /// `e1g1`. Classic geometry only.
+    /// `e1g1`. Classic geometry only, and `Chess960` writes king-to-rook
+    /// whatever the style asks for: a two-square destination there can be
+    /// another legal king move, or the king's own origin.
     KingTwoSquares,
 }
 
@@ -88,7 +90,7 @@ directly.
 
 ```rust
 pub enum Outcome {
-    Checkmate { winner: Color },
+    Checkmate { winner: Colour },
     Stalemate,
     InsufficientMaterial,
     SeventyFiveMoves,
@@ -116,16 +118,17 @@ impl Position {
     pub fn fen(&self) -> String;
     pub fn epd(&self) -> String;
 
-    pub fn side_to_move(&self) -> Color;
+    pub fn side_to_move(&self) -> Colour;
     pub fn piece_at(&self, sq: Square) -> Option<Piece>;
     pub fn by_role(&self, role: Role) -> SquareSet;
-    pub fn by_color(&self, color: Color) -> SquareSet;
+    pub fn by_colour(&self, colour: Colour) -> SquareSet;
     pub fn by_piece(&self, piece: Piece) -> SquareSet;
     pub fn occupied(&self) -> SquareSet;
-    pub fn king_of(&self, color: Color) -> Square;
+    pub fn king_of(&self, colour: Colour) -> Square;
 
     pub fn castling_rights(&self) -> CastlingRights;
     pub fn en_passant(&self) -> Option<Square>;
+    pub fn in_check(&self) -> bool;
     pub fn halfmove_clock(&self) -> u32;
     pub fn fullmove_number(&self) -> u32;
     /// False when the position came from a four-field FEN.
@@ -152,6 +155,10 @@ impl Position {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Key(u64);
 
+impl Key {
+    pub fn get(self) -> u64;
+}
+
 /// An evaluation of a position. Positive favours the side to move; `Mate(n)`
 /// is a forced mate in *n* moves, negative when it is against the side to move.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -162,9 +169,9 @@ pub enum Score { Cp(i32), Mate(i32) }
 pub struct CastlingRights { /* [[Option<File>; 2]; 2] */ }
 
 impl CastlingRights {
-    pub fn short(&self, color: Color) -> Option<File>;
-    pub fn long(&self, color: Color) -> Option<File>;
-    pub fn any(&self, color: Color) -> bool;
+    pub fn short(&self, colour: Colour) -> Option<File>;
+    pub fn long(&self, colour: Colour) -> Option<File>;
+    pub fn any(&self, colour: Colour) -> bool;
     /// `KQkq` when the rook files are the classic ones, `AHah` otherwise.
     pub fn to_fen_field(&self) -> String;
 }
@@ -189,16 +196,21 @@ impl Move {
     pub fn is_en_passant(&self) -> bool;
 }
 
+/// `kind` is the first case that applies, in the order castling, en passant,
+/// promotion, capture, quiet; `is_capture` is true for a capturing promotion
+/// and for en passant as well.
 pub enum MoveKind { Quiet, Capture, EnPassant, Castling, Promotion }
 
 /// Inline storage for the largest legal move count; never allocates.
 pub struct MoveList<T = Move> { /* … */ }
 
-impl<T> MoveList<T> {
+impl<T: Copy + Default> MoveList<T> {
     pub fn new() -> MoveList<T>;
     pub fn clear(&mut self);
     pub fn push(&mut self, item: T);
     pub fn as_slice(&self) -> &[T];
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
 }
 ```
 
@@ -228,6 +240,7 @@ impl Game {
     pub fn castling_output(&self) -> CastlingOutput;
     pub fn set_castling_output(&mut self, style: CastlingOutput);
     pub fn move_to_uci(&self, mv: Move) -> String;
+    pub fn move_to_san(&self, mv: Move) -> String;
     pub fn position(&self) -> &Position;
     pub fn start_position(&self) -> &Position;
     pub fn moves(&self) -> &[Move];
@@ -252,6 +265,33 @@ impl Game {
     pub fn facts(&self) -> Facts;
     pub fn facts_in(&self, scratch: &mut Scratch) -> Facts;
 }
+```
+
+### Errors
+
+Every one of these is `Copy`, `Display` and `std::error::Error`.
+
+```rust
+pub enum FenError {
+    FieldCount, Placement, SideToMove, Castling,
+    EnPassant, HalfmoveClock, FullmoveNumber,
+    /// The placement is not a legal chess position.
+    Position,
+}
+
+/// Why a position is not one a variant can play on.
+pub enum PositionError { CastlingRights }
+
+pub enum MoveParseError {
+    /// Not shaped like a move at all.
+    Syntax,
+    /// Well formed, but names no legal move here.
+    Illegal,
+    /// Names more than one legal move.
+    Ambiguous,
+}
+
+pub struct IllegalMove;
 ```
 
 ---
