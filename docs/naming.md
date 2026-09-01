@@ -1,6 +1,7 @@
 # Names for the position-facts library
 
-Candidates for the reusable crate called `FACTS` in `architecture.md`.
+`esca` was chosen; the candidates below are the record of the choice.
+
 Availability checked on 2026-08-31 against `crates.io/api/v1/crates/<name>`
 and `pypi.org/pypi/<name>/json`; 404 on both means free. The crate name and
 the Python module name should match (hyphens become underscores in Python).
