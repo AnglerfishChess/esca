@@ -148,6 +148,15 @@ impl Position {
     pub fn summary(&self) -> String;
 }
 
+/// A Zobrist key.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Key(u64);
+
+/// An evaluation of a position. Positive favours the side to move; `Mate(n)`
+/// is a forced mate in *n* moves, negative when it is against the side to move.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Score { Cp(i32), Mate(i32) }
+
 /// Chess960-compatible: each right names the rook's starting file.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct CastlingRights { /* [[Option<File>; 2]; 2] */ }
@@ -182,13 +191,14 @@ impl Move {
 
 pub enum MoveKind { Quiet, Capture, EnPassant, Castling, Promotion }
 
-/// Fixed capacity, never allocates.
-pub struct MoveList { /* … */ }
+/// Inline storage for the largest legal move count; never allocates.
+pub struct MoveList<T = Move> { /* … */ }
 
-impl MoveList {
-    pub fn new() -> MoveList;
+impl<T> MoveList<T> {
+    pub fn new() -> MoveList<T>;
     pub fn clear(&mut self);
-    pub fn as_slice(&self) -> &[Move];
+    pub fn push(&mut self, item: T);
+    pub fn as_slice(&self) -> &[T];
 }
 ```
 
@@ -226,7 +236,7 @@ impl Game {
     pub fn ply(&self) -> u32;
 
     pub fn legal_moves(&self) -> MoveList;
-    pub fn annotated_moves(&self) -> Vec<AnnotatedMove>;
+    pub fn annotated_moves(&self) -> MoveList<AnnotatedMove>;
     pub fn play(&mut self, mv: Move) -> Result<(), IllegalMove>;
     pub fn play_uci(&mut self, text: &str) -> Result<(), MoveParseError>;
     pub fn play_san(&mut self, text: &str) -> Result<(), MoveParseError>;
@@ -265,7 +275,7 @@ pub struct Facts {
     pub attacks: AttackFacts,
     pub tactics: [TacticsFacts; 2],
     pub planes: PlaneFacts,
-    pub moves: Vec<AnnotatedMove>,
+    pub moves: MoveList<AnnotatedMove>,
 }
 
 pub struct PawnFacts {
@@ -325,8 +335,12 @@ impl Scratch { pub fn new() -> Scratch; }
 ```
 
 Facts are computed from the position and the variant's legal move list, so a
-group holds under every variant whose rules its definitions assume; the schema
-names which those are (§6). A `Variant` supplies rules, never facts.
+feature holds under every variant whose rules its definition assumes; the
+schema names which those are (§6). A `Variant` supplies rules, never facts.
+
+The repetition and history facts of `state` come from `Game::facts` and
+`Game::facts_in`, which have the history; `Position::facts` and
+`Position::facts_in` emit them as zero, `history_known` included.
 
 ---
 
@@ -349,8 +363,8 @@ impl Schema {
     /// The canonical text `id` hashes.
     pub fn canonical(&self) -> String;
     pub fn all(&self) -> GroupSet;
-    /// The groups whose definitions hold under `variant`.
-    pub fn groups_for(&self, variant: &dyn Variant) -> GroupSet;
+    /// The features whose definitions hold under `variant`.
+    pub fn features_for(&self, variant: &dyn Variant) -> FeatureSet;
 }
 
 pub struct GroupSpec {
@@ -358,13 +372,28 @@ pub struct GroupSpec {
     pub version: u16,
     pub width: usize,
     pub features: &'static [FeatureSpec],
-    /// Variant names the group is defined for; empty means all of them.
+}
+
+pub struct FeatureSpec {
+    pub name: &'static str,
+    /// Within the group, in values.
+    pub offset: usize,
+    pub width: usize,
+    /// Variant names the feature is defined for; empty means all of them.
     pub variants: &'static [&'static str],
+}
+
+/// A subset of a schema's features.
+pub struct FeatureSet { /* … */ }
+
+impl FeatureSet {
+    pub fn contains(&self, group: &str, feature: &str) -> bool;
+    pub fn names(&self) -> impl Iterator<Item = (&'static str, &'static str)>;
 }
 
 impl Facts {
     /// Writes the selected groups in schema order; returns values written.
-    /// A group not defined for the facts' variant is written as zeros, so
+    /// A feature not defined for the facts' variant is written as zeros, so
     /// widths and offsets do not depend on the variant.
     /// Panics if `out` is shorter than `schema.width_of(groups)`.
     pub fn encode_into(&self, schema: &Schema, groups: GroupSet, out: &mut [f32]) -> usize;
@@ -398,6 +427,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 ```
 
 Rows are independent and the crate spawns no threads; the caller parallelises.
+`features.md` §4 names the features defined for classic chess only.
 
 ---
 
@@ -408,7 +438,6 @@ pub mod lichess {
     pub struct Record { pub epd: String, pub evals: Vec<Eval> }
     pub struct Eval { pub depth: u32, pub knodes: u64, pub pvs: Vec<Pv> }
     pub struct Pv { pub score: Score, pub line: String }
-    pub enum Score { Cp(i32), Mate(i32) }
 
     impl Record {
         /// The four-field FEN parsed; `clocks_known()` is false.
@@ -450,7 +479,7 @@ impl Variant for Horde {
 
 let game = Game::new(Arc::new(Horde));
 let facts = game.facts();     // unchanged code
-let groups = Schema::v0().groups_for(game.variant());
+let defined = Schema::v0().features_for(game.variant());
 ```
 
 The model a variant must fit: an 8×8 board, the six standard roles, two
@@ -500,18 +529,31 @@ f.king.ring_attack_weight[esca.US]
 print(f.summary())
 
 # Schema and batch encoding
+esca.SCHEMA_V0                      # Schema
 esca.SCHEMA_ID                      # "b7f0…", 32 hex chars
 esca.WIDTH                          # 1065
 esca.schema()                       # [{"name","version","width","offset"}, …]
-esca.groups_for(esca.CHESS960)      # ["state", "material", …]
+esca.features_for(esca.CHESS960)    # [("state", "in_check"), …]
 
-x = esca.encode(fens, groups=["state", "material", "pawns"])   # (n, w) float32
-esca.encode_into(fens, out)                                    # caller's array
-moves, mx = esca.encode_moves(fen)                             # list[Move], (m, 24)
+# (n, w) float32
+x = esca.encode(fens, variant=esca.CHESS960, groups=["state", "pawns"])
+esca.encode_into(fens, out, groups=["state", "pawns"])   # caller's array
+moves, mx = esca.encode_moves(fen)                       # list[Move], (m, 24)
 
 # Lichess dump
 for batch in esca.lichess.batches(path, batch_size=8192, min_depth=20):
     batch.fens, batch.features, batch.cp, batch.mate, batch.best_moves
+```
+
+Every function that encodes takes keyword-only `variant`, `schema` and
+`groups`, defaulting to `esca.CLASSIC`, `esca.SCHEMA_V0` and every group:
+
+```python
+esca.encode(fens, *, variant=..., schema=..., groups=None) -> np.ndarray
+esca.encode_into(fens, out, *, variant=..., schema=..., groups=None) -> None
+esca.encode_moves(fen, *, variant=..., schema=...) -> tuple[list[Move], np.ndarray]
+esca.lichess.batches(path, *, batch_size, min_depth,
+                     variant=..., schema=..., groups=None) -> Iterator[Batch]
 ```
 
 | Contract | |

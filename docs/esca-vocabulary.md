@@ -104,7 +104,7 @@ defined before it is used.
 | **Game** | A `Variant` plus a start position plus the moves played from it, and therefore the positions reached. It answers rule questions without being handed a variant, and it is what knows about repetition and about claimable draws. |
 | **Round** | Not an esca type. `Game` is one played game; a match, round or tournament is a sequence of `Game`s with pairing and scoring data, which callers keep themselves. "Round" is also not used for a full move — that is *full move*. |
 | **Move** (esca type) | One legal action, stored as origin, destination, optional promotion role, and kind (quiet, capture, castling, en passant). Castling is stored king-to-rook so it is unambiguous in every variant; its text form is produced by the `Variant`. |
-| **MoveList** | An ordered, fixed-capacity list of `Move`s, sized for the largest legal move count and filled without allocating. |
+| **MoveList** | An ordered list sized inline for the largest legal move count and filled without allocating. It holds plain moves or annotated ones. |
 | **Side** | `Us` or `Them`, relative to the side to move. Facts are expressed in these terms, so no fact distinguishes actual White from actual Black. |
 | **SquareSet** | A typed set of squares — one bit per square — supporting union, intersection, difference, membership, count and iteration. The idiomatic name for what engines call a *bitboard*. |
 | **FileSet** | The same for the eight files. |
@@ -115,6 +115,7 @@ defined before it is used.
 | **Schema** | A versioned, ordered list of feature groups with their widths and offsets: the contract between the extractor that writes a feature vector and the net that consumes one. |
 | **SchemaId** | A 128-bit hash over a schema's canonical text. It changes when any group name, order, width or encoding changes, and only then. |
 | **GroupSet** | A subset of a schema's groups, selecting which of them an encoding emits. |
+| **FeatureSet** | A subset of a schema's features, e.g. those whose definitions hold under one variant. A feature outside the set is encoded as zeros, so widths and offsets are unaffected. |
 | **summary** | A human-readable rendering of a position or its facts, for reading and for diagnostics. Its exact text is not a stable format. |
 
 ---
