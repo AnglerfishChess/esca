@@ -520,7 +520,7 @@ static V0_GROUPS: [GroupSpec; 9] = [
     },
     GroupSpec {
         name: "king",
-        version: 1,
+        version: 2,
         width: 122,
         features: &KING,
     },

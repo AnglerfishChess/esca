@@ -58,7 +58,7 @@ pieces:1:35
   knights_on_rim:2:count/2
   minors_undeveloped:2:count/4
   queen_developed:2:bits
-king:1:122
+king:2:122
   king_file:16:one-hot
   king_rank:16:one-hot
   king_on_home_square:2:bits

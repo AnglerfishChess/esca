@@ -3,7 +3,7 @@
 use esca::{CHESS960, CLASSIC, Schema};
 
 /// The id of the v0 schema. Changing it is changing what a trained net eats.
-const SCHEMA_V0_ID: &str = "b8d5295bb6c0475da1187562e3c87593";
+const SCHEMA_V0_ID: &str = "a40a02ef18e4219b754d0f32410d803f";
 
 const CANONICAL: &str = include_str!("data/schema_v0.txt");
 

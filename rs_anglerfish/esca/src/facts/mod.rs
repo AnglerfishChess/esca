@@ -220,9 +220,11 @@ pub struct KingFacts {
     pub ring_attackers: [u8; 2],
     /// Σ over those attackers of N, B = 1, R = 2, Q = 4, per side.
     pub ring_attack_weight: [u8; 2],
-    /// Ring squares attacked by the king's own side, per side.
+    /// Ring squares attacked by the king's own side other than the king
+    /// itself, per side.
     pub ring_defended: [u8; 2],
-    /// Ring squares attacked by the enemy and not defended, per side.
+    /// Ring squares attacked by the enemy and not among `ring_defended`, per
+    /// side.
     pub ring_holes: [u8; 2],
     /// Adjacent squares empty or capturable and not attacked, per side.
     pub escape_squares: [u8; 2],

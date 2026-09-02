@@ -534,7 +534,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v0 id is `b8d5295bb6c0475da1187562e3c87593`; its canonical text is checked
+The v0 id is `a40a02ef18e4219b754d0f32410d803f`; its canonical text is checked
 in as `rs_anglerfish/esca/tests/data/schema_v0.txt`.
 
 ---

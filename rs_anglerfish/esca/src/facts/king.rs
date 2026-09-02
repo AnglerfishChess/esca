@@ -17,6 +17,16 @@ fn shield_files(king: File) -> [File; 3] {
     [centre - 1, centre, centre + 1].map(|i| File::from_index(i).expect("b to g has neighbours"))
 }
 
+/// The squares `side` attacks with anything but its king.
+fn guarded_by(scan: &Scan, side: Side) -> SquareSet {
+    Role::ALL
+        .into_iter()
+        .filter(|&role| role != Role::King)
+        .fold(SquareSet::EMPTY, |set, role| {
+            set | scan.by_role[side.index()][role.index()]
+        })
+}
+
 /// The weight a ring attacker of `role` carries.
 fn ring_weight(role: Role) -> u8 {
     match role {
@@ -85,8 +95,9 @@ pub(super) fn king_facts(scan: &Scan) -> KingFacts {
                 }
             }
         }
-        facts.ring_defended[i] = (ring & scan.by[i]).len().min(255) as u8;
-        facts.ring_holes[i] = ((ring & scan.by[them]) - scan.by[i]).len().min(255) as u8;
+        let guarded = guarded_by(scan, side);
+        facts.ring_defended[i] = (ring & guarded).len().min(255) as u8;
+        facts.ring_holes[i] = ((ring & scan.by[them]) - guarded).len().min(255) as u8;
         facts.escape_squares[i] = ((ring - scan.units[i]) - scan.by[them]).len().min(255) as u8;
 
         facts.back_rank_risk[i] = rank == 1 && {
