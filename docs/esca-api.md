@@ -602,56 +602,62 @@ colours, one unit per square. Rules beyond that need the model widened first.
 
 ## 9. Python surface
 
-Built from the same crate with feature `python`; distributed with `.pyi`
-stubs, so every signature below is typed and checkable.
+Built from the same crate with feature `python`; distributed with `.pyi` stubs,
+so every signature below is typed and checkable. Squares, roles, colours,
+outcomes and castling styles are text on this surface, and a file set is the
+string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
+`Position`, `Game`, `Schema`, `Facts` with its groups, and `lichess.Batch`.
 
 ```python
 import esca
 import numpy as np
 
-esca.CLASSIC            # Variant
+esca.CLASSIC  # Variant
 esca.CHESS960
-esca.US, esca.THEM      # Side
+esca.US, esca.THEM  # 0 and 1, the index of a side-paired fact
 
 # Game — variant defaults to classic everywhere it is optional
 g = esca.Game()
 g = esca.Game(variant=esca.CHESS960, seed=518)
 g = esca.Game.from_fen(fen, variant=esca.CHESS960)
 
-g.castling_output = esca.KING_TO_ROOK   # or esca.KING_TWO_SQUARES
-g.play("e2e4")                      # UCI or a Move
+g.castling_output = esca.KING_TO_ROOK  # or esca.KING_TWO_SQUARES
+g.play("e2e4")  # UCI or a Move
 g.play_san("Nf3")
 g.move_to_uci(mv)
 g.undo()
-g.position                          # Position, immutable and hashable
-g.moves                             # tuple[Move, ...] played
-g.legal_moves()                     # list[Move]
-g.annotated_moves()                 # list[AnnotatedMove]
-g.outcome()                         # Outcome | None
-g.claims()                          # list[DrawClaim]
+g.position  # Position, immutable and hashable
+g.moves  # list[Move] played
+g.legal_moves()  # list[Move]
+g.annotated_moves()  # list[AnnotatedMove]
+g.outcome()  # "checkmate", "stalemate", … or None
+g.claims()  # ["threefold_repetition", …]
 print(g.position.summary())
 
 # Position on its own; rules come from the variant argument
 p = esca.Position.from_fen(fen)
+p.fen, p.epd, p.side_to_move, p.en_passant, p.in_check  # str, str, "w", "e6", bool
+p.piece_at("e1")  # "K"
 f = p.facts(esca.CLASSIC)
-f = g.facts()                       # variant taken from the game
+f = g.facts()  # variant taken from the game
 
-f.pawns.passed[esca.US]             # SquareSet
-list(f.attacks.hanging[esca.THEM])  # [Square, …]
+f.pawns.passed[esca.US]  # SquareSet
+list(f.attacks.hanging[esca.THEM])  # ["e5", …]
 f.king.ring_attack_weight[esca.US]
 print(f.summary())
 
 # Schema and batch encoding
-esca.SCHEMA_V0                      # Schema
-esca.SCHEMA_ID                      # "b7f0…", 32 hex chars
-esca.WIDTH                          # 1065
-esca.schema()                       # [{"name","version","width","offset"}, …]
-esca.features_for(esca.CHESS960)    # [("state", "in_check"), …]
+esca.SCHEMA_V0  # Schema
+esca.SCHEMA_ID  # "b8d5…", 32 hex chars
+esca.WIDTH  # 1065
+esca.MOVE_WIDTH  # 24
+esca.schema()  # [{"name", "version", "width", "offset"}, …]
+esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
 
 # (n, w) float32
 x = esca.encode(fens, variant=esca.CHESS960, groups=["state", "pawns"])
-esca.encode_into(fens, out, groups=["state", "pawns"])   # caller's array
-moves, mx = esca.encode_moves(fen)                       # list[Move], (m, 24)
+esca.encode_into(fens, out, groups=["state", "pawns"])  # caller's array
+moves, mx = esca.encode_moves(fen)  # list[Move], (m, 24)
 
 # Lichess dump
 for batch in esca.lichess.batches(path, batch_size=8192, min_depth=20):
@@ -664,8 +670,8 @@ Every function that encodes takes keyword-only `variant`, `schema` and
 ```python
 esca.encode(fens, *, variant=..., schema=..., groups=None) -> np.ndarray
 esca.encode_into(fens, out, *, variant=..., schema=..., groups=None) -> None
-esca.encode_moves(fen, *, variant=..., schema=...) -> tuple[list[Move], np.ndarray]
-esca.lichess.batches(path, *, batch_size, min_depth,
+esca.encode_moves(fen, *, variant=...) -> tuple[list[Move], np.ndarray]
+esca.lichess.batches(path, *, batch_size=8192, min_depth=0,
                      variant=..., schema=..., groups=None) -> Iterator[Batch]
 ```
 
@@ -675,3 +681,5 @@ esca.lichess.batches(path, *, batch_size, min_depth,
 | Batch calls release the GIL, parallelise rows, and reuse their buffers internally. | |
 | A malformed FEN raises `ValueError` naming the row index. | |
 | `Position`, `Move`, `Facts` and their groups are immutable and picklable; `Position` and `Move` are hashable. | |
+| A batch row takes the deepest evaluation that reaches `min_depth`, and its best line; a record with none, with a placement no game can reach, or with an unreadable line is skipped. | |
+| `batch.cp` and `batch.mate` are both `(n,)` float32 and side-relative: a row is a mate row when `mate` is not 0.0, and a centipawn row otherwise. | |

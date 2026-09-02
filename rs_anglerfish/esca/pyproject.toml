@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "esca"
+description = "A chess model that answers what is true about a position: variants, positions, games, and move text."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Alexander Myodov", email = "amyodov@gmail.com" },
+]
+keywords = ["chess", "chess960", "fen", "san", "position"]
+dependencies = [
+    "numpy>=1.26",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/AnglerfishChess/anglerfish"
+
+[tool.maturin]
+python-source = "python"
+module-name = "esca._esca"
+features = ["python", "lichess", "pyo3/extension-module"]

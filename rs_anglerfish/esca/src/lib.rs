@@ -37,6 +37,8 @@ mod game;
 pub mod lichess;
 mod moves;
 mod position;
+#[cfg(feature = "python")]
+mod python;
 mod schema;
 mod types;
 mod variant;

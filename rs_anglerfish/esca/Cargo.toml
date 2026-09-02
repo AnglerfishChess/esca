@@ -11,14 +11,23 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [features]
 default = []
 # The dump reader.
 lichess = ["dep:serde", "dep:serde_json", "dep:zstd"]
+# The PyO3 module and its batch encoders. A wheel adds
+# `pyo3/extension-module` on top; a test binary links the interpreter instead.
+python = ["dep:numpy", "dep:pyo3", "dep:rayon"]
 
 [dependencies]
 blake3 = "1"
 cozy-chess = "0.3.4"
+numpy = { version = "0.29", optional = true }
+pyo3 = { version = "0.29", optional = true, features = ["abi3-py312"] }
+rayon = { version = "1", optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 zstd = { version = "0.13", optional = true }
