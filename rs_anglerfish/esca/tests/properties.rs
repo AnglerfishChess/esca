@@ -1,6 +1,9 @@
 //! Invariants over randomly played legal games.
 
-use esca::{CastlingOutput, Game, MAX_MOVES, Outcome, Position, Variant, chess960, classic};
+use esca::{
+    CastlingOutput, Game, MAX_MOVES, MoveFacts, MoveList, Outcome, Position, Schema, Scratch, Side,
+    Variant, chess960, classic,
+};
 use proptest::prelude::*;
 
 /// Everything that must hold of any position esca can reach.
@@ -89,5 +92,129 @@ proptest! {
         choices in prop::collection::vec(any::<u8>(), 0..40),
     ) {
         play_out(Game::with_seed(chess960(), seed), &choices)?;
+    }
+}
+
+/// Everything the v0 facts of any position must satisfy.
+fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCaseError> {
+    let fen = position.fen();
+    let schema = Schema::v0();
+    let facts = position.facts(variant);
+    let mut scratch = Scratch::new();
+
+    // Deterministic, and the buffered path agrees with the allocating one.
+    prop_assert_eq!(&facts, &position.facts(variant), "{}", fen);
+    prop_assert_eq!(&facts, &position.facts_in(variant, &mut scratch), "{}", fen);
+
+    let values = facts.encode(schema, schema.all());
+    prop_assert_eq!(values.len(), schema.width_of(schema.all()));
+    prop_assert_eq!(values.len(), 1065);
+    for (index, value) in values.iter().enumerate() {
+        prop_assert!(
+            value.is_finite() && (-1.0..=1.0).contains(value),
+            "value {} is {} in {}",
+            index,
+            value,
+            fen
+        );
+    }
+
+    // Writing into a caller's buffer writes exactly the declared width.
+    let mut buffer = vec![f32::NAN; schema.width() + 8];
+    let written = facts.encode_into(schema, schema.all(), &mut buffer);
+    prop_assert_eq!(written, schema.width());
+    prop_assert_eq!(&buffer[..written], &values[..]);
+    prop_assert!(buffer[written..].iter().all(|v| v.is_nan()));
+
+    // Colour-and-rank mirroring exchanges the sides and nothing else.
+    let mirrored = position
+        .mirrored()
+        .facts(variant)
+        .encode(schema, schema.all());
+    prop_assert_eq!(&mirrored, &values, "mirror of {}", fen);
+
+    for side in Side::ALL {
+        let i = side.index();
+        let pawns = facts.pawns.pawns[i];
+        for derived in [
+            facts.pawns.passed[i],
+            facts.pawns.candidates[i],
+            facts.pawns.doubled[i],
+            facts.pawns.isolated[i],
+            facts.pawns.backward[i],
+            facts.pawns.defended[i],
+        ] {
+            prop_assert!(derived.is_subset(pawns), "{}", fen);
+        }
+        let units = facts.attacks.units(side);
+        for derived in [
+            facts.attacks.hanging[i],
+            facts.attacks.en_prise[i],
+            facts.attacks.pinned[i],
+            facts.attacks.defended[i],
+        ] {
+            prop_assert!(derived.is_subset(units), "{}", fen);
+        }
+        prop_assert!(facts.attacks.hanging[i].is_subset(facts.attacks.en_prise[i]));
+        prop_assert!(facts.attacks.by_pawns[i].is_subset(facts.attacks.by[i]));
+        prop_assert!(facts.pieces.outposts[i].is_subset(facts.attacks.by_pawns[i]));
+        prop_assert!(facts.king.ring[i].is_subset(!facts.king.square[i].to_set()));
+    }
+
+    // Every annotated move is one of the legal moves, once.
+    let mut legal = MoveList::new();
+    variant.legal_moves(position, &mut legal);
+    prop_assert_eq!(facts.moves.len(), legal.len(), "{}", fen);
+    prop_assert_eq!(
+        facts.tactics[0].legal_move_count as usize,
+        legal.len(),
+        "{}",
+        fen
+    );
+    for annotated in facts.moves.iter() {
+        prop_assert!(legal.contains(&annotated.mv), "{}", fen);
+        let mut row = vec![0.0f32; MoveFacts::WIDTH];
+        annotated.facts.encode_into(&mut row);
+        prop_assert!(row.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
+    }
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(24))]
+
+    #[test]
+    fn the_facts_of_a_random_classic_game_keep_their_invariants(
+        choices in prop::collection::vec(any::<u8>(), 0..24),
+    ) {
+        let mut game = Game::new(classic());
+        check_facts(game.variant(), game.position())?;
+        for &choice in &choices {
+            if game.outcome().is_some() {
+                break;
+            }
+            let legal = game.legal_moves();
+            let mv = legal[choice as usize % legal.len()];
+            game.play(mv).expect("a generated move is legal");
+            check_facts(game.variant(), game.position())?;
+        }
+    }
+
+    #[test]
+    fn the_facts_of_a_random_chess960_game_keep_their_invariants(
+        seed in 0u64..960,
+        choices in prop::collection::vec(any::<u8>(), 0..12),
+    ) {
+        let mut game = Game::with_seed(chess960(), seed);
+        check_facts(game.variant(), game.position())?;
+        for &choice in &choices {
+            if game.outcome().is_some() {
+                break;
+            }
+            let legal = game.legal_moves();
+            let mv = legal[choice as usize % legal.len()];
+            game.play(mv).expect("a generated move is legal");
+            check_facts(game.variant(), game.position())?;
+        }
     }
 }

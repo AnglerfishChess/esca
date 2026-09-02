@@ -16,4 +16,9 @@ blake3 = "1"
 cozy-chess = "0.3.4"
 
 [dev-dependencies]
+criterion = "0.5"
 proptest = "1"
+
+[[bench]]
+name = "facts"
+harness = false
