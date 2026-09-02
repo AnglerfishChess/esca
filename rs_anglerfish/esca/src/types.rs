@@ -399,6 +399,163 @@ impl fmt::Display for Rank {
     }
 }
 
+/// A set of files, one bit per file.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct FileSet(u8);
+
+impl FileSet {
+    /// No files.
+    pub const EMPTY: FileSet = FileSet(0);
+    /// All eight files.
+    pub const FULL: FileSet = FileSet(0xFF);
+
+    /// The set whose bit *i* is set iff file *i* is a member.
+    #[inline]
+    pub const fn from_bits(bits: u8) -> FileSet {
+        FileSet(bits)
+    }
+
+    /// The membership bits, bit *i* for file *i*.
+    #[inline]
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    /// Whether `file` is a member.
+    #[inline]
+    pub const fn contains(self, file: File) -> bool {
+        self.0 & (1 << file as u8) != 0
+    }
+
+    /// Adds `file`.
+    #[inline]
+    pub fn insert(&mut self, file: File) {
+        self.0 |= 1 << file as u8;
+    }
+
+    /// Removes `file`.
+    #[inline]
+    pub fn remove(&mut self, file: File) {
+        self.0 &= !(1 << file as u8);
+    }
+
+    /// How many files are members.
+    #[inline]
+    pub const fn len(self) -> u32 {
+        self.0.count_ones()
+    }
+
+    /// Whether there are no members.
+    #[inline]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Whether every member of `self` is a member of `other`.
+    #[inline]
+    pub const fn is_subset(self, other: FileSet) -> bool {
+        self.0 & !other.0 == 0
+    }
+}
+
+impl fmt::Debug for FileSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("FileSet(")?;
+        for file in *self {
+            write!(f, "{file}")?;
+        }
+        f.write_str(")")
+    }
+}
+
+impl BitAnd for FileSet {
+    type Output = FileSet;
+
+    #[inline]
+    fn bitand(self, rhs: FileSet) -> FileSet {
+        FileSet(self.0 & rhs.0)
+    }
+}
+
+impl BitOr for FileSet {
+    type Output = FileSet;
+
+    #[inline]
+    fn bitor(self, rhs: FileSet) -> FileSet {
+        FileSet(self.0 | rhs.0)
+    }
+}
+
+impl Sub for FileSet {
+    type Output = FileSet;
+
+    #[inline]
+    fn sub(self, rhs: FileSet) -> FileSet {
+        FileSet(self.0 & !rhs.0)
+    }
+}
+
+impl Not for FileSet {
+    type Output = FileSet;
+
+    #[inline]
+    fn not(self) -> FileSet {
+        FileSet(!self.0)
+    }
+}
+
+impl BitOrAssign for FileSet {
+    #[inline]
+    fn bitor_assign(&mut self, rhs: FileSet) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl FromIterator<File> for FileSet {
+    fn from_iter<I: IntoIterator<Item = File>>(iter: I) -> FileSet {
+        let mut set = FileSet::EMPTY;
+        for file in iter {
+            set.insert(file);
+        }
+        set
+    }
+}
+
+/// Iterator over a [`FileSet`], from file a upwards.
+#[derive(Clone, Debug)]
+pub struct FileSetIter(u8);
+
+impl Iterator for FileSetIter {
+    type Item = File;
+
+    #[inline]
+    fn next(&mut self) -> Option<File> {
+        if self.0 == 0 {
+            return None;
+        }
+        let index = self.0.trailing_zeros() as usize;
+        self.0 &= self.0 - 1;
+        File::from_index(index)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.0.count_ones() as usize;
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for FileSetIter {}
+
+impl IntoIterator for FileSet {
+    type Item = File;
+    type IntoIter = FileSetIter;
+
+    #[inline]
+    fn into_iter(self) -> FileSetIter {
+        FileSetIter(self.0)
+    }
+}
+
 /// One of the 64 cells, indexed 0 to 63 with a1 = 0 and h8 = 63.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Square(u8);

@@ -286,6 +286,24 @@ impl Position {
         !self.board.checkers().is_empty()
     }
 
+    /// The units giving check to the side to move.
+    #[inline]
+    pub(crate) fn checkers(&self) -> SquareSet {
+        SquareSet::from_cozy(self.board.checkers())
+    }
+
+    /// The same placement with the other side to move and no en-passant
+    /// square; `None` when the side to move stands in check.
+    pub(crate) fn null_move(&self) -> Option<Position> {
+        let board = self.board.null_move()?;
+        Some(Position::from_parts(
+            board,
+            self.halfmove_clock,
+            self.fullmove_number,
+            self.clocks_known,
+        ))
+    }
+
     /// The Zobrist key: equal for equal placement, side to move, castling
     /// rights and en-passant square, and independent of the clocks.
     #[inline]

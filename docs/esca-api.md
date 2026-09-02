@@ -299,11 +299,17 @@ pub struct IllegalMove;
 ## 5. Facts
 
 Grouped plain structs with public fields; the accessor *is* the field. Every
-side-paired value is `[T; 2]`, indexed by `Side`. Definitions are those in
-`features.md` §1, repeated in the doc comments.
+side-paired value is `[T; 2]`, subscripted by `Side::index()`. Definitions are
+those in `features.md` §1, repeated in the doc comments.
 
 ```rust
 pub enum Side { Us, Them }
+
+impl Side {
+    pub const ALL: [Side; 2];
+    /// 0 for us, 1 for them.
+    pub const fn index(self) -> usize;
+}
 
 pub struct Facts {
     pub state: StateFacts,
@@ -325,12 +331,18 @@ pub struct PawnFacts {
     pub doubled: [SquareSet; 2],
     pub isolated: [SquareSet; 2],
     pub backward: [SquareSet; 2],
+    pub defended: [SquareSet; 2],
+    pub count_by_file: [[u8; 8]; 2],
+    pub count_by_rank: [[u8; 8]; 2],
     pub open_files: FileSet,
     pub semi_open_files: [FileSet; 2],
     pub islands: [u8; 2],
     pub levers: [u8; 2],
     pub rams: u8,
-    /* … */
+    pub passer_lead_rank: [Option<u8>; 2],
+    pub passer_protected: [u8; 2],
+    pub passers_connected: [bool; 2],
+    pub passer_unstoppable: [bool; 2],
 }
 
 pub struct AttackFacts {
@@ -340,11 +352,17 @@ pub struct AttackFacts {
     pub hanging: [SquareSet; 2],
     pub en_prise: [SquareSet; 2],
     pub pinned: [SquareSet; 2],
+    pub defended: [SquareSet; 2],
+    pub hanging_value: [i32; 2],
+    pub en_prise_max_value: [i32; 2],
+    pub skewer_candidates: [u8; 2],
+    /* the placement the sets were read from */
 }
 
 impl AttackFacts {
     pub fn attackers_of(&self, sq: Square, side: Side) -> SquareSet;
     pub fn is_hanging(&self, sq: Square) -> bool;
+    pub fn units(&self, side: Side) -> SquareSet;
 }
 
 pub struct AnnotatedMove {
@@ -362,11 +380,30 @@ pub struct MoveFacts {
     pub captures_hanging: bool,
     pub escapes_attack: bool,
     pub to_attacked_by_pawn: bool,
+    pub is_castling: bool,
+    pub is_en_passant: bool,
 }
 
 impl Facts {
+    /// The variant the facts were computed under.
+    pub fn variant(&self) -> &'static str;
+    /// The colour that plays `Side::Us`.
+    pub fn side_to_move(&self) -> Colour;
     /// A page of prose: material, structure, king safety, threats. Text not stable.
     pub fn summary(&self) -> String;
+}
+
+/// The `available`/`count` fields of a `TacticsFacts` carry the numbers; the
+/// schema's `*_available` and `only_moves` bits are predicates over them.
+impl TacticsFacts {
+    pub fn check_available(&self) -> bool;
+    pub fn safe_check_available(&self) -> bool;
+    pub fn promotion_available(&self) -> bool;
+    pub fn safe_promotion_available(&self) -> bool;
+    pub fn capture_available(&self) -> bool;
+    pub fn fork_available(&self) -> bool;
+    pub fn pin_creation_available(&self) -> bool;
+    pub fn only_moves(&self) -> bool;
 }
 
 /// Reusable buffers. One per thread; a search keeps one per node stack.
@@ -403,8 +440,27 @@ impl Schema {
     /// The canonical text `id` hashes.
     pub fn canonical(&self) -> String;
     pub fn all(&self) -> GroupSet;
+    /// Where a group sits in the schema order.
+    pub fn group_index(&self, name: &str) -> Option<usize>;
+    /// The named groups; `None` when a name is not the schema's.
+    pub fn group_set(&self, names: &[&str]) -> Option<GroupSet>;
+    pub fn feature_count(&self) -> usize;
     /// The features whose definitions hold under `variant`.
-    pub fn features_for(&self, variant: &dyn Variant) -> FeatureSet;
+    pub fn features_for(&'static self, variant: &dyn Variant) -> FeatureSet;
+}
+
+impl GroupSet {
+    pub const EMPTY: GroupSet;
+    pub const fn only(index: usize) -> GroupSet;
+    pub const fn contains(self, index: usize) -> bool;
+    pub fn insert(&mut self, index: usize);
+    pub fn remove(&mut self, index: usize);
+    pub const fn is_empty(self) -> bool;
+    pub const fn len(self) -> u32;
+}
+
+impl SchemaId {
+    pub const fn bytes(self) -> [u8; 16];
 }
 
 pub struct GroupSpec {
@@ -419,8 +475,14 @@ pub struct FeatureSpec {
     /// Within the group, in values.
     pub offset: usize,
     pub width: usize,
+    /// The encoding kind and scale, as `features.md` §6 spells it.
+    pub encoding: &'static str,
     /// Variant names the feature is defined for; empty means all of them.
     pub variants: &'static [&'static str],
+}
+
+impl FeatureSpec {
+    pub fn defined_for(&self, variant_name: &str) -> bool;
 }
 
 /// A subset of a schema's features.
@@ -442,6 +504,7 @@ impl Facts {
 
 impl MoveFacts {
     pub const WIDTH: usize = 24;
+    /// Panics if `out` is shorter than `WIDTH`.
     pub fn encode_into(&self, out: &mut [f32]);
 }
 
@@ -468,6 +531,9 @@ pub struct RowError { pub row: usize, pub source: FenError }
 
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
+
+The v0 id is `b8d5295bb6c0475da1187562e3c87593`; its canonical text is checked
+in as `rs_anglerfish/esca/tests/data/schema_v0.txt`.
 
 ---
 

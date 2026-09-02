@@ -46,10 +46,13 @@ feature distinguishes actual White from actual Black.
 | **defended** | A unit of X on *s* is defended if *s* is attacked by X. A piece never defends itself. |
 | **hanging** | A unit of X on *s* is attacked by the opponent and not defended by X. Kings are never hanging. |
 | **value order** | P=1, N=B=3, R=5, Q=9, K=∞. Used only for comparisons, never as an evaluation. |
-| **en prise** | A unit of X is en prise if it is hanging, or if it is attacked by an enemy unit of strictly lower value. |
+| **en prise** | A unit of X is en prise if it is hanging, or if it is attacked by an enemy unit of strictly lower value. Kings are never en prise. |
+| **destination** | The square the moved unit ends on. For castling that is the king's landing square, c1 or g1 in the mover's frame, never the rook's square the move is written with. |
 | **safe destination** | A move of piece *p* to square *t* is safe if, in the position after the move, *t* is not attacked by an enemy pawn, *t* is not attacked by an enemy piece of value below value(*p*), and *t* is not both attacked by them and undefended by us. No exchange sequence is played out: a defender that is pinned or overloaded is still counted as a defender. This is a 1-ply approximation of "does not lose material", and it is wrong exactly where a static exchange evaluation would be needed. |
 | **safe check** | A checking move whose destination is a safe destination. |
 | **king ring** | The up-to-8 squares adjacent to a king. |
+| **ring attacker** | An enemy knight, bishop, rook or queen attacking a king ring square. Pawns and the enemy king do not count. The same set is what tropism averages over. |
+| **king files** | The three files a king's shelter and storm are read on: the king's own file clamped to b–g, and its two neighbours, in ascending order. |
 | **virtual mobility** | The number of squares a queen placed on our own king's square would attack. A cheap proxy for how exposed the king is. |
 
 ### Pawns
@@ -69,8 +72,9 @@ feature distinguishes actual White from actual Black.
 | **lever** | A pawn that can capture an enemy pawn. |
 | **ram** | A pawn whose stop square holds an enemy pawn. |
 | **outpost square for X** | A square on relative ranks 4–6, attacked by one of X's pawns, and never attackable by an enemy pawn (no enemy pawn on either adjacent file at that relative rank or ahead of it). |
-| **pawn shield** | For the king's file and its two neighbours: the nearest friendly pawn ahead of the king on that file. |
+| **pawn shield** | For each of the king files: the nearest friendly pawn ahead of the king on that file. |
 | **pawn storm** | The same three files: the nearest enemy pawn ahead of the king. |
+| **behind a passer** | On the passer's file, at a lower relative rank in the passer owner's frame. Nothing has to stand clear between the two. |
 
 ### Tactical patterns (all measured over one ply)
 
@@ -80,7 +84,7 @@ feature distinguishes actual White from actual Black.
 | **royal fork** | A fork one of whose targets is the king (i.e. a forking check). |
 | **absolute pin** | A unit that may not legally move because its own king would be exposed. |
 | **relative pin** | A unit that, if it moved off the ray, would expose a strictly more valuable non-king unit to the pinning slider. |
-| **skewer** | A slider attacks a unit that, if it moved off the ray, would expose a unit of lower or equal value behind it. |
+| **skewer** | A slider attacks a unit that, if it moved off the ray, would expose a unit of lower or equal value behind it. Counted per (slider, front unit, back unit) triple, for the side whose slider it is. |
 | **discovered check available** | Some friendly unit stands on a ray between one of our sliders and the enemy king, and has at least one legal move off that ray. |
 | **mate in 1** | Some legal move leaves the opponent checkmated. |
 | **stalemate in 1** | Some legal move leaves the opponent stalemated. |
@@ -126,6 +130,7 @@ them off without changing any other offset.
 | one-hot *k* | exactly one 1.0, or all zeros when the feature is absent |
 | 8-per-file | index 0 = file a, in the mover's view |
 | 64-plane | index = square index in the mover's view (a1 = 0 … h8 = 63) |
+| square colour | light and dark are read in the mover's view too, so the rank flip does not swap them |
 
 All values are `f32` in [−1, 1]. No NaN, no infinity, ever. Side-paired
 features are written us-block first, them-block second.
@@ -147,7 +152,7 @@ to serve: **V** value, **P** policy, **B** both.
 | `ep_available` | 1 | bit: the FEN names an en-passant file | A | P |
 | `ep_file` | 8 | one-hot, zeros when none | A | P |
 | `ep_capture_legal` | 1 | bit: some legal move actually captures en passant | C | P |
-| `halfmove_bucket` | 8 | one-hot over 0 / 1–3 / 4–9 / 10–19 / 20–39 / 40–69 / 70–89 / 90–100 | A | V |
+| `halfmove_bucket` | 8 | one-hot over 0 / 1–3 / 4–9 / 10–19 / 20–39 / 40–69 / 70–89 / 90 and above | A | V |
 | `halfmove_known` | 1 | bit: the caller supplied a halfmove clock | A | V |
 | `repetition_seen` | 1 | bit: this position occurred before in the supplied history | A | V |
 | `repetition_available_us` | 1 | bit: some legal move reaches a position in the history | C | V |
@@ -167,10 +172,10 @@ training row — see [§5](#5-open-questions).
 | `non_pawn_material` | 2 | value sum of N,B,R,Q per side, / 62 | A | V |
 | `material_balance` | 1 | (us − them) value sum, / 20 | A | V |
 | `phase` | 1 | see glossary | A | V |
-| `phase_bucket` | 3 | one-hot: phase > 0.75 / 0.25–0.75 / < 0.25 | A | V |
+| `phase_bucket` | 3 | one-hot: phase > 0.75 / 0.25 ≤ phase ≤ 0.75 / < 0.25 | A | V |
 | `both_queens` | 1 | bit: both sides have at least one queen | A | V |
 | `pawns_only` | 1 | bit: no piece other than kings and pawns | A | V |
-| `insufficient_material` | 2 | bit per side: cannot mate with own material alone | A | V |
+| `insufficient_material` | 2 | bit per side: no pawn, rook or queen, and either at most one minor or no knight and bishops of a single square colour | A | V |
 
 ### 2.3 `pawns` — pawn structure (width 165)
 
@@ -212,12 +217,12 @@ Every row is a pair: us then them.
 | `rooks_on_relative_7th` | 2 | count / 2 | A | V |
 | `rook_behind_own_passer` | 2 | count / 2 | A | V |
 | `rook_behind_enemy_passer` | 2 | count / 2 | A | V |
-| `trapped_rook` | 2 | bit: a rook with ≤2 non-capture destinations, on the king's side of a king that has lost castling rights | B | V |
+| `trapped_rook` | 2 | bit: a rook with ≤2 non-capture destinations, on a file beyond its own king's on the wing the king stands on, its side having lost both castling rights | B | V |
 | `knights_on_outpost` | 2 | count / 2 | B | V |
 | `outpost_squares_free` | 2 | count of unoccupied outpost squares, / 4 | A | P |
 | `knights_on_rim` | 2 | count on files a/h or relative ranks 1/8, / 2 | A | V |
-| `minors_undeveloped` | 2 | knights and bishops still on their starting squares, / 4 | A | V |
-| `queen_developed` | 2 | bit: a queen is off its starting square | A | V |
+| `minors_undeveloped` | 2 | knights and bishops still on their classic starting squares b1, c1, f1, g1 relative, / 4 | A | V |
+| `queen_developed` | 2 | bit: a queen stands off its classic starting square d1 relative | A | V |
 
 ### 2.5 `king` — king safety and shelter (width 122)
 
@@ -227,19 +232,19 @@ Every row is a pair: our king then their king, unless noted.
 |---|---|---|---|---|
 | `king_file` | 16 | one-hot 8 per side | A | V |
 | `king_rank` | 16 | one-hot 8 per side, relative rank | A | V |
-| `king_on_home_square` | 2 | bit | A | V |
-| `king_castled_zone` | 4 | bits: king on files a–c, king on files f–h, per side | A | V |
-| `pawn_shield` | 24 | per side, for each of the 3 files around the king: one-hot 4 over "friendly pawn 1 rank ahead / 2 ahead / 3+ ahead / none" | A | V |
-| `king_file_openness` | 12 | per side, for each of the 3 files: bit open, bit semi-open for the enemy | A | V |
-| `pawn_storm` | 24 | per side, for each of the 3 files: one-hot 4 over the distance of the nearest enemy pawn ahead (2 / 3 / 4 / 5+ or none) | A | V |
-| `ring_attackers` | 2 | count of enemy pieces attacking the king ring, / 6 | B | V |
+| `king_on_home_square` | 2 | bit: the king stands on e1 relative; classic chess only | A | V |
+| `king_castled_zone` | 4 | bits: king on files a–c, king on files f–h, per side; classic chess only | A | V |
+| `pawn_shield` | 24 | per side, for each of the king files: one-hot 4 over "friendly pawn 1 rank ahead / 2 ahead / 3+ ahead / none" | A | V |
+| `king_file_openness` | 12 | per side, for each of the king files: bit open, bit semi-open for the enemy | A | V |
+| `pawn_storm` | 24 | per side, for each of the king files: one-hot 4 over the distance of the nearest enemy pawn ahead (≤2 / 3 / 4 / 5+ or none) | A | V |
+| `ring_attackers` | 2 | count of ring attackers, / 6 | B | V |
 | `ring_attack_weight` | 2 | Σ over attackers of (N,B = 1, R = 2, Q = 4), / 16 | B | V |
 | `ring_defended` | 2 | ring squares attacked by the king's own side, / 8 | A | V |
 | `ring_holes` | 2 | ring squares attacked by the enemy and not defended, / 8 | A | V |
 | `king_escape_squares` | 2 | adjacent squares that are empty or capturable and not attacked, / 8 | A | V |
 | `back_rank_risk` | 2 | bit: king on its relative rank 1 with every forward-adjacent square occupied by a friendly unit | A | V |
 | `king_distance` | 8 | one-hot over Chebyshev distance 1–8 between the kings, shared | A | V |
-| `king_tropism` | 2 | mean Chebyshev distance of enemy pieces to this king, / 8 | B | V |
+| `king_tropism` | 2 | mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king, 0 when it has none, / 8 | B | V |
 | `virtual_mobility` | 2 | see glossary, / 27 | A | V |
 
 ### 2.6 `mobility` — mobility and space (width 39)
@@ -247,7 +252,7 @@ Every row is a pair: our king then their king, unless noted.
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
 | `mobility_ratio` | 1 | our total mobility / (ours + theirs), zero when both are zero | B | V |
-| `mobility_by_type` | 10 | per side, per type (P,N,B,R,Q): squares attacked and not occupied by own units, / 16 | B | B |
+| `mobility_by_type` | 10 | per side, per type (P,N,B,R,Q): squares the type's attack map covers and own units do not occupy — a union over the pieces of that type, not a sum, / 16 | B | B |
 | `safe_mobility_by_type` | 10 | as above, minus squares attacked by an enemy pawn, / 16 | B | B |
 | `mobility_diff_by_type` | 5 | us − them per type, / 16 | A | V |
 | `space` | 2 | per side: attacked squares in the opponent's half, / 32 | A | V |
@@ -273,7 +278,8 @@ Every row is a pair: our king then their king, unless noted.
 ### 2.8 `tactics` — one-ply tactics (width 120)
 
 The same 60-wide block twice: `tactics.us` then `tactics.them`, the second
-computed after a null move.
+computed after a null move. The schema names the two blocks' features
+`us.<feature>` and `them.<feature>`.
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -284,7 +290,7 @@ computed after a null move.
 | `safe_check_count` | 1 | count / 8 | C | P |
 | `safe_check_by_piece` | 5 | bit per moving piece type | C | P |
 | `double_check_available` | 1 | bit: a move giving check from two units at once | C | P |
-| `discovered_check_available` | 1 | bit | B | P |
+| `discovered_check_available` | 1 | bit: a legal move after which a unit that did not move gives check | C | P |
 | `mate_in_1` | 1 | bit | D | B |
 | `stalemate_in_1` | 1 | bit | D | B |
 | `promotion_available` | 1 | bit: some legal move promotes | C | B |
@@ -384,7 +390,7 @@ computes them itself where it needs them.
 | Piece-square tables and any hand-tuned score | The net learns them from the board planes. |
 | Move number / opening classification | Absent from the training source, and phase already covers what it would proxy. |
 | Absolute colour | The mover's-view flip removes it; nothing in chess depends on it. |
-| Chess960 castling geometry | v0 assumes standard starting squares for the home-square and castled-zone features. Other features are 960-safe. |
+| Chess960 castling geometry | Four features assume the classic starting squares and are defined for classic chess only: `pieces.minors_undeveloped`, `pieces.queen_developed`, `king.king_on_home_square`, `king.king_castled_zone`. Under another variant they are written as zeros, so widths and offsets do not move. Every other feature is 960-safe. |
 | Game history beyond a supplied repetition set | The library does not track games; the caller passes what it knows. |
 
 ---
@@ -419,7 +425,7 @@ groups = [
   { name = "material", version = 1, width =  26, offset =  29 },
   ...
 ]
-schema_id = "b7f0…"   # 128-bit, hex
+schema_id = "b8d5295bb6c0475da1187562e3c87593"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering
@@ -431,6 +437,12 @@ schema_id = "b7f0…"   # 128-bit, hex
 
 for every group in order. It changes when any name, order, width or encoding
 changes, and only then.
+
+`<encoding>` is the encoding kind and its scale, from a fixed vocabulary:
+`bit`, `bits`, `one-hot`, `mask8`, `plane`, `ratio`, `count/S` and `diff/S`,
+where `S` is the feature's scale; `count/8|4` marks `piece_count`, whose scale
+is 8 for pawns and 4 for the rest. The full text is checked in as
+`rs_anglerfish/esca/tests/data/schema_v0.txt`.
 
 ### Contract
 

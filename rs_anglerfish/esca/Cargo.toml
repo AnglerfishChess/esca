@@ -12,6 +12,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+blake3 = "1"
 cozy-chess = "0.3.4"
 
 [dev-dependencies]

@@ -17,7 +17,7 @@ esca = "0.1"
 ```
 
 ```rust
-use esca::{Game, classic};
+use esca::{Game, Schema, Side, classic};
 
 let mut game = Game::new(classic());
 game.play_san("e4").unwrap();
@@ -28,6 +28,16 @@ for mv in game.legal_moves().as_slice() {
     println!("{}", game.move_to_san(*mv));
 }
 assert_eq!(game.outcome(), None);
+
+// What is true about the position, as a reader's questions …
+let facts = game.facts();
+println!("{:?}", facts.pawns.passed[Side::Us.index()]);
+println!("{}", facts.summary());
+
+// … and as the row a net eats.
+let schema = Schema::v0();
+let row = facts.encode(schema, schema.all());
+assert_eq!(row.len(), 1065);
 ```
 
 ## What it covers
@@ -39,6 +49,11 @@ assert_eq!(game.outcome(), None);
 - UCI move text in either castling spelling, and SAN with the disambiguation it needs.
 - Checkmate, stalemate, insufficient material, the fifty- and seventy-five-move rules, and
   threefold and fivefold repetition.
+- `Facts`: nine groups of cheap position facts — state, material, pawns, pieces, king, mobility,
+  attacks, one-ply tactics and attack planes — plus `MoveFacts` for every legal move, all
+  side-relative and in the mover's view.
+- `Schema`, a versioned manifest with a `schema_id`, and batch encoders that write `f32` rows
+  without allocating.
 
 ## Develop
 
@@ -47,6 +62,8 @@ cargo test
 cargo test -- --ignored     # the deep perft counts
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+cargo bench                 # nanoseconds per position, per group
+cargo run --release --example fixtures   # after a deliberate schema change
 ```
 
 ## License

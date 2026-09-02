@@ -4,6 +4,7 @@ use core::fmt;
 use std::sync::Arc;
 
 use crate::error::{FenError, IllegalMove, MoveParseError, PositionError};
+use crate::facts::{AnnotatedMove, Facts, Scratch, Side};
 use crate::moves::{Move, MoveList};
 use crate::position::Position;
 use crate::variant::{CastlingOutput, DrawClaim, Outcome, Variant};
@@ -174,6 +175,40 @@ impl Game {
     pub fn repetitions(&self) -> u32 {
         let key = *self.keys.last().expect("a game holds its start");
         self.keys.iter().filter(|&&other| other == key).count() as u32
+    }
+
+    /// The facts of the current position, repetition and history included.
+    pub fn facts(&self) -> Facts {
+        let mut scratch = Scratch::new();
+        self.facts_in(&mut scratch)
+    }
+
+    /// The facts of the current position, reusing `scratch`.
+    pub fn facts_in(&self, scratch: &mut Scratch) -> Facts {
+        let mut facts = self.position().facts_in(self.variant(), scratch);
+        facts.state.history_known = true;
+        facts.state.repetition_seen = self.repetitions() >= 2;
+        facts.state.repetition_available[Side::Us.index()] = self.reaches_history(self.position());
+        if let Some(null) = self.position().null_move() {
+            facts.state.repetition_available[Side::Them.index()] = self.reaches_history(&null);
+        }
+        facts
+    }
+
+    /// Every legal move in the current position, annotated.
+    pub fn annotated_moves(&self) -> MoveList<AnnotatedMove> {
+        self.facts().moves
+    }
+
+    /// Whether some legal move from `from` reaches a position this game has
+    /// already seen.
+    fn reaches_history(&self, from: &Position) -> bool {
+        let mut moves = MoveList::new();
+        self.variant.legal_moves(from, &mut moves);
+        moves.iter().any(|&mv| {
+            let next = self.variant.play(from, mv);
+            self.keys.contains(&next.repetition_key())
+        })
     }
 
     fn refresh_claims(&mut self) {
