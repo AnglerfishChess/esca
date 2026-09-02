@@ -129,15 +129,15 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
     }
 
     for file in File::ALL {
-        let white = facts.count_by_file[0][file.index()] > 0;
-        let black = facts.count_by_file[1][file.index()] > 0;
-        if !white && !black {
+        let ours = facts.count_by_file[0][file.index()] > 0;
+        let theirs = facts.count_by_file[1][file.index()] > 0;
+        if !ours && !theirs {
             facts.open_files.insert(file);
         }
-        if !white && black {
+        if !ours && theirs {
             facts.semi_open_files[0].insert(file);
         }
-        if !black && white {
+        if !theirs && ours {
             facts.semi_open_files[1].insert(file);
         }
     }

@@ -62,14 +62,14 @@ feature distinguishes actual White from actual Black.
 | **front span** | For a pawn of X on file *f*, relative rank *r*: all squares on file *f* with relative rank > *r*. |
 | **passed** | No enemy pawn stands on files *f*−1, *f*, *f*+1 at any relative rank greater than *r*. |
 | **candidate passer** | Not passed, no enemy pawn on file *f* ahead of *r*, and the number of our pawns on adjacent files at relative rank ≤ *r* is at least the number of enemy pawns on adjacent files at relative rank > *r*. |
-| **unstoppable passer** | A passed pawn whose promotion square the enemy king cannot reach in time by the rule of the square: `dist(enemy_king, promo_sq) − (them to move ? 1 : 0) > 8 − r`, and no piece other than kings remains for the defender. |
+| **unstoppable passer** | A passed pawn whose promotion square the enemy king cannot reach in time by the rule of the square: `dist(enemy_king, promo_sq) − (defender to move ? 1 : 0) > 8 − r`, and no piece other than kings remains for the defender. The defender is the passer owner's opponent, whichever side that is; its own pawns do not stop the pawn being unstoppable. |
 | **doubled** | Two or more pawns of the same colour on one file. All of them are marked. |
 | **isolated** | No friendly pawn on either adjacent file. |
 | **backward** | Not passed, no friendly pawn on an adjacent file at relative rank ≤ *r*, and the square directly ahead is attacked by an enemy pawn. |
 | **open file** | No pawn of either colour on it. |
 | **semi-open for X** | No pawn of X on it, at least one pawn of the opponent. |
 | **pawn island** | A maximal run of adjacent files carrying at least one pawn of the side. |
-| **lever** | A pawn that can capture an enemy pawn. |
+| **lever** | A pawn one of whose attacked squares carries an enemy pawn. Counted once per such pawn, from the attack alone. |
 | **ram** | A pawn whose stop square holds an enemy pawn. |
 | **outpost square for X** | A square on relative ranks 4–6, attacked by one of X's pawns, and never attackable by an enemy pawn (no enemy pawn on either adjacent file at that relative rank or ahead of it). |
 | **pawn shield** | For each of the king files: the nearest friendly pawn ahead of the king on that file. |
