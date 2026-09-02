@@ -11,9 +11,17 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+# The dump reader.
+lichess = ["dep:serde", "dep:serde_json", "dep:zstd"]
+
 [dependencies]
 blake3 = "1"
 cozy-chess = "0.3.4"
+serde = { version = "1", optional = true, features = ["derive"] }
+serde_json = { version = "1", optional = true }
+zstd = { version = "0.13", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"

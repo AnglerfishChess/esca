@@ -555,13 +555,20 @@ pub mod lichess {
     }
 
     /// Streams a Zstandard-compressed JSON-lines dump; never holds the file.
-    pub fn read(path: &Path) -> io::Result<impl Iterator<Item = io::Result<Record>>>;
+    pub fn read(path: &Path) -> io::Result<impl Iterator<Item = io::Result<Record>> + use<>>;
+    /// Streams decompressed JSON lines; blank ones are skipped.
     pub fn read_from<R: BufRead>(reader: R) -> impl Iterator<Item = io::Result<Record>>;
 }
 ```
 
 Every `evals` entry of a record is exposed; choosing among depths is the
 caller's policy.
+
+The dump writes `cp` and `mate` from White's point of view; `Score` is
+side-relative, so the reader negates the scores of a record whose position has
+Black to move. A malformed line is one `Err` and the stream goes on. A small
+share of dump rows — around one in ten thousand — describe placements no game
+can reach, and `Record::position` returns `FenError::Position` for those.
 
 ---
 

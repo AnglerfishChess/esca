@@ -33,6 +33,8 @@ mod error;
 mod facts;
 mod fen;
 mod game;
+#[cfg(feature = "lichess")]
+pub mod lichess;
 mod moves;
 mod position;
 mod schema;
