@@ -33,6 +33,7 @@ approximation of a costlier truth, the approximation *is* the contract.
 | **mover's view** | The board as seen by *us*: when Black is to move, the board is flipped vertically (rank *r* becomes rank 9−*r*) and the colours are swapped. Files are **not** mirrored — file a stays file a. Every square index, file index and rank index below is in the mover's view. |
 | **relative rank** | Rank counted from the owner's own back rank: our relative rank 1 is where our king starts, relative rank 8 is where our pawns promote. In the mover's view our relative rank equals the absolute rank. |
 | **side-relative** | Every feature exists for us and for them; the two are computed by the same code with the sides exchanged. |
+| **wing** | Files a–d are the queen-side, files e–h the king-side. A unit stands on the wing its own file falls in. |
 
 Because of the flip, "side to move" is constant and is not emitted, and no
 feature distinguishes actual White from actual Black.
