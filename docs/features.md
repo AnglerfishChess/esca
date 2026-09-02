@@ -263,6 +263,9 @@ Every row is a pair: our king then their king, unless noted.
 | `immobile_pieces` | 2 | per side: non-pawn, non-king units with no destination, / 4 | B | V |
 | `total_mobility` | 2 | per side: sum over types, / 96 | B | V |
 
+`immobile_pieces` reads a unit's destinations off its attack map alone, so a
+piece under an absolute pin is not immobile.
+
 ### 2.7 `attacks` — attack-map summary (width 17)
 
 | Feature | Width | Encoding | Cost | Head |
