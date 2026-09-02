@@ -836,10 +836,11 @@ impl PyTacticsFacts {
         self.pin_creation_count > 0
     }
 
-    /// Whether the side has at most two legal moves.
+    /// Whether the side has at most two legal moves. False for a block that
+    /// could not be computed, which has no side to move.
     #[getter]
     fn only_moves(&self) -> bool {
-        self.legal_move_count <= 2
+        self.available && self.legal_move_count <= 2
     }
 
     fn __repr__(&self) -> String {

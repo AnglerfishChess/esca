@@ -46,7 +46,7 @@ feature distinguishes actual White from actual Black.
 | **attack map** | For a side, the union of its attacked squares; kept per piece type as well. |
 | **defended** | A unit of X on *s* is defended if *s* is attacked by X. A piece never defends itself. |
 | **hanging** | A unit of X on *s* is attacked by the opponent and not defended by X. Kings are never hanging. |
-| **value order** | P=1, N=B=3, R=5, Q=9, K=∞. Used only for comparisons, never as an evaluation. |
+| **value order** | P=1, N=B=3, R=5, Q=9, K=∞. Used only for comparisons, never as an evaluation. Where a value is added or subtracted instead of compared, a king contributes 0, except as a forked or hanging target, where it counts as 9 so that the feature's scale holds. |
 | **en prise** | A unit of X is en prise if it is hanging, or if it is attacked by an enemy unit of strictly lower value. Kings are never en prise. |
 | **destination** | The square the moved unit ends on. For castling that is the king's landing square, c1 or g1 in the mover's frame, never the rook's square the move is written with. |
 | **safe destination** | A move of piece *p* to square *t* is safe if, in the position after the move, *t* is not attacked by an enemy pawn, *t* is not attacked by an enemy piece of value below value(*p*), and *t* is not both attacked by them and undefended by us. *p* is the unit standing on *t* after the move, so a promotion is valued as the piece it becomes. No exchange sequence is played out: a defender that is pinned or overloaded is still counted as a defender. This is a 1-ply approximation of "does not lose material", and it is wrong exactly where a static exchange evaluation would be needed. |

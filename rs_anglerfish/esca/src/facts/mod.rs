@@ -421,10 +421,11 @@ impl TacticsFacts {
         self.pin_creation_count > 0
     }
 
-    /// Whether the side to move has at most two legal moves.
+    /// Whether the side to move has at most two legal moves. False for a block
+    /// that could not be computed, which has no side to move.
     #[inline]
     pub fn only_moves(&self) -> bool {
-        self.legal_move_count <= 2
+        self.available && self.legal_move_count <= 2
     }
 }
 

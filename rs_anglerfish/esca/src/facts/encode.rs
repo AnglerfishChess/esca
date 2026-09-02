@@ -420,7 +420,7 @@ fn tactics_block(t: &TacticsFacts, w: &mut Writer) {
     w.bit(t.skewer_creation_available);
     w.bit(t.discovered_attack_available);
     w.count(t.legal_move_count as f32, 64.0);
-    w.bit(t.available && t.only_moves());
+    w.bit(t.only_moves());
     w.bit(t.available);
 }
 
