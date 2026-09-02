@@ -46,16 +46,16 @@ pip install esca
 ```python
 import esca
 
-game = esca.Game()                  # Chess960 rules: esca.Game(variant=esca.CHESS960)
+game = esca.Game()  # Chess960 rules: esca.Game(variant=esca.CHESS960)
 game.play_san("e4")
 game.play("e7e5")
 print(game.position.fen)
 
-facts = game.facts()                # side-relative: index with esca.US / esca.THEM
+facts = game.facts()  # side-relative: index with esca.US / esca.THEM
 print(facts.tactics[esca.US].legal_move_count)
 print(facts.summary())
 
-rows = esca.encode([game.position.fen])   # (1, 1065) float32, ready for a net
+rows = esca.encode([game.position.fen])  # (1, 1065) float32, ready for a net
 print(rows.shape, esca.SCHEMA_ID)
 ```
 
