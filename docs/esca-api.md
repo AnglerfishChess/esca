@@ -658,6 +658,7 @@ esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
 x = esca.encode(fens, variant=esca.CHESS960, groups=["state", "pawns"])
 esca.encode_into(fens, out, groups=["state", "pawns"])  # caller's array
 moves, mx = esca.encode_moves(fen)  # list[Move], (m, 24)
+moves, mx, cuts = esca.encode_moves(fens)  # per FEN, (total, 24), (n + 1,) int64
 
 # Lichess dump
 for batch in esca.lichess.batches(path, batch_size=8192, min_depth=20):
@@ -671,6 +672,7 @@ Every function that encodes takes keyword-only `variant`, `schema` and
 esca.encode(fens, *, variant=..., schema=..., groups=None) -> np.ndarray
 esca.encode_into(fens, out, *, variant=..., schema=..., groups=None) -> None
 esca.encode_moves(fen, *, variant=...) -> tuple[list[Move], np.ndarray]
+esca.encode_moves(fens, *, variant=...) -> tuple[list[list[Move]], np.ndarray, np.ndarray]
 esca.lichess.batches(path, *, batch_size=8192, min_depth=0,
                      variant=..., schema=..., groups=None) -> Iterator[Batch]
 ```
@@ -680,6 +682,7 @@ esca.lichess.batches(path, *, batch_size=8192, min_depth=0,
 | Returned arrays are C-contiguous `float32`, allocated in Rust and handed over without a copy. | |
 | Batch calls release the GIL, parallelise rows, and reuse their buffers internally. | |
 | A malformed FEN raises `ValueError` naming the row index. | |
+| `encode_moves` takes one FEN or a sequence of them. A sequence stacks every position's move rows into one `(total, 24)` array and returns the `(n + 1,)` int64 offsets that cut it, so FEN `i` owns `rows[offsets[i]:offsets[i + 1]]`: no padding, and one array per call rather than one per position. | |
 | `Position`, `Move`, `Facts` and their groups are immutable and picklable; `Position` and `Move` are hashable. | |
 | A batch row takes the deepest evaluation that reaches `min_depth`, and its best line; a record with none, with a placement no game can reach, or with an unreadable line is skipped. | |
 | `batch.cp` and `batch.mate` are both `(n,)` float32 and side-relative: a row is a mate row when `mate` is not 0.0, and a centipawn row otherwise. | |

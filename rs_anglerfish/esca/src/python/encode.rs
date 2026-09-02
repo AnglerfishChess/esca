@@ -2,6 +2,7 @@
 
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2, PyArrayMethods, PyUntypedArrayMethods};
+use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -233,29 +234,83 @@ pub(crate) fn encode_into(
     }
 }
 
-/// The legal moves of `fen` and their `(m, 24)` float32 rows.
-#[pyfunction]
-#[pyo3(signature = (fen, *, variant = None))]
-pub(crate) fn encode_moves<'py>(
-    py: Python<'py>,
-    fen: &str,
-    variant: Option<PyVariant>,
-) -> PyResult<(Vec<PyMove>, Bound<'py, PyArray2<f32>>)> {
-    let variant = variant.unwrap_or_else(super::default_variant);
-    let position = Position::from_fen(fen).map_err(value_error)?;
-    let facts = position.facts(variant.rules());
-    let rows = facts.moves.len();
-    let mut data = vec![0.0f32; rows * MoveFacts::WIDTH];
-    let mut moves = Vec::with_capacity(rows);
+/// One position's legal moves and the values of their rows, row-major.
+fn move_rows(
+    position: &Position,
+    variant: &dyn Variant,
+    scratch: &mut Scratch,
+) -> (Vec<PyMove>, Vec<f32>) {
+    let facts = position.facts_in(variant, scratch);
+    let mut data = vec![0.0f32; facts.moves.len() * MoveFacts::WIDTH];
+    let mut moves = Vec::with_capacity(facts.moves.len());
     for (row, annotated) in facts.moves.iter().enumerate() {
         moves.push(PyMove::new(annotated.mv));
         annotated
             .facts
             .encode_into(&mut data[row * MoveFacts::WIDTH..(row + 1) * MoveFacts::WIDTH]);
     }
-    let array = Array2::from_shape_vec((rows, MoveFacts::WIDTH), data)
+    (moves, data)
+}
+
+/// One position's moves and their row values, or why its FEN was not read.
+type MoveRows = Result<(Vec<PyMove>, Vec<f32>), RowError>;
+
+/// The legal moves of one FEN, or of a sequence of them, and their `(m, 24)`
+/// float32 rows.
+///
+/// For one FEN the result is `(moves, rows)`. For a sequence it is
+/// `(moves, rows, offsets)`: a move list per FEN, every position's rows stacked
+/// into one `(total, 24)` array, and the `(n + 1,)` int64 bounds that cut it,
+/// so FEN `i` owns `rows[offsets[i]:offsets[i + 1]]`.
+#[pyfunction]
+#[pyo3(signature = (fens, *, variant = None))]
+pub(crate) fn encode_moves<'py>(
+    py: Python<'py>,
+    fens: &Bound<'py, PyAny>,
+    variant: Option<PyVariant>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let variant = variant.unwrap_or_else(super::default_variant);
+    let rules = variant.rules();
+
+    if let Ok(fen) = fens.extract::<String>() {
+        let position = Position::from_fen(&fen).map_err(value_error)?;
+        let (moves, data) = py.detach(|| move_rows(&position, rules, &mut Scratch::new()));
+        let rows = moves.len();
+        let array = Array2::from_shape_vec((rows, MoveFacts::WIDTH), data)
+            .expect("the buffer is rows by width");
+        let out = (moves, array.into_pyarray(py)).into_pyobject(py)?;
+        return Ok(out.into_any());
+    }
+
+    let fens: Vec<String> = fens.extract()?;
+    let encoded: Vec<MoveRows> = py.detach(|| {
+        fens.par_iter()
+            .enumerate()
+            .map_init(Scratch::new, |scratch, (row, fen)| {
+                let position =
+                    Position::from_fen(fen).map_err(|source| RowError { row, source })?;
+                Ok(move_rows(&position, rules, scratch))
+            })
+            .collect()
+    });
+
+    let mut moves = Vec::with_capacity(fens.len());
+    let mut offsets = Vec::with_capacity(fens.len() + 1);
+    let mut data: Vec<f32> = Vec::new();
+    let mut bound = 0i64;
+    offsets.push(bound);
+    for row in encoded {
+        let (row_moves, row_data) = row.map_err(value_error)?;
+        bound += row_moves.len() as i64;
+        offsets.push(bound);
+        data.extend_from_slice(&row_data);
+        moves.push(row_moves);
+    }
+    let total = bound as usize;
+    let array = Array2::from_shape_vec((total, MoveFacts::WIDTH), data)
         .expect("the buffer is rows by width");
-    Ok((moves, array.into_pyarray(py)))
+    let out = (moves, array.into_pyarray(py), offsets.into_pyarray(py)).into_pyobject(py)?;
+    Ok(out.into_any())
 }
 
 /// The features whose definitions hold under `variant`.

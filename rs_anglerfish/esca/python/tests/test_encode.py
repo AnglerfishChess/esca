@@ -25,7 +25,7 @@ def vectors(name: str, rows: int) -> np.ndarray:
 
 def test_the_schema_is_the_v0_one() -> None:
     assert esca.SCHEMA_V0.id == esca.SCHEMA_ID
-    assert esca.SCHEMA_ID == (DATA / "schema_v0_id.txt").read_text().strip()
+    assert (DATA / "schema_v0_id.txt").read_text().strip() == esca.SCHEMA_ID
     assert esca.SCHEMA_V0.width == esca.WIDTH == 1065
     assert esca.SCHEMA_V0.canonical() == (DATA / "schema_v0.txt").read_text()
     assert [group["name"] for group in esca.schema()] == esca.SCHEMA_V0.group_names
@@ -86,6 +86,43 @@ def test_encode_moves_gives_a_row_per_legal_move() -> None:
     assert encoded.shape == (20, esca.MOVE_WIDTH)
     assert encoded.flags["C_CONTIGUOUS"]
     assert {move.uci for move in moves} >= {"e2e4", "g1f3"}
+
+
+def test_encode_moves_stacks_a_sequence_and_cuts_it_by_offsets() -> None:
+    fens = corpus("fens_classic.txt")[:16]
+    moves, encoded, offsets = esca.encode_moves(fens)
+    assert len(moves) == 16
+    assert encoded.dtype == np.float32
+    assert encoded.flags["C_CONTIGUOUS"]
+    assert offsets.dtype == np.int64
+    assert offsets.shape == (17,)
+    assert offsets[0] == 0
+    assert offsets[-1] == encoded.shape[0] == sum(len(row) for row in moves)
+    for row, fen in enumerate(fens):
+        one, rows = esca.encode_moves(fen)
+        assert [move.uci for move in moves[row]] == [move.uci for move in one]
+        assert np.array_equal(encoded[offsets[row] : offsets[row + 1]], rows)
+
+
+def test_encode_moves_takes_an_empty_sequence() -> None:
+    moves, encoded, offsets = esca.encode_moves([])
+    assert moves == []
+    assert encoded.shape == (0, esca.MOVE_WIDTH)
+    assert np.array_equal(offsets, [0])
+
+
+def test_encode_moves_follows_its_variant() -> None:
+    fens = corpus("fens_chess960.txt")[:8]
+    moves, encoded, offsets = esca.encode_moves(fens, variant=esca.CHESS960)
+    for row, fen in enumerate(fens):
+        one, rows = esca.encode_moves(fen, variant=esca.CHESS960)
+        assert len(moves[row]) == len(one)
+        assert np.array_equal(encoded[offsets[row] : offsets[row + 1]], rows)
+
+
+def test_a_malformed_fen_in_a_move_batch_names_its_row() -> None:
+    with pytest.raises(ValueError, match="row 1"):
+        esca.encode_moves(["8/8/8/8/8/8/8/K6k w - - 0 1", "nonsense"])
 
 
 def test_features_for_drops_what_a_variant_does_not_define() -> None:

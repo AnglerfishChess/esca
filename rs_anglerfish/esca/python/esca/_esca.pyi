@@ -2,7 +2,7 @@
 
 import os
 from collections.abc import Iterator, Sequence
-from typing import Final, TypedDict, final
+from typing import Final, TypedDict, final, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -616,11 +616,18 @@ def encode_into(
     schema: Schema | None = None,
     groups: Sequence[str] | None = None,
 ) -> None: ...
+@overload
 def encode_moves(
-    fen: str,
+    fens: str,
     *,
     variant: Variant | None = None,
 ) -> tuple[list[Move], NDArray[np.float32]]: ...
+@overload
+def encode_moves(
+    fens: Sequence[str],
+    *,
+    variant: Variant | None = None,
+) -> tuple[list[list[Move]], NDArray[np.float32], NDArray[np.int64]]: ...
 def features_for(variant: Variant, *, schema: Schema | None = None) -> list[tuple[str, str]]: ...
 def schema() -> list[GroupInfo]: ...
 def batches(
