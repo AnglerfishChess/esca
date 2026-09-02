@@ -52,5 +52,5 @@ def test_a_group_subset_narrows_the_features() -> None:
 
 
 def test_a_missing_dump_is_an_error() -> None:
-    with pytest.raises(OSError):
+    with pytest.raises(FileNotFoundError, match="No such file"):
         lichess.batches(SAMPLE.parent / "no_such_dump.jsonl.zst")

@@ -13,7 +13,7 @@ START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 def test_the_variants_are_the_two_named_ones() -> None:
     assert esca.CLASSIC.name == "chess"
     assert esca.CHESS960.name == "chess960"
-    assert esca.CLASSIC == esca.Variant.named("chess")
+    assert esca.Variant.named("chess") == esca.CLASSIC
     assert esca.CLASSIC != esca.CHESS960
     assert esca.CLASSIC.promotion_roles == ["q", "r", "b", "n"]
     with pytest.raises(ValueError, match="not a variant"):
@@ -47,7 +47,7 @@ def test_a_four_field_fen_leaves_the_clocks_unknown() -> None:
 
 
 def test_a_malformed_fen_is_a_value_error() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="four or six fields"):
         esca.Position.from_fen("not a fen")
 
 
