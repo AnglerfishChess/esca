@@ -2,8 +2,8 @@
 //! carry.
 
 use esca::{
-    CHESS960, CLASSIC, Facts, Game, Position, Role, Schema, Scratch, Side, Square, Variant,
-    chess960, classic, encode_fens, encode_positions,
+    CHESS960, CLASSIC, Colour, Facts, Game, Position, Rank, Role, Schema, Scratch, Side, Square,
+    Variant, chess960, classic, encode_fens, encode_positions,
 };
 
 /// The FEN lines of a corpus file, `#` comments and blanks dropped.
@@ -141,6 +141,34 @@ fn the_start_position_is_symmetric() {
     assert_eq!(facts.tactics[1].legal_move_count, 20);
     assert!(facts.tactics[0].available && facts.tactics[1].available);
     assert_eq!(facts.moves.len(), 20);
+}
+
+#[test]
+fn the_side_to_move_plays_us() {
+    let white = facts_of("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    assert_eq!(white.side(Colour::White), Side::Us);
+    assert_eq!(white.side(Colour::Black), Side::Them);
+
+    let black = facts_of("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1");
+    assert_eq!(black.side(Colour::Black), Side::Us);
+    assert_eq!(black.side(Colour::White), Side::Them);
+}
+
+#[test]
+fn a_side_indexes_a_named_colours_facts_whoever_is_to_move() {
+    for fen in [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1",
+    ] {
+        let facts = facts_of(fen);
+        let black = facts.side(Colour::Black).index();
+        assert!(
+            facts.pawns.pawns[black]
+                .into_iter()
+                .all(|square| square.rank() == Rank::Seventh),
+            "{fen}"
+        );
+    }
 }
 
 #[test]

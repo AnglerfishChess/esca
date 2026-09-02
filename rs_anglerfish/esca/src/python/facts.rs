@@ -1049,6 +1049,14 @@ impl PyFacts {
         super::convert::colour_name(self.inner.side_to_move())
     }
 
+    /// The side the colour `"w"` or `"b"` plays: `esca.US` or `esca.THEM`.
+    fn side(&self, colour: &str) -> PyResult<usize> {
+        Ok(self
+            .inner
+            .side(super::convert::colour_from(colour)?)
+            .index())
+    }
+
     /// The position the facts were computed for.
     #[getter]
     fn position(&self) -> PyResult<super::board::PyPosition> {

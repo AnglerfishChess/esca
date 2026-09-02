@@ -389,6 +389,8 @@ impl Facts {
     pub fn variant(&self) -> &'static str;
     /// The colour that plays `Side::Us`.
     pub fn side_to_move(&self) -> Colour;
+    /// The side `colour` plays: the index into every side-paired fact.
+    pub fn side(&self, colour: Colour) -> Side;
     /// A page of prose: material, structure, king safety, threats. Text not stable.
     pub fn summary(&self) -> String;
 }
@@ -641,6 +643,7 @@ p.piece_at("e1")  # "K"
 f = p.facts(esca.CLASSIC)
 f = g.facts()  # variant taken from the game
 
+f.side("b")  # esca.US or esca.THEM, whichever Black plays
 f.pawns.passed[esca.US]  # SquareSet
 list(f.attacks.hanging[esca.THEM])  # ["e5", …]
 f.king.ring_attack_weight[esca.US]

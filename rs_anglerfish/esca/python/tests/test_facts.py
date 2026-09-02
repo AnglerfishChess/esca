@@ -33,6 +33,19 @@ def test_black_to_move_flips_the_view() -> None:
     assert facts.pawns.pawns[esca.US].squares == [f"{file}7" for file in "abcdefgh"]
 
 
+def test_the_side_to_move_plays_us() -> None:
+    facts = esca.Position.from_fen(START).facts(esca.CLASSIC)
+    assert facts.side("w") == esca.US
+    assert facts.side("b") == esca.THEM
+
+
+def test_a_side_indexes_a_named_colours_facts_whoever_is_to_move() -> None:
+    for fen in (START, START.replace(" w ", " b ")):
+        facts = esca.Position.from_fen(fen).facts()
+        black = facts.side("b")
+        assert facts.pawns.pawns[black].squares == [f"{file}7" for file in "abcdefgh"]
+
+
 def test_attack_facts_answer_about_single_squares() -> None:
     facts = esca.Position.from_fen("4k3/8/8/3q4/8/8/4P3/4K3 w - - 0 1").facts()
     attackers = facts.attacks.attackers_of("d5", esca.US)

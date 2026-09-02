@@ -37,6 +37,7 @@ zstd = { version = "0.13", optional = true }
 [dev-dependencies]
 criterion = "0.5"
 proptest = "1"
+rstest = { version = "0.26.1", default-features = false }
 
 [[bench]]
 name = "facts"

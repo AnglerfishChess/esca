@@ -560,6 +560,16 @@ impl Facts {
         self.us
     }
 
+    /// The side `colour` plays: the index into every side-paired fact.
+    #[inline]
+    pub fn side(&self, colour: Colour) -> Side {
+        if colour == self.us {
+            Side::Us
+        } else {
+            Side::Them
+        }
+    }
+
     /// Material, structure, king safety and threats, for a human reader. The
     /// text is not a stable format.
     pub fn summary(&self) -> String {
