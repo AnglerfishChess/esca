@@ -26,3 +26,19 @@ def facts_of() -> Callable[..., esca.Facts]:
 def squares() -> Callable[[str], set[str]]:
     """`squares("e4 d5")`: the squares a space-separated list names."""
     return _squares
+
+
+def _move_facts(fen: str, uci: str, variant: esca.Variant | None = None) -> esca.MoveFacts:
+    for annotated in _facts_of(fen, variant).moves:
+        if annotated.move.uci == uci:
+            return annotated.facts
+    raise AssertionError(f"{uci} is not a legal move of {fen}")
+
+
+@pytest.fixture(scope="session")
+def move_facts() -> Callable[..., esca.MoveFacts]:
+    """`move_facts(fen, "e2e4")`, or with a variant: one legal move's facts.
+
+    Castling is written king-to-rook, so `"e1h1"` is the classic short castling.
+    """
+    return _move_facts

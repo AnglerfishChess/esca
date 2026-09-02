@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use esca::{CLASSIC, Facts, FileSet, Position, Square, SquareSet, Variant};
+use esca::{CLASSIC, Facts, FileSet, MoveFacts, Position, Square, SquareSet, Variant};
 
 /// The facts of `fen` under classic chess.
 pub fn facts_of(fen: &str) -> Facts {
@@ -31,4 +31,20 @@ pub fn files(letters: &str) -> FileSet {
         .chars()
         .map(|letter| esca::File::from_char(letter).expect("a file letter"))
         .collect()
+}
+
+/// The facts of the move `uci` in `fen`, under classic chess.
+pub fn move_facts(fen: &str, uci: &str) -> MoveFacts {
+    move_facts_under(&CLASSIC, fen, uci)
+}
+
+/// The facts of the move `uci` in `fen`, under `variant`. Castling is written
+/// king-to-rook, so `"e1h1"` is the classic short castling.
+pub fn move_facts_under(variant: &dyn Variant, fen: &str, uci: &str) -> MoveFacts {
+    facts_under(variant, fen)
+        .moves
+        .iter()
+        .find(|annotated| annotated.mv.to_string() == uci)
+        .unwrap_or_else(|| panic!("{uci} is a legal move of the position"))
+        .facts
 }
