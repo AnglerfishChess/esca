@@ -1108,6 +1108,26 @@ pub struct PyTacticsFacts {
     /// Legal moves.
     #[pyo3(get)]
     legal_move_count: u16,
+    /// A checking move that captures and whose destination is safe.
+    #[pyo3(get)]
+    safe_check_capturing: bool,
+    /// A move uncovering a slider's attack on the enemy queen.
+    #[pyo3(get)]
+    discovered_attack_on_queen: bool,
+    /// A move after which a rook or queen of the side checks the enemy king
+    /// along that king's own rank, its back rank being blocked.
+    #[pyo3(get)]
+    back_rank_mate_threat: bool,
+    /// A quiet move after which the largest SEE of a unit over the enemy's
+    /// units is greater than it is now.
+    #[pyo3(get)]
+    quiet_threat_available: bool,
+    /// No legal move has a safe destination.
+    #[pyo3(get)]
+    no_safe_moves: bool,
+    /// A promotion whose SEE is above 0.
+    #[pyo3(get)]
+    promotion_see_positive: bool,
 }
 
 impl PyTacticsFacts {
@@ -1142,6 +1162,12 @@ impl PyTacticsFacts {
             skewer_creation_available: facts.skewer_creation_available,
             discovered_attack_available: facts.discovered_attack_available,
             legal_move_count: facts.legal_move_count,
+            safe_check_capturing: facts.safe_check_capturing,
+            discovered_attack_on_queen: facts.discovered_attack_on_queen,
+            back_rank_mate_threat: facts.back_rank_mate_threat,
+            quiet_threat_available: facts.quiet_threat_available,
+            no_safe_moves: facts.no_safe_moves,
+            promotion_see_positive: facts.promotion_see_positive,
         }
     }
 }

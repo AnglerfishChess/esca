@@ -73,6 +73,66 @@ LOSING_TAKE_THEIRS = "4k3/8/2p5/3p4/8/8/3R4/4K3 b - - 0 1"
 #: Chess960: castling long lands the king on c1 and the rook on d1, in check.
 NINE_SIXTY = "3k3r/8/8/8/8/8/8/RK6 w A - 0 1"
 
+#: Rxe8 takes the rook and checks in one, onto a square nothing covers.
+SAFE_CHECK_CAPTURE = "k3r3/8/8/8/8/8/4R3/4R2K w - - 0 1"
+
+#: The same board with Black to move.
+SAFE_CHECK_CAPTURE_THEIRS = "k3r3/8/8/8/8/8/4R3/4R2K b - - 0 1"
+
+#: Rxe7 checks and captures, and the king takes the rook straight back.
+UNSAFE_CHECK_CAPTURE = "4k3/4r3/8/8/8/8/8/4R2K w - - 0 1"
+
+#: Every knight move uncovers the rook's attack on the queen behind it.
+DISCOVERED_QUEEN = "3q2k1/8/8/8/3N4/8/8/3R3K w - - 0 1"
+
+#: The same board with Black to move.
+DISCOVERED_QUEEN_THEIRS = "3q2k1/8/8/8/3N4/8/8/3R3K b - - 0 1"
+
+#: The same discovery with the colours exchanged, Black to move.
+MIRRORED_QUEEN = "3r3k/8/8/8/3n4/8/8/3Q2K1 b - - 0 1"
+
+#: The same board with White to move.
+MIRRORED_QUEEN_THEIRS = "3r3k/8/8/8/3n4/8/8/3Q2K1 w - - 0 1"
+
+#: The same discovery onto a rook: uncovered, but not onto the queen.
+DISCOVERED_ROOK = "3r2k1/8/8/8/3N4/8/8/3R3K w - - 0 1"
+
+#: The mating board with the h-pawn a rank on, so the black king has luft.
+BACK_RANK_LUFT = "6k1/5pp1/7p/8/8/7r/5PPP/R5K1 w - - 0 1"
+
+#: Ra8 mates; White's own king stands a rank up, on no back rank of its own.
+BACK_RANK_ONE_SIDED = "6k1/5ppp/8/8/8/4r2P/5PPK/R7 w - - 0 1"
+
+#: A rook of Black's own seals the eighth rank, so Ra8 arrives without check.
+BACK_RANK_BLOCKED = "1r4k1/5ppp/8/8/8/7r/5PPP/R5K1 w - - 0 1"
+
+#: Rd1 attacks the knight the rook reaches nothing from where it stands.
+QUIET_THREAT = "6k1/8/8/3n4/8/8/8/R5K1 w - - 0 1"
+
+#: The same board with Black to move.
+QUIET_THREAT_THEIRS = "6k1/8/8/3n4/8/8/8/R5K1 b - - 0 1"
+
+#: The rook attacks the knight already, and no move of White's wins more.
+THREAT_STANDS = "6k1/8/8/3n4/8/8/8/3R2K1 w - - 0 1"
+
+#: Five legal moves for White, every one of them onto a square a pawn covers.
+BOXED_IN = "k7/8/8/8/1p4pp/4p3/5bPP/1N5K w - - 0 1"
+
+#: The same board with Black to move.
+BOXED_IN_THEIRS = "k7/8/8/8/1p4pp/4p3/5bPP/1N5K b - - 0 1"
+
+#: The same position with the colours exchanged, so Black is the boxed side.
+BOXED_IN_MIRRORED = "1n5k/5Bpp/4P3/1P4PP/8/8/8/K7 b - - 0 1"
+
+#: The knight covers b8, so every promotion there loses the new piece.
+GUARDED_PROMOTION = "8/1P6/n6k/8/7K/8/8/8 w - - 0 1"
+
+#: Nothing covers f8: the push alone wins a queen.
+FREE_PROMOTION = "8/5P2/7k/8/7K/8/8/8 w - - 0 1"
+
+#: The same board with Black to move.
+FREE_PROMOTION_THEIRS = "8/5P2/7k/8/7K/8/8/8 b - - 0 1"
+
 #: The helper `conftest.py` hands over.
 FactsOf = Callable[..., esca.Facts]
 
@@ -780,6 +840,186 @@ def test_their_block_is_unavailable_and_empty_when_the_null_move_does_not_exist(
         assert not them.only_moves
         assert not them.check_available
         assert not them.promotion_available
+
+
+@pytest.mark.parametrize(
+    ("fen", "capturing"),
+    [
+        (START, [False, False]),
+        (MATE, [False, False]),
+        (SAFE_CHECK_CAPTURE, [True, False]),
+        (SAFE_CHECK_CAPTURE_THEIRS, [False, True]),
+        (UNSAFE_CHECK_CAPTURE, [False, True]),
+        (DISCOVERY, [True, False]),
+    ],
+    ids=[
+        "start",
+        "mate",
+        "safe_check_capture",
+        "safe_check_capture_theirs",
+        "unsafe_check_capture",
+        "discovery",
+    ],
+)
+def test_a_capturing_check_is_reported_only_when_its_destination_is_safe(
+    fen: str, capturing: list[bool], facts_of: FactsOf
+) -> None:
+    tactics = facts_of(fen).tactics
+    assert tactics[esca.US].safe_check_capturing == capturing[0]
+    assert tactics[esca.THEM].safe_check_capturing == capturing[1]
+
+
+@pytest.mark.parametrize(
+    ("fen", "uncovered"),
+    [
+        (START, [False, False]),
+        (DISCOVERED_QUEEN, [True, False]),
+        (DISCOVERED_QUEEN_THEIRS, [False, True]),
+        (MIRRORED_QUEEN, [True, False]),
+        (MIRRORED_QUEEN_THEIRS, [False, True]),
+        (DISCOVERED_ROOK, [False, False]),
+    ],
+    ids=[
+        "start",
+        "discovered_queen",
+        "discovered_queen_theirs",
+        "mirrored_queen",
+        "mirrored_queen_theirs",
+        "discovered_rook",
+    ],
+)
+def test_a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
+    fen: str, uncovered: list[bool], facts_of: FactsOf
+) -> None:
+    tactics = facts_of(fen).tactics
+    assert tactics[esca.US].discovered_attack_on_queen == uncovered[0]
+    assert tactics[esca.THEM].discovered_attack_on_queen == uncovered[1]
+    for side in (esca.US, esca.THEM):
+        block = tactics[side]
+        assert block.discovered_attack_available or not block.discovered_attack_on_queen
+
+
+@pytest.mark.parametrize(
+    ("fen", "threat"),
+    [
+        (START, [False, False]),
+        (MATE, [True, False]),
+        (MATE_THEIRS, [False, True]),
+        (BACK_RANK_LUFT, [False, False]),
+        (BACK_RANK_ONE_SIDED, [True, False]),
+        (BACK_RANK_BLOCKED, [False, True]),
+    ],
+    ids=[
+        "start",
+        "mate",
+        "mate_theirs",
+        "back_rank_luft",
+        "back_rank_one_sided",
+        "back_rank_blocked",
+    ],
+)
+def test_a_back_rank_mate_threat_is_a_rook_or_queen_check_on_a_sealed_back_rank(
+    fen: str, threat: list[bool], facts_of: FactsOf
+) -> None:
+    tactics = facts_of(fen).tactics
+    assert tactics[esca.US].back_rank_mate_threat == threat[0]
+    assert tactics[esca.THEM].back_rank_mate_threat == threat[1]
+
+
+@pytest.mark.parametrize(
+    ("fen", "threat"),
+    [
+        (START, [False, False]),
+        (QUIET_THREAT, [True, False]),
+        (QUIET_THREAT_THEIRS, [False, True]),
+        (THREAT_STANDS, [False, True]),
+        (PROMOTION_CAPTURES, [False, False]),
+        (MATE, [False, True]),
+        (DISCOVERED_QUEEN, [True, False]),
+    ],
+    ids=[
+        "start",
+        "quiet_threat",
+        "quiet_threat_theirs",
+        "threat_stands",
+        "promotion_captures",
+        "mate",
+        "discovered_queen",
+    ],
+)
+def test_a_quiet_threat_leaves_more_to_be_won_than_stands_to_be_won_now(
+    fen: str, threat: list[bool], facts_of: FactsOf
+) -> None:
+    tactics = facts_of(fen).tactics
+    assert tactics[esca.US].quiet_threat_available == threat[0]
+    assert tactics[esca.THEM].quiet_threat_available == threat[1]
+
+
+@pytest.mark.parametrize(
+    ("fen", "boxed"),
+    [
+        (START, [False, False]),
+        (MATE, [False, False]),
+        (BOXED_IN, [True, False]),
+        (BOXED_IN_THEIRS, [False, True]),
+        (BOXED_IN_MIRRORED, [True, False]),
+        (STALEMATE, [False, True]),
+    ],
+    ids=[
+        "start",
+        "mate",
+        "boxed_in",
+        "boxed_in_theirs",
+        "boxed_in_mirrored",
+        "stalemate",
+    ],
+)
+def test_a_side_has_no_safe_moves_when_every_legal_move_lands_where_it_can_be_taken(
+    fen: str, boxed: list[bool], facts_of: FactsOf
+) -> None:
+    tactics = facts_of(fen).tactics
+    assert tactics[esca.US].no_safe_moves == boxed[0]
+    assert tactics[esca.THEM].no_safe_moves == boxed[1]
+
+
+@pytest.mark.parametrize(
+    ("fen", "positive"),
+    [
+        (START, [False, False]),
+        (PROMOTIONS, [True, True]),
+        (GUARDED_PROMOTION, [False, False]),
+        (PROMOTION_CAPTURES, [True, True]),
+        (FREE_PROMOTION, [True, False]),
+        (FREE_PROMOTION_THEIRS, [False, True]),
+    ],
+    ids=[
+        "start",
+        "promotions",
+        "guarded_promotion",
+        "promotion_captures",
+        "free_promotion",
+        "free_promotion_theirs",
+    ],
+)
+def test_a_promotion_is_see_positive_when_the_exchange_on_its_square_wins_material(
+    fen: str, positive: list[bool], facts_of: FactsOf
+) -> None:
+    tactics = facts_of(fen).tactics
+    assert tactics[esca.US].promotion_see_positive == positive[0]
+    assert tactics[esca.THEM].promotion_see_positive == positive[1]
+
+
+def test_a_block_the_null_move_does_not_allow_states_no_tactic_of_its_own(facts_of: FactsOf) -> None:
+    """A block with no side to move states no tactic, `no_safe_moves` included:
+    zero there says the block was not computed, not that a safe move exists."""
+    theirs = facts_of(IN_CHECK).tactics[esca.THEM]
+    assert not theirs.available
+    assert not theirs.safe_check_capturing
+    assert not theirs.discovered_attack_on_queen
+    assert not theirs.back_rank_mate_threat
+    assert not theirs.quiet_threat_available
+    assert not theirs.no_safe_moves
+    assert not theirs.promotion_see_positive
 
 
 def test_the_tactics_of_a_chess960_position_read_a_castling_by_the_kings_landing_square(

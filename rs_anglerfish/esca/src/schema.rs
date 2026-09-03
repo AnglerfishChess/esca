@@ -6,7 +6,7 @@ use core::fmt;
 use crate::variant::Variant;
 
 /// How many features the widest schema may name.
-const MAX_FEATURES: usize = 256;
+const MAX_FEATURES: usize = 512;
 
 /// One named value inside a group.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -497,7 +497,7 @@ static HISTORY: [FeatureSpec; 11] = feature_specs! {
     "history_known", 1, "bit", ANY;
 };
 
-static TACTICS: [FeatureSpec; 70] = feature_specs! {
+static TACTICS: [FeatureSpec; 82] = feature_specs! {
     "us.check_available", 1, "bit", ANY;
     "us.check_count", 1, "count/8", ANY;
     "us.check_by_piece", 5, "bits", ANY;
@@ -533,6 +533,12 @@ static TACTICS: [FeatureSpec; 70] = feature_specs! {
     "us.legal_move_count", 1, "count/64", ANY;
     "us.only_moves", 1, "bit", ANY;
     "us.facts_available", 1, "bit", ANY;
+    "us.safe_check_capturing", 1, "bit", ANY;
+    "us.discovered_attack_on_queen", 1, "bit", ANY;
+    "us.back_rank_mate_threat", 1, "bit", ANY;
+    "us.quiet_threat_available", 1, "bit", ANY;
+    "us.no_safe_moves", 1, "bit", ANY;
+    "us.promotion_see_positive", 1, "bit", ANY;
     "them.check_available", 1, "bit", ANY;
     "them.check_count", 1, "count/8", ANY;
     "them.check_by_piece", 5, "bits", ANY;
@@ -568,6 +574,12 @@ static TACTICS: [FeatureSpec; 70] = feature_specs! {
     "them.legal_move_count", 1, "count/64", ANY;
     "them.only_moves", 1, "bit", ANY;
     "them.facts_available", 1, "bit", ANY;
+    "them.safe_check_capturing", 1, "bit", ANY;
+    "them.discovered_attack_on_queen", 1, "bit", ANY;
+    "them.back_rank_mate_threat", 1, "bit", ANY;
+    "them.quiet_threat_available", 1, "bit", ANY;
+    "them.no_safe_moves", 1, "bit", ANY;
+    "them.promotion_see_positive", 1, "bit", ANY;
 };
 
 static PLANES: [FeatureSpec; 8] = feature_specs! {
@@ -644,8 +656,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "tactics",
-        version: 2,
-        width: 120,
+        version: 3,
+        width: 132,
         features: &TACTICS,
     },
     GroupSpec {
@@ -691,7 +703,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1956);
+        assert_eq!(Schema::v1().width(), 1968);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

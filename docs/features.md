@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1956 f32 per position | value head, policy head |
+| `position` | one vector of 1968 f32 per position | value head, policy head |
 | `move` | one vector of 40 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -71,7 +71,7 @@ feature distinguishes actual White from actual Black.
 |---|---|
 | **value sum** | Σ over a set of units of P=1, N=B=3, R=5, Q=9, K=0. |
 | **exchange on a square** | Both sides capture on one square in turn, each with its least valuable attacker of that square, until one has no attacker left or stops. Attackers are read from the occupancy of the moment, so a slider standing behind a departed attacker on the same ray joins in. Pins are ignored: a pinned defender still counts. A king captures only when the square is no longer attacked by the other side, so it is the last attacker of its side. A pawn capturing onto its relative rank 8 promotes to a queen: that capture wins 8 more, and a queen stands on the square from then on. |
-| **SEE** | Static exchange evaluation, in value units, signed, positive for material won. Of a capture: the value its side wins from the exchange that capture begins, each side stopping as soon as going on would cost it material. The move itself is played whatever it costs, so a capture's SEE may be negative. Of a quiet move: the same reckoning with nothing captured, so 0 or negative. Of castling: 0. |
+| **SEE** | Static exchange evaluation, in value units, signed, positive for material won. Of a capture: the value its side wins from the exchange that capture begins, each side stopping as soon as going on would cost it material. The move itself is played whatever it costs, so a capture's SEE may be negative. Of a quiet move: the same reckoning with nothing captured, so 0 or negative unless it promotes. A promoting move wins the piece it becomes, less the pawn, besides whatever it captures. Of castling: 0. |
 | **SEE of a unit** | The SEE of the exchange the opponent begins by capturing that unit. Never negative — the opponent may leave it alone. 0 for a square no enemy unit attacks, and for a king. |
 | **signed SEE of a unit** | The same exchange with the opponent's first capture played whatever it costs, so it may be negative. Absent where the opponent has no capture there: an unattacked unit, a king, and a unit whose only attacker is a king the square is still defended against. |
 | **max gain** | The largest SEE over a side's captures. |
@@ -142,6 +142,8 @@ taking here cost", never "is taking here best".
 | **discovered check available** | Some friendly unit stands on a ray between one of our sliders and the enemy king, and has at least one legal move off that ray. |
 | **mate in 1** | Some legal move leaves the opponent checkmated. |
 | **stalemate in 1** | Some legal move leaves the opponent stalemated. |
+| **quiet move** | A legal move that captures nothing. It may still promote, and it may still give check. |
+| **back rank blocked** | Of a king on its relative rank 1: every square adjacent to it on the rank ahead carries a unit of its own side. Two such squares for a king on file a or h, three otherwise. |
 
 ### Endgame
 
@@ -185,8 +187,10 @@ the legal move list).
 Class D applies to exactly two features (`mate_in_1`, `stalemate_in_1`). They
 sit in their own sub-group so that a search that cannot afford them can turn
 them off without changing any other offset. `C·E` is one exchange loop per
-capture in the move list, `B·E` one per unit of a side. Class F belongs to the
-`move` schema alone, where it is paid once per legal move.
+capture in the move list, `B·E` one per unit of a side, and `C·B·E` one per
+enemy unit per quiet move — the dearest position-level class, borne by
+`tactics.quiet_threat_available` alone. Class F belongs to the `move` schema
+alone, where it is paid once per legal move.
 
 ### Encoding rules
 
@@ -456,9 +460,9 @@ yet made — the geometry a pin, a skewer or a piled-up attack comes from.
 a unit an enemy pawn attacks is en prise whatever defends it, and threatened
 only when the exchange on its square wins material.
 
-### 2.11 `tactics` — one-ply tactics (width 120)
+### 2.11 `tactics` — one-ply tactics (width 132)
 
-The same 60-wide block twice: `tactics.us` then `tactics.them`, the second
+The same 66-wide block twice: `tactics.us` then `tactics.them`, the second
 computed after a null move. The schema names the two blocks' features
 `us.<feature>` and `them.<feature>`.
 
@@ -499,6 +503,21 @@ computed after a null move. The schema names the two blocks' features
 | `legal_move_count` | 1 | count / 64 | C | V |
 | `only_moves` | 1 | bit: at most 2 legal moves | C | V |
 | `facts_available` | 1 | bit: 0 when the block could not be computed (in check, for the them block) | A | B |
+| `safe_check_capturing` | 1 | bit: a checking move that captures and whose destination is safe | C | B |
+| `discovered_attack_on_queen` | 1 | bit: a move uncovering a slider's attack on the enemy queen | C | B |
+| `back_rank_mate_threat` | 1 | bit: a move after which a rook or queen of the side checks the enemy king from that king's own rank, its back rank being blocked | C | B |
+| `quiet_threat_available` | 1 | bit: a quiet move after which the largest SEE of a unit over their units is greater than it is now | C·B·E | B |
+| `no_safe_moves` | 1 | bit: no legal move has a safe destination | C | V |
+| `promotion_see_positive` | 1 | bit: a promotion whose SEE is above 0 | C·E | B |
+
+Where the last six left a reading open, this is the one taken:
+
+| Feature | Reading |
+|---|---|
+| `back_rank_mate_threat` | The enemy king's back rank being blocked is read before the move, on the same squares `king.back_rank_risk` reads for that side; the checking unit need not be the one that moved, so uncovering a rook that already stood on the rank sets the bit. |
+| `quiet_threat_available` | Both sides of the comparison are the largest *SEE of a unit* over their units — `threats.threat_max_gain` for the other side as the position stands, and the same quantity in the position after the move. |
+| `no_safe_moves` | A side with no legal move has none with a safe destination, so the bit is 1 wherever the side is mated or stalemated. |
+| `promotion_see_positive` | The SEE of a promotion counts the queen it becomes less the pawn, so a push to an unattacked eighth-rank square is positive without capturing anything. |
 
 ### 2.12 `endgame` — endgame facts (width 15)
 
@@ -586,12 +605,12 @@ width and is the natural first ablation target.
 | `attacks` | 25 | B |
 | `exchange` | 8 | C·E |
 | `threats` | 24 | B·E |
-| `tactics` | 120 | C, plus 2 features at D |
+| `tactics` | 132 | C, plus 2 features at D |
 | `endgame` | 15 | A |
 | `history` | 27 | A |
 | `planes` | 512 | A |
-| **total** | **1956** | |
-| total without `placement` and `planes` | 676 | |
+| **total** | **1968** | |
+| total without `placement` and `planes` | 688 | |
 
 ---
 
@@ -672,7 +691,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1956 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1968 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -694,7 +713,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "f6a3271f03ca6497bdbb6248b93c0700"   # 128-bit, hex
+schema_id = "df557ea406ae153e6fe602aa9ded5eb0"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

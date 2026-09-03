@@ -596,6 +596,12 @@ fn tactics_block(t: &TacticsFacts, w: &mut Writer) {
     w.count(t.legal_move_count as f32, 64.0);
     w.bit(t.only_moves());
     w.bit(t.available);
+    w.bit(t.safe_check_capturing);
+    w.bit(t.discovered_attack_on_queen);
+    w.bit(t.back_rank_mate_threat);
+    w.bit(t.quiet_threat_available);
+    w.bit(t.no_safe_moves);
+    w.bit(t.promotion_see_positive);
 }
 
 fn endgame(facts: &Facts, w: &mut Writer) {

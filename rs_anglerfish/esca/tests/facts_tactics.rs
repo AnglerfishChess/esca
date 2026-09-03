@@ -71,6 +71,66 @@ const LOSING_TAKE_THEIRS: &str = "4k3/8/2p5/3p4/8/8/3R4/4K3 b - - 0 1";
 /// Chess960: castling long lands the king on c1 and the rook on d1, in check.
 const NINE_SIXTY: &str = "3k3r/8/8/8/8/8/8/RK6 w A - 0 1";
 
+/// Rxe8 takes the rook and checks in one, onto a square nothing covers.
+const SAFE_CHECK_CAPTURE: &str = "k3r3/8/8/8/8/8/4R3/4R2K w - - 0 1";
+
+/// The same board with Black to move.
+const SAFE_CHECK_CAPTURE_THEIRS: &str = "k3r3/8/8/8/8/8/4R3/4R2K b - - 0 1";
+
+/// Rxe7 checks and captures, and the king takes the rook straight back.
+const UNSAFE_CHECK_CAPTURE: &str = "4k3/4r3/8/8/8/8/8/4R2K w - - 0 1";
+
+/// Every knight move uncovers the rook's attack on the queen behind it.
+const DISCOVERED_QUEEN: &str = "3q2k1/8/8/8/3N4/8/8/3R3K w - - 0 1";
+
+/// The same board with Black to move.
+const DISCOVERED_QUEEN_THEIRS: &str = "3q2k1/8/8/8/3N4/8/8/3R3K b - - 0 1";
+
+/// The same discovery with the colours exchanged, Black to move.
+const MIRRORED_QUEEN: &str = "3r3k/8/8/8/3n4/8/8/3Q2K1 b - - 0 1";
+
+/// The same board with White to move.
+const MIRRORED_QUEEN_THEIRS: &str = "3r3k/8/8/8/3n4/8/8/3Q2K1 w - - 0 1";
+
+/// The same discovery onto a rook: uncovered, but not onto the queen.
+const DISCOVERED_ROOK: &str = "3r2k1/8/8/8/3N4/8/8/3R3K w - - 0 1";
+
+/// The mating board with the h-pawn a rank on, so the black king has luft.
+const BACK_RANK_LUFT: &str = "6k1/5pp1/7p/8/8/7r/5PPP/R5K1 w - - 0 1";
+
+/// Ra8 mates; White's own king stands a rank up, on no back rank of its own.
+const BACK_RANK_ONE_SIDED: &str = "6k1/5ppp/8/8/8/4r2P/5PPK/R7 w - - 0 1";
+
+/// A rook of Black's own seals the eighth rank, so Ra8 arrives without check.
+const BACK_RANK_BLOCKED: &str = "1r4k1/5ppp/8/8/8/7r/5PPP/R5K1 w - - 0 1";
+
+/// Rd1 attacks the knight the rook reaches nothing from where it stands.
+const QUIET_THREAT: &str = "6k1/8/8/3n4/8/8/8/R5K1 w - - 0 1";
+
+/// The same board with Black to move.
+const QUIET_THREAT_THEIRS: &str = "6k1/8/8/3n4/8/8/8/R5K1 b - - 0 1";
+
+/// The rook attacks the knight already, and no move of White's wins more.
+const THREAT_STANDS: &str = "6k1/8/8/3n4/8/8/8/3R2K1 w - - 0 1";
+
+/// Five legal moves for White, every one of them onto a square a pawn covers.
+const BOXED_IN: &str = "k7/8/8/8/1p4pp/4p3/5bPP/1N5K w - - 0 1";
+
+/// The same board with Black to move.
+const BOXED_IN_THEIRS: &str = "k7/8/8/8/1p4pp/4p3/5bPP/1N5K b - - 0 1";
+
+/// The same position with the colours exchanged, so Black is the boxed side.
+const BOXED_IN_MIRRORED: &str = "1n5k/5Bpp/4P3/1P4PP/8/8/8/K7 b - - 0 1";
+
+/// The knight covers b8, so every promotion there loses the new piece.
+const GUARDED_PROMOTION: &str = "8/1P6/n6k/8/7K/8/8/8 w - - 0 1";
+
+/// Nothing covers f8: the push alone wins a queen.
+const FREE_PROMOTION: &str = "8/5P2/7k/8/7K/8/8/8 w - - 0 1";
+
+/// The same board with Black to move.
+const FREE_PROMOTION_THEIRS: &str = "8/5P2/7k/8/7K/8/8/8 b - - 0 1";
+
 /// The two blocks of `fen` under classic chess, us first.
 fn blocks(fen: &str) -> [TacticsFacts; 2] {
     facts_of(fen).tactics
@@ -704,6 +764,139 @@ fn their_block_is_unavailable_and_empty_when_the_null_move_does_not_exist(
     if !available[1] {
         assert_eq!(tactics[Side::Them.index()], TacticsFacts::default());
     }
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::mate(MATE, [false, false])]
+#[case::safe_check_capture(SAFE_CHECK_CAPTURE, [true, false])]
+#[case::safe_check_capture_theirs(SAFE_CHECK_CAPTURE_THEIRS, [false, true])]
+#[case::unsafe_check_capture(UNSAFE_CHECK_CAPTURE, [false, true])]
+#[case::discovery(DISCOVERY, [true, false])]
+fn a_capturing_check_is_reported_only_when_its_destination_is_safe(
+    #[case] fen: &str,
+    #[case] capturing: [bool; 2],
+) {
+    let tactics = blocks(fen);
+    assert_eq!(tactics[Side::Us.index()].safe_check_capturing, capturing[0]);
+    assert_eq!(
+        tactics[Side::Them.index()].safe_check_capturing,
+        capturing[1]
+    );
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::discovered_queen(DISCOVERED_QUEEN, [true, false])]
+#[case::discovered_queen_theirs(DISCOVERED_QUEEN_THEIRS, [false, true])]
+#[case::mirrored_queen(MIRRORED_QUEEN, [true, false])]
+#[case::mirrored_queen_theirs(MIRRORED_QUEEN_THEIRS, [false, true])]
+#[case::discovered_rook(DISCOVERED_ROOK, [false, false])]
+fn a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
+    #[case] fen: &str,
+    #[case] uncovered: [bool; 2],
+) {
+    let tactics = blocks(fen);
+    assert_eq!(
+        tactics[Side::Us.index()].discovered_attack_on_queen,
+        uncovered[0]
+    );
+    assert_eq!(
+        tactics[Side::Them.index()].discovered_attack_on_queen,
+        uncovered[1]
+    );
+    for side in [Side::Us, Side::Them] {
+        let block = tactics[side.index()];
+        assert!(block.discovered_attack_available || !block.discovered_attack_on_queen);
+    }
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::mate(MATE, [true, false])]
+#[case::mate_theirs(MATE_THEIRS, [false, true])]
+#[case::back_rank_luft(BACK_RANK_LUFT, [false, false])]
+#[case::back_rank_one_sided(BACK_RANK_ONE_SIDED, [true, false])]
+#[case::back_rank_blocked(BACK_RANK_BLOCKED, [false, true])]
+fn a_back_rank_mate_threat_is_a_rook_or_queen_check_on_a_sealed_back_rank(
+    #[case] fen: &str,
+    #[case] threat: [bool; 2],
+) {
+    let tactics = blocks(fen);
+    assert_eq!(tactics[Side::Us.index()].back_rank_mate_threat, threat[0]);
+    assert_eq!(tactics[Side::Them.index()].back_rank_mate_threat, threat[1]);
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::quiet_threat(QUIET_THREAT, [true, false])]
+#[case::quiet_threat_theirs(QUIET_THREAT_THEIRS, [false, true])]
+#[case::threat_stands(THREAT_STANDS, [false, true])]
+#[case::promotion_captures(PROMOTION_CAPTURES, [false, false])]
+#[case::mate(MATE, [false, true])]
+#[case::discovered_queen(DISCOVERED_QUEEN, [true, false])]
+fn a_quiet_threat_leaves_more_to_be_won_than_stands_to_be_won_now(
+    #[case] fen: &str,
+    #[case] threat: [bool; 2],
+) {
+    let tactics = blocks(fen);
+    assert_eq!(tactics[Side::Us.index()].quiet_threat_available, threat[0]);
+    assert_eq!(
+        tactics[Side::Them.index()].quiet_threat_available,
+        threat[1]
+    );
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::mate(MATE, [false, false])]
+#[case::boxed_in(BOXED_IN, [true, false])]
+#[case::boxed_in_theirs(BOXED_IN_THEIRS, [false, true])]
+#[case::boxed_in_mirrored(BOXED_IN_MIRRORED, [true, false])]
+#[case::stalemate(STALEMATE, [false, true])]
+fn a_side_has_no_safe_moves_when_every_legal_move_lands_where_it_can_be_taken(
+    #[case] fen: &str,
+    #[case] boxed: [bool; 2],
+) {
+    let tactics = blocks(fen);
+    assert_eq!(tactics[Side::Us.index()].no_safe_moves, boxed[0]);
+    assert_eq!(tactics[Side::Them.index()].no_safe_moves, boxed[1]);
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::promotions(PROMOTIONS, [true, true])]
+#[case::guarded_promotion(GUARDED_PROMOTION, [false, false])]
+#[case::promotion_captures(PROMOTION_CAPTURES, [true, true])]
+#[case::free_promotion(FREE_PROMOTION, [true, false])]
+#[case::free_promotion_theirs(FREE_PROMOTION_THEIRS, [false, true])]
+fn a_promotion_is_see_positive_when_the_exchange_on_its_square_wins_material(
+    #[case] fen: &str,
+    #[case] positive: [bool; 2],
+) {
+    let tactics = blocks(fen);
+    assert_eq!(
+        tactics[Side::Us.index()].promotion_see_positive,
+        positive[0]
+    );
+    assert_eq!(
+        tactics[Side::Them.index()].promotion_see_positive,
+        positive[1]
+    );
+}
+
+/// A block with no side to move states no tactic, `no_safe_moves` included:
+/// zero there says the block was not computed, not that a safe move exists.
+#[test]
+fn a_block_the_null_move_does_not_allow_states_no_tactic_of_its_own() {
+    let theirs = blocks(IN_CHECK)[Side::Them.index()];
+    assert!(!theirs.available);
+    assert!(!theirs.safe_check_capturing);
+    assert!(!theirs.discovered_attack_on_queen);
+    assert!(!theirs.back_rank_mate_threat);
+    assert!(!theirs.quiet_threat_available);
+    assert!(!theirs.no_safe_moves);
+    assert!(!theirs.promotion_see_positive);
 }
 
 /// No `tactics` fact is among the four `features.md` §4 keeps for classic chess

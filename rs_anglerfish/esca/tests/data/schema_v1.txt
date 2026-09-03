@@ -153,7 +153,7 @@ threats:2:24
   xray_through_enemy:2:count/4
   battery_count:2:count/4
   battery_at_king:2:bits
-tactics:2:120
+tactics:3:132
   us.check_available:1:bit
   us.check_count:1:count/8
   us.check_by_piece:5:bits
@@ -189,6 +189,12 @@ tactics:2:120
   us.legal_move_count:1:count/64
   us.only_moves:1:bit
   us.facts_available:1:bit
+  us.safe_check_capturing:1:bit
+  us.discovered_attack_on_queen:1:bit
+  us.back_rank_mate_threat:1:bit
+  us.quiet_threat_available:1:bit
+  us.no_safe_moves:1:bit
+  us.promotion_see_positive:1:bit
   them.check_available:1:bit
   them.check_count:1:count/8
   them.check_by_piece:5:bits
@@ -224,6 +230,12 @@ tactics:2:120
   them.legal_move_count:1:count/64
   them.only_moves:1:bit
   them.facts_available:1:bit
+  them.safe_check_capturing:1:bit
+  them.discovered_attack_on_queen:1:bit
+  them.back_rank_mate_threat:1:bit
+  them.quiet_threat_available:1:bit
+  them.no_safe_moves:1:bit
+  them.promotion_see_positive:1:bit
 endgame:2:15
   king_centralisation:2:count/3
   race_plies:2:count/8

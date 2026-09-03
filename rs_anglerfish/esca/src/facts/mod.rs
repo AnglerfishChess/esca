@@ -600,6 +600,20 @@ pub struct TacticsFacts {
     pub discovered_attack_available: bool,
     /// Legal moves.
     pub legal_move_count: u16,
+    /// A checking move that captures and whose destination is safe.
+    pub safe_check_capturing: bool,
+    /// A move uncovering a slider's attack on the enemy queen.
+    pub discovered_attack_on_queen: bool,
+    /// A move after which a rook or queen of the side checks the enemy king
+    /// along that king's own rank, its back rank being blocked.
+    pub back_rank_mate_threat: bool,
+    /// A quiet move after which the largest SEE of a unit over the enemy's
+    /// units is greater than it is now.
+    pub quiet_threat_available: bool,
+    /// No legal move has a safe destination.
+    pub no_safe_moves: bool,
+    /// A promotion whose SEE is above 0.
+    pub promotion_see_positive: bool,
 }
 
 impl TacticsFacts {
@@ -957,6 +971,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         Side::Us,
         &attacks,
         &pawns,
+        &king,
         legal,
         replies,
         Some(&mut moves),
@@ -973,6 +988,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
                 Side::Them,
                 &attacks,
                 &pawns,
+                &king,
                 their_moves,
                 replies,
                 None,

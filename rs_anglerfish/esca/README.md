@@ -30,7 +30,7 @@ let facts = game.facts();              // side-relative, in the mover's view
 println!("{}", facts.tactics[Side::Us.index()].legal_move_count);
 println!("{}", facts.summary());
 
-let schema = Schema::v1();             // the row a net eats: 1956 f32
+let schema = Schema::v1();             // the row a net eats: 1968 f32
 println!("{}", facts.encode(schema, schema.all()).len());
 ```
 
@@ -56,7 +56,7 @@ facts = game.facts()  # side-relative: index with esca.US / esca.THEM
 print(facts.tactics[esca.US].legal_move_count)
 print(facts.summary())
 
-rows = esca.encode([game.position.fen])  # (1, 1956) float32, ready for a net
+rows = esca.encode([game.position.fen])  # (1, 1968) float32, ready for a net
 print(rows.shape, esca.SCHEMA_ID)
 ```
 

@@ -10,7 +10,9 @@ use crate::variant::Variant;
 use super::scan::{
     Scan, attackers, attacks_of, between, line, material_value, order_value, target_value,
 };
-use super::{AnnotatedMove, AttackFacts, MoveFacts, PawnFacts, Side, TacticsFacts, king, pawns};
+use super::{
+    AnnotatedMove, AttackFacts, KingFacts, MoveFacts, PawnFacts, Side, TacticsFacts, king, pawns,
+};
 
 /// The square the moved unit ends on: for castling the king's destination,
 /// which is c1 or g1 in the mover's frame.
@@ -88,8 +90,16 @@ fn ring_attackers(scan: &Scan, side: Side) -> i32 {
         .count() as i32
 }
 
-/// Whether a slider of `mover` that `mv` leaves standing gains an attack on an
-/// enemy unit worth 3 or more.
+/// What a slider of `mover` that `mv` leaves standing gains an attack on.
+#[derive(Clone, Copy, Default)]
+struct Discovered {
+    /// A unit worth 3 or more.
+    on_heavy: bool,
+    /// The enemy queen.
+    on_queen: bool,
+}
+
+/// What the sliders of `mover` that `mv` leaves standing come to attack.
 fn discovered_attack(
     after: &Position,
     scan: &Scan,
@@ -97,26 +107,49 @@ fn discovered_attack(
     mover_colour: Colour,
     mv: Move,
     enemy_units: SquareSet,
-) -> bool {
+) -> Discovered {
     let occupied = after.occupied();
     let stationary = moved_to(mv) | mv.from().to_set() | mv.to().to_set();
-    [Role::Bishop, Role::Rook, Role::Queen]
+    let mut found = Discovered::default();
+    for slider in [Role::Bishop, Role::Rook, Role::Queen] {
+        for from in scan.role_units[mover.index()][slider.index()] - stationary {
+            let gained =
+                attacks_of(slider, from, mover_colour, occupied) - scan.attacks_from[from.index()];
+            for target in gained & enemy_units {
+                let role = after
+                    .piece_at(target)
+                    .expect("a target stands on its own square")
+                    .role;
+                found.on_heavy |= material_value(role) >= 3;
+                found.on_queen |= role == Role::Queen;
+            }
+            if found.on_heavy && found.on_queen {
+                return found;
+            }
+        }
+    }
+    found
+}
+
+/// The units of `colour` an exchange can be read on: all but the king.
+fn takeable(position: &Position, colour: Colour) -> SquareSet {
+    position.by_colour(colour) - position.by_role(Role::King)
+}
+
+/// Whether some unit of `colour` has an SEE of a unit above `best`.
+fn threatens_more_than(position: &Position, colour: Colour, best: i32) -> bool {
+    takeable(position, colour)
         .into_iter()
-        .any(|role| {
-            (scan.role_units[mover.index()][role.index()] - stationary)
-                .into_iter()
-                .any(|from| {
-                    let gained = attacks_of(role, from, mover_colour, occupied)
-                        - scan.attacks_from[from.index()];
-                    (gained & enemy_units).into_iter().any(|target| {
-                        let role = after
-                            .piece_at(target)
-                            .expect("a target stands on its own square")
-                            .role;
-                        material_value(role) >= 3
-                    })
-                })
-        })
+        .any(|square| position.see(square) > best)
+}
+
+/// The largest SEE of a unit over the units of `colour`.
+fn max_threat(position: &Position, colour: Colour) -> i32 {
+    takeable(position, colour)
+        .into_iter()
+        .map(|square| position.see(square))
+        .max()
+        .unwrap_or(0)
 }
 
 /// What the position before a move says about it: the reading every move of
@@ -206,8 +239,8 @@ impl Before<'_> {
 
 /// The whole `tactics` block for the side to move in `position`.
 ///
-/// `scan` and `attacks` describe the same placement, which a null move leaves
-/// unchanged. `annotated`, when given, receives one entry per legal move.
+/// `scan`, `attacks` and `king` describe the same placement, which a null move
+/// leaves unchanged. `annotated`, when given, receives one entry per legal move.
 #[expect(clippy::too_many_arguments, reason = "one shared pass, no owning type")]
 pub(super) fn tactics(
     variant: &dyn Variant,
@@ -216,6 +249,7 @@ pub(super) fn tactics(
     mover: Side,
     attacks: &AttackFacts,
     pawns: &PawnFacts,
+    king: &KingFacts,
     legal: &MoveList,
     replies: &mut MoveList,
     mut annotated: Option<&mut MoveList<AnnotatedMove>>,
@@ -231,10 +265,16 @@ pub(super) fn tactics(
         mover,
         mover_colour,
     };
+    // The back rank the enemy king may be mated on, and how much of theirs we
+    // already stand to win: both are read before any move is played.
+    let back_rank_open = king.back_rank_risk[enemy.index()];
+    let their_king = scan.kings[enemy.index()];
+    let threat_now = max_threat(position, enemy_colour);
 
     let mut facts = TacticsFacts {
         available: true,
         legal_move_count: legal.len().min(u16::MAX as usize) as u16,
+        no_safe_moves: true,
         ..TacticsFacts::default()
     };
 
@@ -267,6 +307,7 @@ pub(super) fn tactics(
         });
         let is_safe =
             !attacked_by_pawn && !cheaper && (enemy_attackers.is_empty() || !defenders.is_empty());
+        facts.no_safe_moves &= !is_safe;
 
         let gives_check = after.in_check();
         let victim = if mv.is_capture() {
@@ -274,15 +315,31 @@ pub(super) fn tactics(
         } else {
             None
         };
+        let see = if annotate || victim.is_some() || promotion.is_some() {
+            position.see_capture(mv)
+        } else {
+            0
+        };
         let captures_hanging =
             mv.is_capture() && attacks.hanging[enemy.index()].contains(victim_square(mv));
 
-        let discovers = if annotate || !facts.discovered_attack_available {
+        let discovers = if annotate
+            || !facts.discovered_attack_available
+            || !facts.discovered_attack_on_queen
+        {
             discovered_attack(&after, scan, mover, mover_colour, mv, enemy_units)
         } else {
-            false
+            Discovered::default()
         };
-        facts.discovered_attack_available |= discovers;
+        facts.discovered_attack_available |= discovers.on_heavy;
+        facts.discovered_attack_on_queen |= discovers.on_queen;
+
+        if victim.is_none()
+            && !facts.quiet_threat_available
+            && threatens_more_than(&after, enemy_colour, threat_now)
+        {
+            facts.quiet_threat_available = true;
+        }
 
         if annotate {
             let moves_attacked_unit = scan.by[enemy.index()].contains(mv.from());
@@ -311,7 +368,7 @@ pub(super) fn tactics(
                         to_attacked_by_pawn: attacked_by_pawn,
                         is_castling: mv.is_castling(),
                         is_en_passant: mv.is_en_passant(),
-                        see: position.see_capture(mv),
+                        see,
                         threat_created_max: delta.threat_created_max,
                         moves_attacked_unit,
                         blocks_check,
@@ -327,7 +384,7 @@ pub(super) fn tactics(
                         own_hanging_delta: delta.own_hanging_delta,
                         their_hanging_delta: delta.their_hanging_delta,
                         leaves_unit_hanging: delta.leaves_unit_hanging,
-                        gives_discovered_attack: discovers,
+                        gives_discovered_attack: discovers.on_heavy,
                     },
                 });
         }
@@ -342,6 +399,7 @@ pub(super) fn tactics(
                 if mover_role != Role::King {
                     facts.safe_check_by_role[mover_role.index()] = true;
                 }
+                facts.safe_check_capturing |= victim.is_some();
             }
             let checkers = after.checkers();
             if checkers.len() >= 2 {
@@ -349,6 +407,18 @@ pub(super) fn tactics(
             }
             if !(checkers - moved_to(mv)).is_empty() {
                 facts.discovered_check_available = true;
+            }
+            if back_rank_open {
+                facts.back_rank_mate_threat |= checkers.into_iter().any(|from| {
+                    from.rank() == their_king.rank()
+                        && matches!(
+                            after
+                                .piece_at(from)
+                                .expect("a checker stands on its own square")
+                                .role,
+                            Role::Rook | Role::Queen
+                        )
+                });
             }
         }
 
@@ -374,11 +444,11 @@ pub(super) fn tactics(
             if is_safe {
                 facts.safe_promotion_files.insert(mv.to().file());
             }
+            facts.promotion_see_positive |= see > 0;
         }
 
         if let Some(role) = victim {
             facts.capture_count += 1;
-            let see = position.see_capture(mv);
             facts.winning_capture_available |= see > 0;
             facts.winning_capture_max_gain = facts.winning_capture_max_gain.max(see.max(0));
             if captures_hanging {
