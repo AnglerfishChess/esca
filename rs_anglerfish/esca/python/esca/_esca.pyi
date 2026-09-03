@@ -198,6 +198,13 @@ class Schema:
     def __hash__(self) -> int: ...
 
 @final
+class PlacementFacts:
+    """Where the units stand: one square set per side and role."""
+
+    @property
+    def by_role(self) -> tuple[list[SquareSet], list[SquareSet]]: ...
+
+@final
 class StateFacts:
     """Game-state flags."""
 
@@ -572,6 +579,8 @@ class Facts:
     def side(self, colour: str) -> int: ...
     @property
     def position(self) -> Position: ...
+    @property
+    def placement(self) -> PlacementFacts: ...
     @property
     def state(self) -> StateFacts: ...
     @property

@@ -72,6 +72,39 @@ pub(crate) fn facts_group<'py>(
     }
 }
 
+/// Where the units stand: one square set per side and role.
+#[pyclass(frozen, module = "esca", name = "PlacementFacts")]
+pub struct PyPlacementFacts {
+    parent: Py<PyFacts>,
+    /// Each side's units, by role P, N, B, R, Q, K.
+    #[pyo3(get)]
+    by_role: (Vec<PySquareSet>, Vec<PySquareSet>),
+}
+
+impl PyPlacementFacts {
+    fn of(facts: &facts::PlacementFacts, parent: Py<PyFacts>) -> PyPlacementFacts {
+        PyPlacementFacts {
+            parent,
+            by_role: set_list_pair(facts.by_role),
+        }
+    }
+}
+
+#[pymethods]
+impl PyPlacementFacts {
+    fn __repr__(&self) -> String {
+        "<PlacementFacts>".to_string()
+    }
+
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
+        let py = slf.py();
+        Ok((
+            group_reconstructor(py)?,
+            (slf.get().parent.clone_ref(py), "placement"),
+        ))
+    }
+}
+
 /// Game-state flags: check, castling rights and the en-passant square.
 #[pyclass(frozen, module = "esca", name = "StateFacts")]
 pub struct PyStateFacts {
@@ -1109,6 +1142,11 @@ impl PyFacts {
         Position::from_fen(&self.text)
             .map(super::board::PyPosition::new)
             .map_err(super::convert::value_error)
+    }
+
+    #[getter]
+    fn placement(slf: &Bound<'_, Self>) -> PyPlacementFacts {
+        PyPlacementFacts::of(&slf.get().inner.placement, slf.clone().unbind())
     }
 
     #[getter]

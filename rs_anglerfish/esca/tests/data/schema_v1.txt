@@ -1,4 +1,16 @@
-placement:1:0
+placement:1:768
+  our_pawns:64:plane
+  our_knights:64:plane
+  our_bishops:64:plane
+  our_rooks:64:plane
+  our_queens:64:plane
+  our_king:64:plane
+  their_pawns:64:plane
+  their_knights:64:plane
+  their_bishops:64:plane
+  their_rooks:64:plane
+  their_queens:64:plane
+  their_king:64:plane
 state:2:16
   in_check:1:bit
   double_check:1:bit

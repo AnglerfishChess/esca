@@ -27,11 +27,11 @@ def test_the_schema_is_the_v1_one() -> None:
     assert esca.SCHEMA == esca.SCHEMA_V1
     assert esca.SCHEMA.id == esca.SCHEMA_ID
     assert (DATA / "schema_v1_id.txt").read_text().strip() == esca.SCHEMA_ID
-    assert esca.SCHEMA.width == esca.WIDTH == 1070
+    assert esca.SCHEMA.width == esca.WIDTH == 1838
     assert esca.SCHEMA.canonical() == (DATA / "schema_v1.txt").read_text()
     assert [group["name"] for group in esca.schema()] == esca.SCHEMA.group_names
-    assert esca.schema()[0] == {"name": "placement", "version": 1, "width": 0, "offset": 0}
-    assert esca.schema()[1] == {"name": "state", "version": 2, "width": 16, "offset": 0}
+    assert esca.schema()[0] == {"name": "placement", "version": 1, "width": 768, "offset": 0}
+    assert esca.schema()[1] == {"name": "state", "version": 2, "width": 16, "offset": 768}
     assert esca.SCHEMA.width_of(["state", "pawns"]) == 16 + 165
     assert esca.SCHEMA.width_of(["exchange", "threats", "endgame"]) == 0
 
@@ -63,7 +63,7 @@ def test_a_group_subset_is_the_matching_slice() -> None:
     whole = esca.encode(fens)
     state = esca.encode(fens, groups=["state"])
     assert state.shape == (8, 16)
-    assert np.array_equal(state, whole[:, :16])
+    assert np.array_equal(state, whole[:, 768 : 768 + 16])
     with pytest.raises(ValueError, match="groups of the schema"):
         esca.encode(fens, groups=["nonsense"])
 

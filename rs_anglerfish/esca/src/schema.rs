@@ -298,7 +298,20 @@ macro_rules! feature_specs {
     };
 }
 
-static PLACEMENT: [FeatureSpec; 0] = feature_specs! {};
+static PLACEMENT: [FeatureSpec; 12] = feature_specs! {
+    "our_pawns", 64, "plane", ANY;
+    "our_knights", 64, "plane", ANY;
+    "our_bishops", 64, "plane", ANY;
+    "our_rooks", 64, "plane", ANY;
+    "our_queens", 64, "plane", ANY;
+    "our_king", 64, "plane", ANY;
+    "their_pawns", 64, "plane", ANY;
+    "their_knights", 64, "plane", ANY;
+    "their_bishops", 64, "plane", ANY;
+    "their_rooks", 64, "plane", ANY;
+    "their_queens", 64, "plane", ANY;
+    "their_king", 64, "plane", ANY;
+};
 
 static STATE: [FeatureSpec; 6] = feature_specs! {
     "in_check", 1, "bit", ANY;
@@ -511,7 +524,7 @@ static V1_GROUPS: [GroupSpec; 14] = [
     GroupSpec {
         name: "placement",
         version: 1,
-        width: 0,
+        width: 768,
         features: &PLACEMENT,
     },
     GroupSpec {
@@ -617,7 +630,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1070);
+        assert_eq!(Schema::v1().width(), 1838);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

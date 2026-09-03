@@ -61,6 +61,21 @@ impl Not for Side {
     }
 }
 
+/// Where the units stand: one square set per side and role.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct PlacementFacts {
+    /// Each side's units, by role P, N, B, R, Q, K.
+    pub by_role: [[SquareSet; 6]; 2],
+}
+
+impl PlacementFacts {
+    /// The units of `side` with `role`.
+    #[inline]
+    pub fn of(&self, side: Side, role: Role) -> SquareSet {
+        self.by_role[side.index()][role.index()]
+    }
+}
+
 /// Game-state flags: check, castling rights and the en-passant square.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct StateFacts {
@@ -541,6 +556,8 @@ impl fmt::Debug for Scratch {
 /// moves.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Facts {
+    /// Where the units stand.
+    pub placement: PlacementFacts,
     /// Game-state flags.
     pub state: StateFacts,
     /// What the plies before this position say.
@@ -718,6 +735,9 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
     };
 
     Facts {
+        placement: PlacementFacts {
+            by_role: scan.role_units,
+        },
         state,
         history,
         material,

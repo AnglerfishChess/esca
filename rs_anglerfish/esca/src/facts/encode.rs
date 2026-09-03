@@ -77,6 +77,15 @@ fn halfmove_bucket(clock: u32) -> usize {
     }
 }
 
+fn placement(facts: &Facts, w: &mut Writer) {
+    let us = facts.us;
+    for side in Side::ALL {
+        for role in Role::ALL {
+            w.plane(facts.placement.of(side, role), us);
+        }
+    }
+}
+
 fn state(facts: &Facts, w: &mut Writer) {
     let state = &facts.state;
     w.bit(state.in_check);
@@ -485,7 +494,8 @@ impl Facts {
                 match group.name {
                     // Groups with no features yet: their width is zero, so
                     // nothing is written and no offset moves.
-                    "placement" | "exchange" | "threats" | "endgame" => {}
+                    "exchange" | "threats" | "endgame" => {}
+                    "placement" => placement(self, &mut writer),
                     "state" => state(self, &mut writer),
                     "history" => history(self, &mut writer),
                     "material" => material(self, &mut writer),

@@ -438,7 +438,7 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 1070 values.
+    /// The v1 schema of `features.md`: 14 groups, 1838 values.
     pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
@@ -541,7 +541,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v1 id is `35d58f76bda968e13521215fb7f38321`; its canonical text is checked
+The v1 id is `fe99d28c8799bcd326ea00656ca88f29`; its canonical text is checked
 in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ---
@@ -659,8 +659,8 @@ print(f.summary())
 
 # Schema and batch encoding
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
-esca.SCHEMA_ID  # "35d5…", 32 hex chars
-esca.WIDTH  # 1070
+esca.SCHEMA_ID  # "fe99…", 32 hex chars
+esca.WIDTH  # 1838
 esca.MOVE_WIDTH  # 24
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]

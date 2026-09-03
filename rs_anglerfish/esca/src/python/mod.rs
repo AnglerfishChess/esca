@@ -43,6 +43,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<board::PyGame>()?;
     module.add_class::<encode::PySchema>()?;
     module.add_class::<facts::PyFacts>()?;
+    module.add_class::<facts::PyPlacementFacts>()?;
     module.add_class::<facts::PyStateFacts>()?;
     module.add_class::<facts::PyHistoryFacts>()?;
     module.add_class::<facts::PyMaterialFacts>()?;

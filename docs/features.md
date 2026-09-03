@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1070 f32 per position | value head, policy head |
+| `position` | one vector of 1838 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -150,9 +150,28 @@ A group with no features is named and ordered anyway: its width is 0, it
 writes nothing, and the group after it keeps its offset when the empty one is
 filled.
 
-### 2.1 `placement` — piece planes (width 0)
+### 2.1 `placement` — piece planes (width 768)
 
-Reserved. No features yet.
+The raw board: twelve 64-square planes in the mover's view, ours before
+theirs and in the role order P, N, B, R, Q, K.
+
+| Feature | Width | Encoding | Cost | Head |
+|---|---|---|---|---|
+| `our_pawns` | 64 | 64-plane | A | B |
+| `our_knights` | 64 | 64-plane | A | B |
+| `our_bishops` | 64 | 64-plane | A | B |
+| `our_rooks` | 64 | 64-plane | A | B |
+| `our_queens` | 64 | 64-plane | A | B |
+| `our_king` | 64 | 64-plane | A | B |
+| `their_pawns` | 64 | 64-plane | A | B |
+| `their_knights` | 64 | 64-plane | A | B |
+| `their_bishops` | 64 | 64-plane | A | B |
+| `their_rooks` | 64 | 64-plane | A | B |
+| `their_queens` | 64 | 64-plane | A | B |
+| `their_king` | 64 | 64-plane | A | B |
+
+Because the planes are read in the mover's view, the same structure with the
+colours swapped gives the same 768 values.
 
 ### 2.2 `state` — game-state flags (width 16)
 
@@ -379,7 +398,7 @@ width and is the natural first ablation target.
 
 | Group | Width | Dominant cost |
 |---|---|---|
-| `placement` | 0 | A |
+| `placement` | 768 | A |
 | `state` | 16 | A |
 | `material` | 26 | A |
 | `pawns` | 165 | A |
@@ -393,7 +412,7 @@ width and is the natural first ablation target.
 | `endgame` | 0 | — |
 | `history` | 12 | A |
 | `planes` | 512 | A |
-| **total** | **1070** | |
+| **total** | **1838** | |
 | total without `placement` and `planes` | 558 | |
 
 ---
@@ -448,7 +467,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1070 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1838 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -466,12 +485,12 @@ version, a width and an ordered list of feature entries.
 ```
 schema_semver = "1.0.0"
 groups = [
-  { name = "placement", version = 1, width =   0, offset =   0 },
-  { name = "state",     version = 2, width =  16, offset =   0 },
-  { name = "material",  version = 1, width =  26, offset =  16 },
+  { name = "placement", version = 1, width = 768, offset =   0 },
+  { name = "state",     version = 2, width =  16, offset = 768 },
+  { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "35d58f76bda968e13521215fb7f38321"   # 128-bit, hex
+schema_id = "fe99d28c8799bcd326ea00656ca88f29"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering
