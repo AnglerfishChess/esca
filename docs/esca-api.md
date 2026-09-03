@@ -388,6 +388,19 @@ pub struct PawnFacts {
     pub passer_protected: [u8; 2],
     pub passers_connected: [bool; 2],
     pub passer_unstoppable: [bool; 2],
+    pub chain_max_length: [u8; 2],
+    pub chain_base_attacked: [bool; 2],
+    pub majority_by_wing: [[bool; 2]; 2],
+    pub holes: [SquareSet; 2],
+    pub holes_occupied: [u8; 2],
+    pub fixed_pawns: [u8; 2],
+    pub blocked_passers: [u8; 2],
+    pub passer_distance: [Option<u8>; 2],
+    pub passer_king_distance: [[Option<u8>; 2]; 2],
+    pub passer_in_square: [bool; 2],
+    pub passer_free_path: [u8; 2],
+    pub half_open_at_enemy_king: [u8; 2],
+    pub backward_on_semi_open: [u8; 2],
 }
 
 pub struct AttackFacts {
@@ -480,7 +493,7 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 1876 values.
+    /// The v1 schema of `features.md`: 14 groups, 1906 values.
     pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
@@ -583,7 +596,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v1 id is `e1db399a544b4fea0af0afc55f254e8b`; its canonical text is checked
+The v1 id is `a430d5b96c3c2cd37a8e9b4d0072d845`; its canonical text is checked
 in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ---
@@ -704,7 +717,7 @@ print(f.summary())
 # Schema and batch encoding
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
 esca.SCHEMA_ID  # "16a7…", 32 hex chars
-esca.WIDTH  # 1876
+esca.WIDTH  # 1906
 esca.MOVE_WIDTH  # 24
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]

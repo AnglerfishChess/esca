@@ -334,7 +334,7 @@ static MATERIAL: [FeatureSpec; 9] = feature_specs! {
     "insufficient_material", 2, "bits", ANY;
 };
 
-static PAWNS: [FeatureSpec; 18] = feature_specs! {
+static PAWNS: [FeatureSpec; 31] = feature_specs! {
     "pawn_count_by_file", 16, "count/3", ANY;
     "pawn_count_by_rank", 16, "count/8", ANY;
     "doubled_files", 16, "mask8", ANY;
@@ -353,6 +353,19 @@ static PAWNS: [FeatureSpec; 18] = feature_specs! {
     "defended_pawns", 2, "count/8", ANY;
     "levers", 2, "count/4", ANY;
     "rams", 1, "count/8", ANY;
+    "chain_max_length", 2, "count/5", ANY;
+    "chain_base_attacked", 2, "bits", ANY;
+    "majority_by_wing", 4, "bits", ANY;
+    "holes", 2, "count/16", ANY;
+    "holes_occupied", 2, "count/4", ANY;
+    "fixed_pawns", 2, "count/8", ANY;
+    "blocked_passers", 2, "count/2", ANY;
+    "passer_distance", 2, "count/6", ANY;
+    "passer_king_distance", 4, "count/8", ANY;
+    "passer_in_square", 2, "bits", ANY;
+    "passer_free_path", 2, "count/2", ANY;
+    "half_open_at_enemy_king", 2, "count/3", ANY;
+    "backward_on_semi_open", 2, "count/4", ANY;
 };
 
 static PIECES: [FeatureSpec; 17] = feature_specs! {
@@ -564,8 +577,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "pawns",
-        version: 1,
-        width: 165,
+        version: 2,
+        width: 195,
         features: &PAWNS,
     },
     GroupSpec {
@@ -653,7 +666,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1876);
+        assert_eq!(Schema::v1().width(), 1906);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

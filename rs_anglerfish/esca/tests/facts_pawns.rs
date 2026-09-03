@@ -51,6 +51,27 @@ const RUNAWAY: &str = "8/P6k/8/8/8/8/6K1/8 w - - 0 1";
 /// The same runaway one tempo later: it is theirs, and the tempo saves nothing.
 const RUNAWAY_THEIRS: &str = "8/P6k/8/8/8/8/6K1/8 b - - 0 1";
 
+/// The same locked centre with Black to move: every side-paired value swaps.
+const LOCKED_THEIRS: &str = "4k3/8/4p3/1pppPp2/2PP1P2/8/8/4K3 b - - 0 1";
+
+/// A knight and a bishop each hold a square the other side's pawns have left.
+const HOLES: &str = "4k3/pp3ppp/2pB4/8/2PP4/3n4/PP3PPP/6K1 w - - 0 1";
+
+/// Chains of two against a chain of three, both bases under attack.
+const CHAINS: &str = "4k3/b4p2/4p3/3pP1N1/3P1P2/8/8/4K3 w - - 0 1";
+
+/// Passers blockaded by minor pieces that also stand on holes.
+const BLOCKADE: &str = "4k3/8/1n6/1P1b1p2/3P1N2/8/8/4K3 w - - 0 1";
+
+/// Both kings castled short, with files left open in front of each.
+const CASTLED: &str = "6k1/pp3pp1/8/8/4P3/8/PPP4P/6K1 w - - 0 1";
+
+/// Three backward pawns, each on a file its opponent has left.
+const WEAK: &str = "4k3/8/8/8/1p1p4/8/2P3P1/4K3 w - - 0 1";
+
+/// Two passers on one rank: b5 leads, being the nearer to file a.
+const TWIN_PASSERS: &str = "6k1/3p4/3K4/1P4P1/8/8/8/8 w - - 0 1";
+
 /// A Chess960 middlegame; no pawn fact reads the back rank, so nothing moves.
 const NINE_SIXTY: &str = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10";
 
@@ -327,6 +348,206 @@ fn an_unstoppable_passer_beats_the_defending_king_to_its_promotion_square(
     assert_eq!(facts_of(fen).pawns.passer_unstoppable, unstoppable);
 }
 
+#[rstest]
+#[case::start(START, [1, 1])]
+#[case::runaway(RUNAWAY, [1, 0])]
+#[case::holes(HOLES, [1, 2])]
+#[case::chains(CHAINS, [2, 3])]
+#[case::majorities(MAJORITIES, [3, 2])]
+#[case::phalanx(PHALANX, [3, 3])]
+fn the_longest_chain_is_the_longest_run_of_pawns_each_defending_the_next(
+    #[case] fen: &str,
+    #[case] length: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.chain_max_length, length);
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::phalanx(PHALANX, [false, false])]
+#[case::locked(LOCKED, [true, false])]
+#[case::locked_theirs(LOCKED_THEIRS, [false, true])]
+#[case::wedge(WEDGE, [true, false])]
+#[case::chains(CHAINS, [true, true])]
+fn a_chain_base_is_attacked_when_an_enemy_unit_bears_on_its_rearmost_pawn(
+    #[case] fen: &str,
+    #[case] attacked: [bool; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.chain_base_attacked, attacked);
+}
+
+#[rstest]
+#[case::start(START, [[false, false], [false, false]])]
+#[case::tripled(TRIPLED, [[true, false], [false, false]])]
+#[case::contact(CONTACT, [[false, false], [true, false]])]
+#[case::majorities(MAJORITIES, [[true, false], [false, true]])]
+#[case::wings(WINGS, [[false, true], [true, false]])]
+#[case::weak(WEAK, [[false, true], [true, false]])]
+fn a_majority_is_more_own_pawns_than_enemy_pawns_on_a_wing(
+    #[case] fen: &str,
+    #[case] majority: [[bool; 2]; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.majority_by_wing, majority);
+}
+
+#[rstest]
+#[case::start(START, "", "")]
+#[case::majorities(MAJORITIES, "", "d6 f6 h3 h4 h5 h6")]
+#[case::holes(HOLES, "d3 d4", "d6")]
+#[case::castled(CASTLED, "e3 e4 e5 e6 f3 f4 h3 h4 h5 h6", "d3 d4 d5 d6")]
+fn a_hole_is_a_square_no_pawn_of_the_side_can_ever_attack(
+    #[case] fen: &str,
+    #[case] us: &str,
+    #[case] them: &str,
+) {
+    let facts = facts_of(fen);
+    assert_eq!(facts.pawns.holes[Side::Us.index()], squares(us));
+    assert_eq!(facts.pawns.holes[Side::Them.index()], squares(them));
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::majorities(MAJORITIES, [0, 6])]
+#[case::castled(CASTLED, [10, 4])]
+#[case::wings(WINGS, [13, 13])]
+#[case::blockade(BLOCKADE, [27, 28])]
+fn holes_are_counted_over_the_four_ranks_the_definition_names(
+    #[case] fen: &str,
+    #[case] holes: [u32; 2],
+) {
+    let facts = facts_of(fen);
+    assert_eq!(
+        facts.pawns.holes.map(|set| set.len()),
+        holes,
+        "the encoding counts what the sets hold"
+    );
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::castled(CASTLED, [0, 0])]
+#[case::majorities(MAJORITIES, [0, 0])]
+#[case::holes(HOLES, [1, 1])]
+#[case::blockade(BLOCKADE, [2, 1])]
+fn a_hole_is_occupied_when_an_enemy_knight_or_bishop_stands_on_it(
+    #[case] fen: &str,
+    #[case] occupied: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.holes_occupied, occupied);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::majorities(MAJORITIES, [1, 1])]
+#[case::blockade(BLOCKADE, [2, 1])]
+#[case::tripled(TRIPLED, [2, 1])]
+#[case::wedge(WEDGE, [3, 3])]
+#[case::locked(LOCKED, [4, 4])]
+fn a_fixed_pawn_has_a_unit_of_either_colour_on_its_stop_square(
+    #[case] fen: &str,
+    #[case] fixed: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.fixed_pawns, fixed);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::passers(PASSERS, [0, 0])]
+#[case::phalanx(PHALANX, [0, 0])]
+#[case::twin_passers(TWIN_PASSERS, [0, 1])]
+#[case::blockade(BLOCKADE, [2, 1])]
+fn a_blocked_passer_has_an_enemy_unit_on_its_stop_square(
+    #[case] fen: &str,
+    #[case] blocked: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.blocked_passers, blocked);
+}
+
+#[rstest]
+#[case::start(START, [None, None])]
+#[case::runaway(RUNAWAY, [Some(1), None])]
+#[case::phalanx(PHALANX, [Some(2), Some(2)])]
+#[case::passers(PASSERS, [Some(3), Some(5)])]
+#[case::twin_passers(TWIN_PASSERS, [Some(3), Some(6)])]
+#[case::tripled(TRIPLED, [Some(4), Some(5)])]
+fn the_passer_distance_is_what_the_lead_passer_still_has_to_push(
+    #[case] fen: &str,
+    #[case] distance: [Option<u8>; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.passer_distance, distance);
+}
+
+#[rstest]
+#[case::start(START, [[None, None], [None, None]])]
+#[case::runaway(RUNAWAY, [[Some(6), Some(7)], [None, None]])]
+#[case::passers(PASSERS, [[Some(7), Some(2)], [Some(7), Some(2)]])]
+#[case::phalanx(PHALANX, [[Some(7), Some(3)], [Some(7), Some(3)]])]
+#[case::blockade(BLOCKADE, [[Some(7), Some(3)], [Some(7), Some(1)]])]
+#[case::twin_passers(TWIN_PASSERS, [[Some(2), Some(5)], [Some(7), Some(5)]])]
+fn both_kings_are_measured_to_the_lead_passers_promotion_square(
+    #[case] fen: &str,
+    #[case] distance: [[Option<u8>; 2]; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.passer_king_distance, distance);
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::runaway(RUNAWAY, [false, false])]
+#[case::runaway_theirs(RUNAWAY_THEIRS, [false, false])]
+#[case::phalanx(PHALANX, [false, true])]
+#[case::twin_passers(TWIN_PASSERS, [false, true])]
+#[case::passers(PASSERS, [true, true])]
+#[case::blockade(BLOCKADE, [true, true])]
+fn a_defending_king_in_the_square_catches_the_lead_passer(
+    #[case] fen: &str,
+    #[case] caught: [bool; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.passer_in_square, caught);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::blockade(BLOCKADE, [0, 0])]
+#[case::runaway(RUNAWAY, [1, 0])]
+#[case::twin_passers(TWIN_PASSERS, [1, 0])]
+#[case::tripled(TRIPLED, [1, 1])]
+#[case::passers(PASSERS, [2, 2])]
+#[case::phalanx(PHALANX, [3, 3])]
+fn a_free_path_is_a_passer_with_nothing_at_all_ahead_of_it(
+    #[case] fen: &str,
+    #[case] free: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.passer_free_path, free);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::wings(WINGS, [0, 1])]
+#[case::split(SPLIT, [1, 0])]
+#[case::majorities(MAJORITIES, [1, 1])]
+#[case::contact(CONTACT, [2, 1])]
+#[case::castled(CASTLED, [2, 1])]
+fn a_file_aimed_at_the_enemy_king_is_one_semi_open_for_us_among_its_three(
+    #[case] fen: &str,
+    #[case] aimed: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.half_open_at_enemy_king, aimed);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::backward(BACKWARD, [0, 0])]
+#[case::locked(LOCKED, [0, 0])]
+#[case::weak(WEAK, [1, 2])]
+#[case::split(SPLIT, [2, 2])]
+fn a_backward_pawn_counts_again_on_a_file_the_enemy_has_left(
+    #[case] fen: &str,
+    #[case] weak: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).pawns.backward_on_semi_open, weak);
+}
+
 /// No `pawns` fact is among the four `features.md` §4 defines for classic chess
 /// only, so a Chess960 position answers exactly as the same placement would.
 #[test]
@@ -357,6 +578,14 @@ fn the_pawn_facts_of_a_chess960_position_are_the_classic_ones() {
     assert_eq!(pawns.rams, 2);
     assert_eq!(pawns.semi_open_files[Side::Them.index()], files("c"));
     assert!(pawns.open_files.is_empty());
+    assert_eq!(pawns.chain_max_length, [2, 2]);
+    assert_eq!(pawns.holes[Side::Us.index()], squares("a3 a4 g3"));
+    assert_eq!(
+        pawns.holes[Side::Them.index()],
+        squares("b5 b6 g5 g6 h5 h6")
+    );
+    assert_eq!(pawns.fixed_pawns, [2, 3]);
+    assert_eq!(pawns.majority_by_wing, [[false, false], [false, false]]);
 
     let classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10");
     assert_eq!(classic.pawns, *pawns);

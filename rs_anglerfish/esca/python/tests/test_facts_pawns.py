@@ -53,6 +53,27 @@ RUNAWAY = "8/P6k/8/8/8/8/6K1/8 w - - 0 1"
 #: The same runaway one tempo later: it is theirs, and the tempo saves nothing.
 RUNAWAY_THEIRS = "8/P6k/8/8/8/8/6K1/8 b - - 0 1"
 
+#: The same locked centre with Black to move: every side-paired value swaps.
+LOCKED_THEIRS = "4k3/8/4p3/1pppPp2/2PP1P2/8/8/4K3 b - - 0 1"
+
+#: A knight and a bishop each hold a square the other side's pawns have left.
+HOLES = "4k3/pp3ppp/2pB4/8/2PP4/3n4/PP3PPP/6K1 w - - 0 1"
+
+#: Chains of two against a chain of three, both bases under attack.
+CHAINS = "4k3/b4p2/4p3/3pP1N1/3P1P2/8/8/4K3 w - - 0 1"
+
+#: Passers blockaded by minor pieces that also stand on holes.
+BLOCKADE = "4k3/8/1n6/1P1b1p2/3P1N2/8/8/4K3 w - - 0 1"
+
+#: Both kings castled short, with files left open in front of each.
+CASTLED = "6k1/pp3pp1/8/8/4P3/8/PPP4P/6K1 w - - 0 1"
+
+#: Three backward pawns, each on a file its opponent has left.
+WEAK = "4k3/8/8/8/1p1p4/8/2P3P1/4K3 w - - 0 1"
+
+#: Two passers on one rank: b5 leads, being the nearer to file a.
+TWIN_PASSERS = "6k1/3p4/3K4/1P4P1/8/8/8/8 w - - 0 1"
+
 #: A Chess960 middlegame; no pawn fact reads the back rank, so nothing moves.
 NINE_SIXTY = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10"
 
@@ -398,6 +419,260 @@ def test_an_unstoppable_passer_beats_the_defending_king_to_its_promotion_square(
     assert facts_of(fen).pawns.passer_unstoppable == unstoppable
 
 
+@pytest.mark.parametrize(
+    ("fen", "length"),
+    [
+        (START, (1, 1)),
+        (RUNAWAY, (1, 0)),
+        (HOLES, (1, 2)),
+        (CHAINS, (2, 3)),
+        (MAJORITIES, (3, 2)),
+        (PHALANX, (3, 3)),
+    ],
+    ids=["start", "runaway", "holes", "chains", "majorities", "phalanx"],
+)
+def test_the_longest_chain_is_the_longest_run_of_pawns_each_defending_the_next(
+    fen: str, length: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.chain_max_length == length
+
+
+@pytest.mark.parametrize(
+    ("fen", "attacked"),
+    [
+        (START, (False, False)),
+        (PHALANX, (False, False)),
+        (LOCKED, (True, False)),
+        (LOCKED_THEIRS, (False, True)),
+        (WEDGE, (True, False)),
+        (CHAINS, (True, True)),
+    ],
+    ids=["start", "phalanx", "locked", "locked_theirs", "wedge", "chains"],
+)
+def test_a_chain_base_is_attacked_when_an_enemy_unit_bears_on_its_rearmost_pawn(
+    fen: str, attacked: tuple[bool, bool], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.chain_base_attacked == attacked
+
+
+@pytest.mark.parametrize(
+    ("fen", "majority"),
+    [
+        (START, ((False, False), (False, False))),
+        (TRIPLED, ((True, False), (False, False))),
+        (CONTACT, ((False, False), (True, False))),
+        (MAJORITIES, ((True, False), (False, True))),
+        (WINGS, ((False, True), (True, False))),
+        (WEAK, ((False, True), (True, False))),
+    ],
+    ids=["start", "tripled", "contact", "majorities", "wings", "weak"],
+)
+def test_a_majority_is_more_own_pawns_than_enemy_pawns_on_a_wing(
+    fen: str, majority: tuple[tuple[bool, bool], tuple[bool, bool]], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.majority_by_wing == majority
+
+
+@pytest.mark.parametrize(
+    ("fen", "us", "them"),
+    [
+        (START, "", ""),
+        (MAJORITIES, "", "d6 f6 h3 h4 h5 h6"),
+        (HOLES, "d3 d4", "d6"),
+        (CASTLED, "e3 e4 e5 e6 f3 f4 h3 h4 h5 h6", "d3 d4 d5 d6"),
+    ],
+    ids=["start", "majorities", "holes", "castled"],
+)
+def test_a_hole_is_a_square_no_pawn_of_the_side_can_ever_attack(
+    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+) -> None:
+    pawns = facts_of(fen).pawns
+    assert set(pawns.holes[esca.US]) == squares(us)
+    assert set(pawns.holes[esca.THEM]) == squares(them)
+
+
+@pytest.mark.parametrize(
+    ("fen", "holes"),
+    [
+        (START, (0, 0)),
+        (MAJORITIES, (0, 6)),
+        (CASTLED, (10, 4)),
+        (WINGS, (13, 13)),
+        (BLOCKADE, (27, 28)),
+    ],
+    ids=["start", "majorities", "castled", "wings", "blockade"],
+)
+def test_holes_are_counted_over_the_four_ranks_the_definition_names(
+    fen: str, holes: tuple[int, int], facts_of: FactsOf
+) -> None:
+    """The encoding counts what the sets hold."""
+    pawns = facts_of(fen).pawns
+    assert (len(pawns.holes[esca.US]), len(pawns.holes[esca.THEM])) == holes
+
+
+@pytest.mark.parametrize(
+    ("fen", "occupied"),
+    [
+        (START, (0, 0)),
+        (CASTLED, (0, 0)),
+        (MAJORITIES, (0, 0)),
+        (HOLES, (1, 1)),
+        (BLOCKADE, (2, 1)),
+    ],
+    ids=["start", "castled", "majorities", "holes", "blockade"],
+)
+def test_a_hole_is_occupied_when_an_enemy_knight_or_bishop_stands_on_it(
+    fen: str, occupied: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.holes_occupied == occupied
+
+
+@pytest.mark.parametrize(
+    ("fen", "fixed"),
+    [
+        (START, (0, 0)),
+        (MAJORITIES, (1, 1)),
+        (BLOCKADE, (2, 1)),
+        (TRIPLED, (2, 1)),
+        (WEDGE, (3, 3)),
+        (LOCKED, (4, 4)),
+    ],
+    ids=["start", "majorities", "blockade", "tripled", "wedge", "locked"],
+)
+def test_a_fixed_pawn_has_a_unit_of_either_colour_on_its_stop_square(
+    fen: str, fixed: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.fixed_pawns == fixed
+
+
+@pytest.mark.parametrize(
+    ("fen", "blocked"),
+    [
+        (START, (0, 0)),
+        (PASSERS, (0, 0)),
+        (PHALANX, (0, 0)),
+        (TWIN_PASSERS, (0, 1)),
+        (BLOCKADE, (2, 1)),
+    ],
+    ids=["start", "passers", "phalanx", "twin_passers", "blockade"],
+)
+def test_a_blocked_passer_has_an_enemy_unit_on_its_stop_square(
+    fen: str, blocked: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.blocked_passers == blocked
+
+
+@pytest.mark.parametrize(
+    ("fen", "distance"),
+    [
+        (START, (None, None)),
+        (RUNAWAY, (1, None)),
+        (PHALANX, (2, 2)),
+        (PASSERS, (3, 5)),
+        (TWIN_PASSERS, (3, 6)),
+        (TRIPLED, (4, 5)),
+    ],
+    ids=["start", "runaway", "phalanx", "passers", "twin_passers", "tripled"],
+)
+def test_the_passer_distance_is_what_the_lead_passer_still_has_to_push(
+    fen: str, distance: tuple[int | None, int | None], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.passer_distance == distance
+
+
+@pytest.mark.parametrize(
+    ("fen", "distance"),
+    [
+        (START, ((None, None), (None, None))),
+        (RUNAWAY, ((6, 7), (None, None))),
+        (PASSERS, ((7, 2), (7, 2))),
+        (PHALANX, ((7, 3), (7, 3))),
+        (BLOCKADE, ((7, 3), (7, 1))),
+        (TWIN_PASSERS, ((2, 5), (7, 5))),
+    ],
+    ids=["start", "runaway", "passers", "phalanx", "blockade", "twin_passers"],
+)
+def test_both_kings_are_measured_to_the_lead_passers_promotion_square(
+    fen: str,
+    distance: tuple[tuple[int | None, int | None], tuple[int | None, int | None]],
+    facts_of: FactsOf,
+) -> None:
+    assert facts_of(fen).pawns.passer_king_distance == distance
+
+
+@pytest.mark.parametrize(
+    ("fen", "caught"),
+    [
+        (START, (False, False)),
+        (RUNAWAY, (False, False)),
+        (RUNAWAY_THEIRS, (False, False)),
+        (PHALANX, (False, True)),
+        (TWIN_PASSERS, (False, True)),
+        (PASSERS, (True, True)),
+        (BLOCKADE, (True, True)),
+    ],
+    ids=["start", "runaway", "runaway_theirs", "phalanx", "twin_passers", "passers", "blockade"],
+)
+def test_a_defending_king_in_the_square_catches_the_lead_passer(
+    fen: str, caught: tuple[bool, bool], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.passer_in_square == caught
+
+
+@pytest.mark.parametrize(
+    ("fen", "free"),
+    [
+        (START, (0, 0)),
+        (BLOCKADE, (0, 0)),
+        (RUNAWAY, (1, 0)),
+        (TWIN_PASSERS, (1, 0)),
+        (TRIPLED, (1, 1)),
+        (PASSERS, (2, 2)),
+        (PHALANX, (3, 3)),
+    ],
+    ids=["start", "blockade", "runaway", "twin_passers", "tripled", "passers", "phalanx"],
+)
+def test_a_free_path_is_a_passer_with_nothing_at_all_ahead_of_it(
+    fen: str, free: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.passer_free_path == free
+
+
+@pytest.mark.parametrize(
+    ("fen", "aimed"),
+    [
+        (START, (0, 0)),
+        (WINGS, (0, 1)),
+        (SPLIT, (1, 0)),
+        (MAJORITIES, (1, 1)),
+        (CONTACT, (2, 1)),
+        (CASTLED, (2, 1)),
+    ],
+    ids=["start", "wings", "split", "majorities", "contact", "castled"],
+)
+def test_a_file_aimed_at_the_enemy_king_is_one_semi_open_for_us_among_its_three(
+    fen: str, aimed: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.half_open_at_enemy_king == aimed
+
+
+@pytest.mark.parametrize(
+    ("fen", "weak"),
+    [
+        (START, (0, 0)),
+        (BACKWARD, (0, 0)),
+        (LOCKED, (0, 0)),
+        (WEAK, (1, 2)),
+        (SPLIT, (2, 2)),
+    ],
+    ids=["start", "backward", "locked", "weak", "split"],
+)
+def test_a_backward_pawn_counts_again_on_a_file_the_enemy_has_left(
+    fen: str, weak: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pawns.backward_on_semi_open == weak
+
+
 def test_the_pawn_facts_of_a_chess960_position_are_the_classic_ones(facts_of: FactsOf, squares: Squares) -> None:
     """No `pawns` fact is one of the four `features.md` §4 defines for classic
     chess only, so a Chess960 position answers as the same placement would."""
@@ -414,6 +689,11 @@ def test_the_pawn_facts_of_a_chess960_position_are_the_classic_ones(facts_of: Fa
     assert pawns.rams == 2
     assert pawns.semi_open_files[esca.THEM] == "c"
     assert pawns.open_files == ""
+    assert pawns.chain_max_length == (2, 2)
+    assert set(pawns.holes[esca.US]) == squares("a3 a4 g3")
+    assert set(pawns.holes[esca.THEM]) == squares("b5 b6 g5 g6 h5 h6")
+    assert pawns.fixed_pawns == (2, 3)
+    assert pawns.majority_by_wing == ((False, False), (False, False))
 
     classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10").pawns
     assert set(classic.passed[esca.US]) == set(pawns.passed[esca.US])

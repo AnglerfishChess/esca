@@ -51,6 +51,9 @@ type GroupReduce<'py> = PyResult<(Bound<'py, PyAny>, (Py<PyFacts>, &'static str)
 /// The same for a group that is one of a side-paired two.
 type SideGroupReduce<'py> = PyResult<(Bound<'py, PyAny>, (Py<PyFacts>, &'static str, isize))>;
 
+/// A pair of optional distances per side, own king then enemy king.
+type KingDistances = ((Option<u8>, Option<u8>), (Option<u8>, Option<u8>));
+
 /// The callable a group's `__reduce__` names.
 fn group_reconstructor(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     py.import("esca._esca")?.getattr("_facts_group")
@@ -350,6 +353,48 @@ pub struct PyPawnFacts {
     /// A passer the enemy king cannot catch, per side.
     #[pyo3(get)]
     passer_unstoppable: (bool, bool),
+    /// The longest run of pawns each defending the next, per side.
+    #[pyo3(get)]
+    chain_max_length: (u8, u8),
+    /// An enemy unit attacks the base of a chain of two or more, per side.
+    #[pyo3(get)]
+    chain_base_attacked: (bool, bool),
+    /// More own pawns than enemy pawns on the queen-side, on the king-side,
+    /// per side.
+    #[pyo3(get)]
+    majority_by_wing: ((bool, bool), (bool, bool)),
+    /// Squares on relative ranks 3 to 6 no pawn of the side can ever attack,
+    /// per side.
+    #[pyo3(get)]
+    holes: (PySquareSet, PySquareSet),
+    /// Enemy knights and bishops standing on those squares, per side.
+    #[pyo3(get)]
+    holes_occupied: (u8, u8),
+    /// Pawns whose stop square holds a unit of either colour, per side.
+    #[pyo3(get)]
+    fixed_pawns: (u8, u8),
+    /// Passers whose stop square holds an enemy unit, per side.
+    #[pyo3(get)]
+    blocked_passers: (u8, u8),
+    /// The pushes the lead passer still needs, per side.
+    #[pyo3(get)]
+    passer_distance: (Option<u8>, Option<u8>),
+    /// The distance to the lead passer's promotion square from its own king
+    /// and from the enemy king, per side.
+    #[pyo3(get)]
+    passer_king_distance: KingDistances,
+    /// The defending king is in the square of the lead passer, per side.
+    #[pyo3(get)]
+    passer_in_square: (bool, bool),
+    /// Passers whose whole front span is empty, per side.
+    #[pyo3(get)]
+    passer_free_path: (u8, u8),
+    /// Files semi-open for the side among the enemy king's files, per side.
+    #[pyo3(get)]
+    half_open_at_enemy_king: (u8, u8),
+    /// Backward pawns on a file semi-open for the enemy, per side.
+    #[pyo3(get)]
+    backward_on_semi_open: (u8, u8),
 }
 
 impl PyPawnFacts {
@@ -374,6 +419,19 @@ impl PyPawnFacts {
             passer_protected: pair(facts.passer_protected),
             passers_connected: pair(facts.passers_connected),
             passer_unstoppable: pair(facts.passer_unstoppable),
+            chain_max_length: pair(facts.chain_max_length),
+            chain_base_attacked: pair(facts.chain_base_attacked),
+            majority_by_wing: pair(facts.majority_by_wing.map(pair)),
+            holes: PySquareSet::pair(facts.holes),
+            holes_occupied: pair(facts.holes_occupied),
+            fixed_pawns: pair(facts.fixed_pawns),
+            blocked_passers: pair(facts.blocked_passers),
+            passer_distance: pair(facts.passer_distance),
+            passer_king_distance: pair(facts.passer_king_distance.map(pair)),
+            passer_in_square: pair(facts.passer_in_square),
+            passer_free_path: pair(facts.passer_free_path),
+            half_open_at_enemy_king: pair(facts.half_open_at_enemy_king),
+            backward_on_semi_open: pair(facts.backward_on_semi_open),
         }
     }
 }

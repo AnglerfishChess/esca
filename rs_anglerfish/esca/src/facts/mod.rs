@@ -188,6 +188,35 @@ pub struct PawnFacts {
     pub passers_connected: [bool; 2],
     /// A passer the enemy king cannot catch, per side.
     pub passer_unstoppable: [bool; 2],
+    /// The longest run of pawns each defending the next, per side.
+    pub chain_max_length: [u8; 2],
+    /// An enemy unit attacks the base of a chain of two or more, per side.
+    pub chain_base_attacked: [bool; 2],
+    /// More own pawns than enemy pawns on the queen-side, on the king-side,
+    /// per side.
+    pub majority_by_wing: [[bool; 2]; 2],
+    /// Squares on relative ranks 3 to 6 no pawn of the side can ever attack,
+    /// per side.
+    pub holes: [SquareSet; 2],
+    /// Enemy knights and bishops standing on those squares, per side.
+    pub holes_occupied: [u8; 2],
+    /// Pawns whose stop square holds a unit of either colour, per side.
+    pub fixed_pawns: [u8; 2],
+    /// Passers whose stop square holds an enemy unit, per side.
+    pub blocked_passers: [u8; 2],
+    /// The pushes the lead passer still needs, per side.
+    pub passer_distance: [Option<u8>; 2],
+    /// The distance to the lead passer's promotion square from its own king
+    /// and from the enemy king, per side.
+    pub passer_king_distance: [[Option<u8>; 2]; 2],
+    /// The defending king is in the square of the lead passer, per side.
+    pub passer_in_square: [bool; 2],
+    /// Passers whose whole front span is empty, per side.
+    pub passer_free_path: [u8; 2],
+    /// Files semi-open for the side among the enemy king's files, per side.
+    pub half_open_at_enemy_king: [u8; 2],
+    /// Backward pawns on a file semi-open for the enemy, per side.
+    pub backward_on_semi_open: [u8; 2],
 }
 
 /// Bishops, rooks, knights and queens.

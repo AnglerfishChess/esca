@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1876 f32 per position | value head, policy head |
+| `position` | one vector of 1906 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -94,7 +94,17 @@ taking here cost", never "is taking here best".
 | **semi-open for X** | No pawn of X on it, at least one pawn of the opponent. |
 | **pawn island** | A maximal run of adjacent files carrying at least one pawn of the side. |
 | **lever** | A pawn one of whose attacked squares carries an enemy pawn. Counted once per such pawn, from the attack alone. |
+| **stop square** | The square directly ahead of a pawn on its own file: file *f*, relative rank *r*+1. |
 | **ram** | A pawn whose stop square holds an enemy pawn. |
+| **fixed pawn** | A pawn whose stop square holds any unit, its own side's or the enemy's. A ram is the case where that unit is an enemy pawn. |
+| **blocked passer** | A passed pawn whose stop square holds an enemy unit. |
+| **pawn chain** | A maximal run of friendly pawns each defending the next, along one diagonal direction. Its **length** is the number of pawns in it. Every pawn heads a run of at least itself, so a side with pawns none of which defends another has a longest chain of 1, and a side with no pawns has 0. |
+| **chain base** | The rearmost pawn of a chain of two or more: the one no other pawn of that chain defends. |
+| **majority** | On a wing, strictly more own pawns than enemy pawns. |
+| **hole for X** | A square on X's relative ranks 3 to 6 that no pawn of X can ever attack: no pawn of X stands on either adjacent file at a lower relative rank. Occupancy does not matter — a hole may carry a unit of either side, X's own pawn included. |
+| **promotion distance** | For a pawn on relative rank *r*: 8 − *r*, the pushes it still needs. |
+| **lead passer** | A side's most advanced passer: the one of greatest relative rank, and among equals the one nearest file a. |
+| **in the square** | Of the king defending against a passer on relative rank *r*: `dist(king, promotion square) − (defender to move ? 1 : 0) ≤ 8 − r`, the rule of the square. The defender is the passer owner's opponent. An `unstoppable passer` is this test failing with a bare-king defender besides. |
 | **outpost square for X** | A square on relative ranks 4–6, attacked by one of X's pawns, and never attackable by an enemy pawn (no enemy pawn on either adjacent file at that relative rank or ahead of it). |
 | **pawn shield** | For each of the king files: the nearest friendly pawn ahead of the king on that file. |
 | **pawn storm** | The same three files: the nearest enemy pawn ahead of the king. |
@@ -232,7 +242,7 @@ The clock and the repetition facts are the `history` group's ([§2.13](#213-hist
 | `pawns_only` | 1 | bit: no piece other than kings and pawns | A | V |
 | `insufficient_material` | 2 | bit per side: no pawn, rook or queen, and either at most one minor or no knight and bishops of a single square colour | A | V |
 
-### 2.4 `pawns` — pawn structure (width 165)
+### 2.4 `pawns` — pawn structure (width 195)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -254,6 +264,19 @@ The clock and the repetition facts are the `history` group's ([§2.13](#213-hist
 | `defended_pawns` | 2 | count per side of pawns defended by a pawn, / 8 | A | V |
 | `levers` | 2 | count per side, / 4 | A | P |
 | `rams` | 1 | count of blocked pawn pairs, / 8 | A | V |
+| `chain_max_length` | 2 | longest pawn chain per side, / 5 | B | V |
+| `chain_base_attacked` | 2 | bit per side: an enemy unit attacks a chain base | B | V |
+| `majority_by_wing` | 4 | bits per side: majority on the queen-side, on the king-side | A | V |
+| `holes` | 2 | count of holes for the side, / 16 | A | V |
+| `holes_occupied` | 2 | enemy knights and bishops standing on those holes, / 4 | B | V |
+| `fixed_pawns` | 2 | count per side, / 8 | A | V |
+| `blocked_passers` | 2 | count per side, / 2 | A | V |
+| `passer_distance` | 2 | promotion distance of the lead passer, / 6; 0 when the side has none, which no passer's distance is | A | V |
+| `passer_king_distance` | 4 | per side: Chebyshev distance to the lead passer's promotion square from its own king, then from the enemy king, / 8; 8 when the side has no passer, one more than any distance on a board | A | V |
+| `passer_in_square` | 2 | bit per side: the defending king is in the square of the lead passer; 0 when the side has no passer | A | V |
+| `passer_free_path` | 2 | passers whose whole front span is empty, / 2 | A | V |
+| `half_open_at_enemy_king` | 2 | files semi-open for the side among the enemy king files, / 3 | A | V |
+| `backward_on_semi_open` | 2 | backward pawns on a file semi-open for the enemy, / 4 | A | V |
 
 ### 2.5 `pieces` — bishops, rooks, knights, queens (width 35)
 
@@ -482,7 +505,7 @@ width and is the natural first ablation target.
 | `placement` | 768 | A |
 | `state` | 16 | A |
 | `material` | 26 | A |
-| `pawns` | 165 | A |
+| `pawns` | 195 | A |
 | `pieces` | 35 | A/B |
 | `king` | 120 | A/B |
 | `mobility` | 39 | B |
@@ -493,8 +516,8 @@ width and is the natural first ablation target.
 | `endgame` | 15 | A |
 | `history` | 27 | A |
 | `planes` | 512 | A |
-| **total** | **1876** | |
-| total without `placement` and `planes` | 596 | |
+| **total** | **1906** | |
+| total without `placement` and `planes` | 626 | |
 
 ---
 
@@ -547,7 +570,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1876 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1906 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -569,7 +592,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "e1db399a544b4fea0af0afc55f254e8b"   # 128-bit, hex
+schema_id = "a430d5b96c3c2cd37a8e9b4d0072d845"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

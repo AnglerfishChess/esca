@@ -12,7 +12,7 @@ fn file_mask(file: File) -> SquareSet {
 
 /// The three files a king's shelter is read on: its own file clamped to b–g,
 /// and the two neighbours of that, in ascending order.
-fn shield_files(king: File) -> [File; 3] {
+pub(super) fn shield_files(king: File) -> [File; 3] {
     let centre = king.index().clamp(1, 6);
     [centre - 1, centre, centre + 1].map(|i| File::from_index(i).expect("b to g has neighbours"))
 }

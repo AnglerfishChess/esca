@@ -197,6 +197,51 @@ fn pawns(facts: &Facts, w: &mut Writer) {
         w.count(p.levers[side.index()] as f32, 4.0);
     }
     w.count(p.rams as f32, 8.0);
+    for side in Side::ALL {
+        w.count(p.chain_max_length[side.index()] as f32, 5.0);
+    }
+    for side in Side::ALL {
+        w.bit(p.chain_base_attacked[side.index()]);
+    }
+    for side in Side::ALL {
+        for wing in p.majority_by_wing[side.index()] {
+            w.bit(wing);
+        }
+    }
+    for side in Side::ALL {
+        w.count(p.holes[side.index()].len() as f32, 16.0);
+    }
+    for (counts, scale) in [
+        (&p.holes_occupied, 4.0),
+        (&p.fixed_pawns, 8.0),
+        (&p.blocked_passers, 2.0),
+    ] {
+        for side in Side::ALL {
+            w.count(counts[side.index()] as f32, scale);
+        }
+    }
+    for side in Side::ALL {
+        // No passer's promotion distance is 0, so 0 says the side has none.
+        w.count(p.passer_distance[side.index()].unwrap_or(0) as f32, 6.0);
+    }
+    for side in Side::ALL {
+        for king in p.passer_king_distance[side.index()] {
+            // No distance on a board is 8, so 8 says the side has no passer.
+            w.count(king.unwrap_or(8) as f32, 8.0);
+        }
+    }
+    for side in Side::ALL {
+        w.bit(p.passer_in_square[side.index()]);
+    }
+    for (counts, scale) in [
+        (&p.passer_free_path, 2.0),
+        (&p.half_open_at_enemy_king, 3.0),
+        (&p.backward_on_semi_open, 4.0),
+    ] {
+        for side in Side::ALL {
+            w.count(counts[side.index()] as f32, scale);
+        }
+    }
 }
 
 fn pieces(facts: &Facts, w: &mut Writer) {
