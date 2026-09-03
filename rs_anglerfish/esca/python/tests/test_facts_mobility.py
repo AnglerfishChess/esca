@@ -223,6 +223,44 @@ def test_the_mobility_difference_is_ours_less_theirs_by_type(fen: str, diff: lis
 
 
 @pytest.mark.parametrize(
+    ("fen", "diff"),
+    [
+        (START, [0.0, 0.0, 0.0, 0.0, 0.0]),
+        (ONE_KNIGHT_OUT, [1 / 16, -3 / 16, 0.0, -1 / 16, 0.0]),
+        (QUEEN_DUEL, [0.0, 0.0, 0.0, 0.0, -1 / 16]),
+        (OPEN_ROOKS, [0.0, 0.0, 0.0, 1.0, 0.0]),
+        (OPEN_ROOKS_THEIRS, [0.0, 0.0, 0.0, -1.0, 0.0]),
+        (PAWN_SCREEN, [-3 / 16, 0.0, 0.0, 11 / 16, 0.0]),
+        (PAWN_SCREEN_THEIRS, [3 / 16, 0.0, 0.0, -11 / 16, 0.0]),
+        (CROSSFIRE, [1 / 16, 0.0, 0.0, 4 / 16, 0.0]),
+        (TRENCHES, [-1 / 16, 0.0, 0.0, 0.0, 0.0]),
+        (BOXED_IN, [2 / 16, 0.0, 0.0, 0.0, 0.0]),
+        (CENTRE_GRIP, [-5 / 16, 13 / 16, 9 / 16, 0.0, 0.0]),
+        (BARE_KINGS, [0.0, 0.0, 0.0, 0.0, 0.0]),
+    ],
+    ids=[
+        "start",
+        "one_knight_out",
+        "queen_duel",
+        "open_rooks",
+        "open_rooks_theirs",
+        "pawn_screen",
+        "pawn_screen_theirs",
+        "crossfire",
+        "trenches",
+        "boxed_in",
+        "centre_grip",
+        "bare_kings",
+    ],
+)
+def test_the_safe_difference_is_our_safe_mobility_less_theirs_by_type(fen: str, diff: list[float]) -> None:
+    """Neither side's pawns cover a square the other's pieces reach in
+    `QUEEN_DUEL`, `OPEN_ROOKS` or `BARE_KINGS`, so there the safe difference is
+    the whole difference."""
+    assert encoded(fen, "safe_mobility_diff_by_type") == pytest.approx(diff)
+
+
+@pytest.mark.parametrize(
     ("fen", "space"),
     [
         (START, (0, 0)),

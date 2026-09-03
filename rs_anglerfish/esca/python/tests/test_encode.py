@@ -27,13 +27,66 @@ def test_the_schema_is_the_v1_one() -> None:
     assert esca.SCHEMA == esca.SCHEMA_V1
     assert esca.SCHEMA.id == esca.SCHEMA_ID
     assert (DATA / "schema_v1_id.txt").read_text().strip() == esca.SCHEMA_ID
-    assert esca.SCHEMA.width == esca.WIDTH == 1968
+    assert esca.SCHEMA.width == esca.WIDTH == 2039
     assert esca.SCHEMA.canonical() == (DATA / "schema_v1.txt").read_text()
     assert [group["name"] for group in esca.schema()] == esca.SCHEMA.group_names
     assert esca.schema()[0] == {"name": "placement", "version": 1, "width": 768, "offset": 0}
     assert esca.schema()[1] == {"name": "state", "version": 2, "width": 16, "offset": 768}
     assert esca.SCHEMA.width_of(["state", "pawns"]) == 16 + 195
     assert esca.SCHEMA.width_of(["threats", "endgame"]) == 24 + 15
+
+
+#: The move row as `features.md` §3 lists it, in the canonical form §6 spells.
+MOVE_CANONICAL = """move:1:40
+  is_capture:1:bit
+  victim_type:5:one-hot
+  mover_type:6:one-hot
+  promotion_piece:4:one-hot
+  gives_check:1:bit
+  gives_safe_check:1:bit
+  is_safe:1:bit
+  captures_hanging:1:bit
+  escapes_attack:1:bit
+  to_attacked_by_pawn:1:bit
+  is_castling:1:bit
+  is_en_passant:1:bit
+  see:1:diff/9
+  threat_created_max:1:count/9
+  moves_attacked_unit:1:bit
+  blocks_check:1:bit
+  advances_passer:1:bit
+  creates_passer:1:bit
+  creates_weakness:3:bits
+  opens_file_at_enemy_king:1:bit
+  ring_attack_delta:2:diff/4
+  own_hanging_delta:1:diff/4
+  their_hanging_delta:1:diff/4
+  leaves_unit_hanging:1:bit
+  gives_discovered_attack:1:bit
+"""
+
+
+def test_the_move_sections_canonical_text_is_the_golden_ones_last_section() -> None:
+    """The move row is a section of the same text, so the one id covers both
+    rows: renaming a feature of it changes the text the id hashes."""
+    moves = esca.SCHEMA.moves()
+    assert moves == esca.MOVE_SCHEMA
+    assert moves.canonical() == MOVE_CANONICAL
+    canonical = (DATA / "schema_v1.txt").read_text()
+    assert canonical.endswith(MOVE_CANONICAL)
+    assert canonical.count("\nmove:") == 1
+    assert canonical.replace("  see:1:diff/9\n", "  static_exchange:1:diff/9\n") != canonical
+
+
+def test_the_move_rows_features_are_as_wide_as_the_row() -> None:
+    moves = esca.MOVE_SCHEMA
+    assert moves.name == "move"
+    assert moves.version == 1
+    assert moves.width == esca.MOVE_WIDTH == 40
+    features = moves.features()
+    assert sum(feature["width"] for feature in features) == esca.MOVE_WIDTH
+    assert len(features) == 25
+    assert features[12] == {"name": "see", "offset": 24, "width": 1, "encoding": "diff/9"}
 
 
 def test_encode_returns_a_contiguous_float32_matrix() -> None:

@@ -21,7 +21,7 @@ use crate::schema::Schema;
 use crate::variant::{chess960, classic};
 
 use board::PyVariant;
-use encode::PySchema;
+use encode::{PyMoveSchema, PySchema};
 
 /// Classic chess, the default wherever a variant is optional.
 fn default_variant() -> PyVariant {
@@ -33,6 +33,10 @@ fn default_schema() -> PySchema {
     PySchema::new(Schema::v1())
 }
 
+fn default_move_schema() -> PyMoveSchema {
+    PyMoveSchema::new(Schema::v1().moves())
+}
+
 #[pymodule]
 #[pyo3(name = "_esca")]
 fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -42,6 +46,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<board::PyPosition>()?;
     module.add_class::<board::PyGame>()?;
     module.add_class::<encode::PySchema>()?;
+    module.add_class::<encode::PyMoveSchema>()?;
     module.add_class::<facts::PyFacts>()?;
     module.add_class::<facts::PyPlacementFacts>()?;
     module.add_class::<facts::PyStateFacts>()?;
@@ -98,6 +103,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("SCHEMA_ID", Schema::v1().id().to_string())?;
     module.add("WIDTH", Schema::v1().width())?;
     module.add("MOVE_WIDTH", MoveFacts::WIDTH)?;
+    module.add("MOVE_SCHEMA", default_move_schema())?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

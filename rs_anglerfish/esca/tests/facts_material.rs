@@ -45,6 +45,13 @@ const SAME_COLOUR_BISHOPS: &str = "4k3/8/8/1n1n4/8/2B1B3/8/4K3 w - - 0 1";
 /// Bishops of both colours against a lone knight: only the knight cannot mate.
 const BISHOP_PAIR: &str = "4k3/6n1/8/8/8/8/8/2B1KB2 w - - 0 1";
 
+/// The same placement read from the other side: the pair is theirs.
+const BISHOP_PAIR_THEIRS: &str = "4k3/6n1/8/8/8/8/8/2B1KB2 b - - 0 1";
+
+/// A bishop and a knight against two bishops: the same piece value, the pair
+/// on one side only.
+const ONE_BISHOP_AGAINST_TWO: &str = "2b1kb2/8/8/8/8/8/6N1/4K1B1 w - - 0 1";
+
 /// A bare knight against a rook and a pawn.
 const LONE_KNIGHT: &str = "r3k3/5p2/8/8/8/5N2/8/4K3 w - - 0 1";
 
@@ -222,6 +229,39 @@ fn a_side_holding_at_most_a_minor_or_bishops_of_one_colour_cannot_mate(
     assert_eq!(facts_of(fen).material.insufficient, insufficient);
 }
 
+#[rstest]
+#[case::start(START, 0)]
+#[case::queenless(QUEENLESS, 0)]
+#[case::same_colour_bishops(SAME_COLOUR_BISHOPS, 0)]
+#[case::army_against_a_king(ARMY_AGAINST_A_KING, 1)]
+#[case::bishop_pair(BISHOP_PAIR, 1)]
+#[case::bishop_pair_theirs(BISHOP_PAIR_THEIRS, -1)]
+#[case::one_bishop_against_two(ONE_BISHOP_AGAINST_TWO, -1)]
+#[case::lone_knight(LONE_KNIGHT, 0)]
+#[case::bare_kings(BARE_KINGS, 0)]
+fn only_bishops_of_both_colours_are_a_pair(#[case] fen: &str, #[case] imbalance: i32) {
+    assert_eq!(facts_of(fen).material.bishop_pair_imbalance, imbalance);
+    assert_eq!(encoded(fen, "bishop_pair_imbalance"), [imbalance as f32]);
+}
+
+#[rstest]
+#[case::start(START, 0.0)]
+#[case::two_queens_each(TWO_QUEENS_EACH, 0.0)]
+#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, 3.0 / 20.0)]
+#[case::army_against_a_king(ARMY_AGAINST_A_KING, 1.0)]
+#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, 4.0 / 20.0)]
+#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, -4.0 / 20.0)]
+#[case::rook_and_knight(ROOK_AND_KNIGHT, 3.0 / 20.0)]
+#[case::one_bishop_against_two(ONE_BISHOP_AGAINST_TWO, 0.0)]
+#[case::lone_knight(LONE_KNIGHT, -2.0 / 20.0)]
+#[case::pawn_ending(PAWN_ENDING, 0.0)]
+fn the_piece_value_difference_runs_past_its_scale_only_with_a_whole_army(
+    #[case] fen: &str,
+    #[case] difference: f32,
+) {
+    assert_eq!(encoded(fen, "non_pawn_material_diff"), [difference]);
+}
+
 /// No `material` fact is among the four `features.md` §4 defines for classic
 /// chess only, so a Chess960 position answers exactly as the same placement
 /// would.
@@ -237,6 +277,7 @@ fn the_material_facts_of_a_chess960_position_are_the_classic_ones() {
     assert!(material.both_queens);
     assert!(!material.pawns_only);
     assert_eq!(material.insufficient, [false, false]);
+    assert_eq!(material.bishop_pair_imbalance, 0);
 
     let classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10");
     assert_eq!(classic.material, material);

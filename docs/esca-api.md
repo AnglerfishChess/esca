@@ -527,7 +527,8 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 1968 values.
+    /// The v1 schema of `features.md`: 14 groups, 2039 values, and the
+    /// 40-value move row.
     pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
@@ -535,6 +536,8 @@ impl Schema {
     pub fn width_of(&self, groups: GroupSet) -> usize;
     pub fn groups(&self) -> &[GroupSpec];
     pub fn group(&self, name: &str) -> Option<&GroupSpec>;
+    /// The move row: the group named `move`, versioned on its own.
+    pub fn moves(&self) -> &'static GroupSpec;
     /// The canonical text `id` hashes.
     pub fn canonical(&self) -> String;
     pub fn all(&self) -> GroupSet;
@@ -566,6 +569,12 @@ pub struct GroupSpec {
     pub version: u16,
     pub width: usize,
     pub features: &'static [FeatureSpec],
+}
+
+impl GroupSpec {
+    /// The group's own part of the canonical text.
+    pub fn canonical(&self) -> String;
+    pub fn feature(&self, name: &str) -> Option<&'static FeatureSpec>;
 }
 
 pub struct FeatureSpec {
@@ -601,6 +610,7 @@ impl Facts {
 }
 
 impl MoveFacts {
+    /// `Schema::v1().moves().width`, as a constant.
     pub const WIDTH: usize = 40;
     /// Panics if `out` is shorter than `WIDTH`.
     pub fn encode_into(&self, out: &mut [f32]);
@@ -630,8 +640,11 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v1 id is `df557ea406ae153e6fe602aa9ded5eb0`; its canonical text is checked
-in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
+The v1 id is `dbe7a74d1478ca3f083be1cb5df36a1d`; its canonical text is checked
+in as `rs_anglerfish/esca/tests/data/schema_v1.txt`, the position row's groups
+first and the `move` section last. The one id covers both rows, so a net that
+stores it refuses a move row of another shape as surely as a position row of
+one.
 
 ---
 
@@ -704,8 +717,9 @@ Built from the same crate with feature `python`; distributed with `.pyi` stubs,
 so every signature below is typed and checkable. Squares, roles, colours,
 outcomes and castling styles are text on this surface, and a file set is the
 string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
-`Position`, `Game`, `Schema`, `Facts` with its groups, `lichess.Batch`,
-`pgn.Game`, and `uci.Engine` with its `Limits`, `Option`, `Info` and `Answer`.
+`Position`, `Game`, `Schema`, `MoveSchema`, `Facts` with its groups,
+`lichess.Batch`, `pgn.Game`, and `uci.Engine` with its `Limits`, `Option`,
+`Info` and `Answer`.
 
 ```python
 import esca
@@ -752,8 +766,10 @@ print(f.summary())
 # Schema and batch encoding
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
 esca.SCHEMA_ID  # "16a7…", 32 hex chars
-esca.WIDTH  # 1968
+esca.WIDTH  # 2039
 esca.MOVE_WIDTH  # 40
+esca.MOVE_SCHEMA  # MoveSchema, also as esca.SCHEMA.moves()
+esca.MOVE_SCHEMA.features()  # [{"name", "offset", "width", "encoding"}, …]
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
 

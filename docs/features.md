@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1968 f32 per position | value head, policy head |
+| `position` | one vector of 2039 f32 per position | value head, policy head |
 | `move` | one vector of 40 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -254,7 +254,7 @@ colours swapped gives the same 768 values.
 
 The clock and the repetition facts are the `history` group's ([§2.13](#213-history--what-the-plies-before-say-width-27)).
 
-### 2.3 `material` — material and phase (width 26)
+### 2.3 `material` — material and phase (width 28)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -267,6 +267,8 @@ The clock and the repetition facts are the `history` group's ([§2.13](#213-hist
 | `both_queens` | 1 | bit: both sides have at least one queen | A | V |
 | `pawns_only` | 1 | bit: no piece other than kings and pawns | A | V |
 | `insufficient_material` | 2 | bit per side: no pawn, rook or queen, and either at most one minor or no knight and bishops of a single square colour | A | V |
+| `bishop_pair_imbalance` | 1 | diff / 1: our bishop pair less theirs, a side holding the pair when it has bishops on both square colours | A | V |
+| `non_pawn_material_diff` | 1 | diff / 20: value sum of N, B, R and Q, us less them | A | V |
 
 ### 2.4 `pawns` — pawn structure (width 195)
 
@@ -381,7 +383,7 @@ and a king that castled and then walked back to the centre is none again.
 Chess960 starts kings anywhere on the first rank, so the feature is written as
 zeros there, as §4 says.
 
-### 2.7 `mobility` — mobility and space (width 39)
+### 2.7 `mobility` — mobility and space (width 44)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -395,6 +397,7 @@ zeros there, as §4 says.
 | `extended_centre_control` | 2 | per side: attacks on c3–f6, / 16 | A | V |
 | `immobile_pieces` | 2 | per side: non-pawn, non-king units with no destination, / 4 | B | V |
 | `total_mobility` | 2 | per side: sum over types, / 96 | B | V |
+| `safe_mobility_diff_by_type` | 5 | safe mobility us − them per type, / 16 | A | V |
 
 `immobile_pieces` reads a unit's destinations off its attack map alone, so a
 piece under an absolute pin is not immobile.
@@ -575,9 +578,9 @@ The Lichess evaluation dump carries 4-field FENs (no halfmove clock, no move
 number), so the whole group is constant across it — see
 [§5](#5-open-questions).
 
-### 2.14 `planes` — attack and status bitboards (width 512)
+### 2.14 `planes` — attack and status bitboards (width 576)
 
-Eight 64-square planes, in the mover's view. This group carries most of the
+Nine 64-square planes, in the mover's view. This group carries most of the
 width and is the natural first ablation target.
 
 | Plane | Definition | Cost | Head |
@@ -590,6 +593,7 @@ width and is the natural first ablation target.
 | `their_hanging` | their units that are hanging | A | B |
 | `our_pinned` | our units under an absolute pin | B | B |
 | `their_pinned` | their units under an absolute pin | B | B |
+| `their_threatened` | their threatened units: where the material an exchange wins us stands | B·E | B |
 
 ### 2.15 Totals
 
@@ -597,20 +601,20 @@ width and is the natural first ablation target.
 |---|---|---|
 | `placement` | 768 | A |
 | `state` | 16 | A |
-| `material` | 26 | A |
+| `material` | 28 | A |
 | `pawns` | 195 | A |
 | `pieces` | 44 | A/B/C |
 | `king` | 137 | A/B |
-| `mobility` | 39 | B |
+| `mobility` | 44 | B |
 | `attacks` | 25 | B |
 | `exchange` | 8 | C·E |
 | `threats` | 24 | B·E |
 | `tactics` | 132 | C, plus 2 features at D |
 | `endgame` | 15 | A |
 | `history` | 27 | A |
-| `planes` | 512 | A |
-| **total** | **1968** | |
-| total without `placement` and `planes` | 688 | |
+| `planes` | 576 | A/B |
+| **total** | **2039** | |
+| total without `placement` and `planes` | 695 | |
 
 ---
 
@@ -625,6 +629,11 @@ the king's landing square.
 The first twelve features are read from the position's shared scratch. The
 rest read the position after the move, which is made anyway to answer
 `gives_check`; the pawn structure and the attack maps are then rescanned.
+
+The row is a section of the schema of its own, named `move`, with a version of
+its own and the features below as its entries, in this order. `schema_id`
+hashes it together with the position groups, so one id covers both rows
+([§6](#6-schema-versioning)).
 
 | Feature | Width | Encoding | Cost | Definition |
 |---|---|---|---|---|
@@ -691,7 +700,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1968 values. Ablation (§7) decides whether it
+2. **`planes` width.** 576 of 2039 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -702,18 +711,21 @@ computes them itself where it needs them.
 
 ### Manifest
 
-A schema is an ordered list of groups. Each group has a name, an integer
-version, a width and an ordered list of feature entries.
+A schema is the position row's ordered list of groups, then the move row as a
+single group named `move`. Each group has a name, an integer version, a width
+and an ordered list of feature entries; no group of the position row is named
+`move`.
 
 ```
 schema_semver = "1.0.0"
 groups = [
   { name = "placement", version = 1, width = 768, offset =   0 },
   { name = "state",     version = 2, width =  16, offset = 768 },
-  { name = "material",  version = 1, width =  26, offset = 784 },
+  { name = "material",  version = 2, width =  28, offset = 784 },
   ...
 ]
-schema_id = "df557ea406ae153e6fe602aa9ded5eb0"   # 128-bit, hex
+moves = { name = "move", version = 1, width = 40 }
+schema_id = "dbe7a74d1478ca3f083be1cb5df36a1d"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering
@@ -723,8 +735,10 @@ schema_id = "df557ea406ae153e6fe602aa9ded5eb0"   # 128-bit, hex
   <feature>:<width>:<encoding>\n   (for each feature, in order)
 ```
 
-for every group in order. It changes when any name, order, width or encoding
-changes, and only then.
+for every group of the position row in order, then for the `move` section,
+which is always last. It changes when any name, order, width or encoding of
+either row changes, and only then, so a checkpoint that stores the id detects
+a move row of another width as surely as a position row of one.
 
 `<encoding>` is the encoding kind and its scale, from a fixed vocabulary:
 `bit`, `bits`, `one-hot`, `mask8`, `plane`, `ratio`, `count/S` and `diff/S`,
@@ -749,6 +763,7 @@ is 8 for pawns and 4 for the rest. The full text is checked in as
 | Add or reorder features inside a group | Bump that group's version; it becomes a distinct group id | keep working while the previous version's implementation is retained |
 | Give a group of width 0 its first features | Bump that group's version; every later group's offset moves | stop working; refused at load |
 | Remove a group | Bump `schema_semver` major | stop working; refused at load |
+| Add or reorder features in the `move` section | Bump its version; new `schema_id` | stop working: the move row is written whole, never as a subset |
 
 At most two versions of any group are kept compiled. Dropping an old version
 is a major release.

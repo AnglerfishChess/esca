@@ -260,6 +260,9 @@ pub struct PyMaterialFacts {
     /// Each side's own material could never deliver mate.
     #[pyo3(get)]
     insufficient: (bool, bool),
+    /// Our bishop pair less theirs: -1, 0 or 1.
+    #[pyo3(get)]
+    bishop_pair_imbalance: i32,
 }
 
 impl PyMaterialFacts {
@@ -273,6 +276,7 @@ impl PyMaterialFacts {
             both_queens: facts.both_queens,
             pawns_only: facts.pawns_only,
             insufficient: pair(facts.insufficient),
+            bishop_pair_imbalance: facts.bishop_pair_imbalance,
         }
     }
 }
@@ -1317,7 +1321,7 @@ fn drawish_material_name(kind: facts::DrawishMaterial) -> String {
     .to_string()
 }
 
-/// The eight square sets the `planes` group emits.
+/// The square sets the `planes` group emits.
 #[pyclass(frozen, module = "esca", name = "PlaneFacts")]
 pub struct PyPlaneFacts {
     parent: Py<PyFacts>,
@@ -1333,6 +1337,9 @@ pub struct PyPlaneFacts {
     /// Each side's absolutely pinned units.
     #[pyo3(get)]
     pinned: (PySquareSet, PySquareSet),
+    /// Each side's threatened units.
+    #[pyo3(get)]
+    threatened: (PySquareSet, PySquareSet),
 }
 
 impl PyPlaneFacts {
@@ -1343,6 +1350,7 @@ impl PyPlaneFacts {
             attacked_by_pawns: PySquareSet::pair(facts.attacked_by_pawns),
             hanging: PySquareSet::pair(facts.hanging),
             pinned: PySquareSet::pair(facts.pinned),
+            threatened: PySquareSet::pair(facts.threatened),
         }
     }
 }

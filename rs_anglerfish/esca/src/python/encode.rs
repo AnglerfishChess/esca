@@ -10,7 +10,7 @@ use rayon::prelude::*;
 
 use crate::facts::{MoveFacts, RowError, Scratch};
 use crate::position::Position;
-use crate::schema::{GroupSet, Schema};
+use crate::schema::{GroupSet, GroupSpec, Schema};
 use crate::variant::Variant;
 
 use super::board::{PyMove, PyVariant};
@@ -108,8 +108,95 @@ impl PySchema {
         self.inner.canonical()
     }
 
+    /// The move row: the group named `move`, versioned on its own.
+    fn moves(&self) -> PyMoveSchema {
+        PyMoveSchema::new(self.inner.moves())
+    }
+
     fn __repr__(&self) -> String {
         format!("<Schema {} {}>", self.inner.semver(), self.inner.id())
+    }
+}
+
+/// The move row of a schema: what one legal move's values carry.
+#[pyclass(
+    frozen,
+    eq,
+    hash,
+    skip_from_py_object,
+    module = "esca",
+    name = "MoveSchema"
+)]
+#[derive(Clone, Copy)]
+pub struct PyMoveSchema {
+    inner: &'static GroupSpec,
+}
+
+impl PyMoveSchema {
+    pub(crate) fn new(inner: &'static GroupSpec) -> PyMoveSchema {
+        PyMoveSchema { inner }
+    }
+}
+
+impl PartialEq for PyMoveSchema {
+    fn eq(&self, other: &PyMoveSchema) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl Eq for PyMoveSchema {}
+
+impl std::hash::Hash for PyMoveSchema {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.canonical().hash(state);
+    }
+}
+
+#[pymethods]
+impl PyMoveSchema {
+    /// The section's name in the canonical text.
+    #[getter]
+    fn name(&self) -> &'static str {
+        self.inner.name
+    }
+
+    /// The version, bumped when the row's features change.
+    #[getter]
+    fn version(&self) -> u16 {
+        self.inner.version
+    }
+
+    /// How many values one move occupies.
+    #[getter]
+    fn width(&self) -> usize {
+        self.inner.width
+    }
+
+    /// The features, each as `{"name", "offset", "width", "encoding"}`, in the
+    /// order they are written.
+    fn features<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        let mut out = Vec::with_capacity(self.inner.features.len());
+        for feature in self.inner.features {
+            let entry = PyDict::new(py);
+            entry.set_item("name", feature.name)?;
+            entry.set_item("offset", feature.offset)?;
+            entry.set_item("width", feature.width)?;
+            entry.set_item("encoding", feature.encoding)?;
+            out.push(entry);
+        }
+        Ok(out)
+    }
+
+    /// The section's own part of the schema's canonical text.
+    fn canonical(&self) -> String {
+        self.inner.canonical()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<MoveSchema v{} {} values>",
+            self.inner.version, self.inner.width
+        )
     }
 }
 

@@ -47,6 +47,13 @@ SAME_COLOUR_BISHOPS = "4k3/8/8/1n1n4/8/2B1B3/8/4K3 w - - 0 1"
 #: Bishops of both colours against a lone knight: only the knight cannot mate.
 BISHOP_PAIR = "4k3/6n1/8/8/8/8/8/2B1KB2 w - - 0 1"
 
+#: The same placement read from the other side: the pair is theirs.
+BISHOP_PAIR_THEIRS = "4k3/6n1/8/8/8/8/8/2B1KB2 b - - 0 1"
+
+#: A bishop and a knight against two bishops: the same piece value, the pair on
+#: one side only.
+ONE_BISHOP_AGAINST_TWO = "2b1kb2/8/8/8/8/8/6N1/4K1B1 w - - 0 1"
+
 #: A bare knight against a rook and a pawn.
 LONE_KNIGHT = "r3k3/5p2/8/8/8/5N2/8/4K3 w - - 0 1"
 
@@ -360,6 +367,67 @@ def test_a_side_holding_at_most_a_minor_or_bishops_of_one_colour_cannot_mate(
     assert facts_of(fen).material.insufficient == insufficient
 
 
+@pytest.mark.parametrize(
+    ("fen", "imbalance"),
+    [
+        (START, 0),
+        (QUEENLESS, 0),
+        (SAME_COLOUR_BISHOPS, 0),
+        (ARMY_AGAINST_A_KING, 1),
+        (BISHOP_PAIR, 1),
+        (BISHOP_PAIR_THEIRS, -1),
+        (ONE_BISHOP_AGAINST_TWO, -1),
+        (LONE_KNIGHT, 0),
+        (BARE_KINGS, 0),
+    ],
+    ids=[
+        "start",
+        "queenless",
+        "same_colour_bishops",
+        "army_against_a_king",
+        "bishop_pair",
+        "bishop_pair_theirs",
+        "one_bishop_against_two",
+        "lone_knight",
+        "bare_kings",
+    ],
+)
+def test_only_bishops_of_both_colours_are_a_pair(fen: str, imbalance: int, facts_of: FactsOf) -> None:
+    assert facts_of(fen).material.bishop_pair_imbalance == imbalance
+    assert encoded(fen, "bishop_pair_imbalance") == pytest.approx([imbalance])
+
+
+@pytest.mark.parametrize(
+    ("fen", "difference"),
+    [
+        (START, 0.0),
+        (TWO_QUEENS_EACH, 0.0),
+        (HEAVY_AND_A_KNIGHT, 3 / 20),
+        (ARMY_AGAINST_A_KING, 1.0),
+        (QUEEN_FOR_A_ROOK, 4 / 20),
+        (QUEEN_FOR_A_ROOK_THEIRS, -4 / 20),
+        (ROOK_AND_KNIGHT, 3 / 20),
+        (ONE_BISHOP_AGAINST_TWO, 0.0),
+        (LONE_KNIGHT, -2 / 20),
+        (PAWN_ENDING, 0.0),
+    ],
+    ids=[
+        "start",
+        "two_queens_each",
+        "heavy_and_a_knight",
+        "army_against_a_king",
+        "queen_for_a_rook",
+        "queen_for_a_rook_theirs",
+        "rook_and_knight",
+        "one_bishop_against_two",
+        "lone_knight",
+        "pawn_ending",
+    ],
+)
+def test_the_piece_value_difference_runs_past_its_scale_only_with_a_whole_army(fen: str, difference: float) -> None:
+    assert encoded(fen, "non_pawn_material_diff") == pytest.approx([difference])
+
+
 def test_the_material_facts_of_a_chess960_position_are_the_classic_ones(facts_of: FactsOf) -> None:
     """No `material` fact is one of the four `features.md` §4 defines for
     classic chess only, so a Chess960 position answers as the same placement
@@ -373,6 +441,7 @@ def test_the_material_facts_of_a_chess960_position_are_the_classic_ones(facts_of
     assert material.both_queens
     assert not material.pawns_only
     assert material.insufficient == (False, False)
+    assert material.bishop_pair_imbalance == 0
 
     classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10").material
     assert classic.count == material.count

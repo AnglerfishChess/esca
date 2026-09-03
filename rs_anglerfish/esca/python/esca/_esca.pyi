@@ -23,6 +23,7 @@ SCHEMA: Final[Schema]
 SCHEMA_ID: Final[str]
 WIDTH: Final[int]
 MOVE_WIDTH: Final[int]
+MOVE_SCHEMA: Final[MoveSchema]
 
 class GroupInfo(TypedDict):
     """Where a schema group sits and how wide it is."""
@@ -31,6 +32,14 @@ class GroupInfo(TypedDict):
     version: int
     width: int
     offset: int
+
+class FeatureInfo(TypedDict):
+    """Where a feature sits inside its group, and how it is written."""
+
+    name: str
+    offset: int
+    width: int
+    encoding: str
 
 @final
 class Variant:
@@ -196,6 +205,22 @@ class Schema:
     def width_of(self, groups: Sequence[str] | None = None) -> int: ...
     def features_for(self, variant: Variant) -> list[tuple[str, str]]: ...
     def canonical(self) -> str: ...
+    def moves(self) -> MoveSchema: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
+@final
+class MoveSchema:
+    """The move row of a schema: what one legal move's values carry."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def version(self) -> int: ...
+    @property
+    def width(self) -> int: ...
+    def features(self) -> list[FeatureInfo]: ...
+    def canonical(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
 
@@ -268,6 +293,8 @@ class MaterialFacts:
     def pawns_only(self) -> bool: ...
     @property
     def insufficient(self) -> tuple[bool, bool]: ...
+    @property
+    def bishop_pair_imbalance(self) -> int: ...
 
 @final
 class PawnFacts:
@@ -656,7 +683,7 @@ class EndgameFacts:
 
 @final
 class PlaneFacts:
-    """The eight square sets the `planes` group emits."""
+    """The square sets the `planes` group emits."""
 
     @property
     def attacked(self) -> tuple[SquareSet, SquareSet]: ...
@@ -666,6 +693,8 @@ class PlaneFacts:
     def hanging(self) -> tuple[SquareSet, SquareSet]: ...
     @property
     def pinned(self) -> tuple[SquareSet, SquareSet]: ...
+    @property
+    def threatened(self) -> tuple[SquareSet, SquareSet]: ...
 
 @final
 class MoveFacts:

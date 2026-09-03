@@ -147,6 +147,29 @@ fn the_mobility_difference_is_ours_less_theirs_by_type(#[case] fen: &str, #[case
     assert_eq!(encoded(fen, "mobility_diff_by_type"), diff);
 }
 
+/// Neither side's pawns cover a square the other's pieces reach in
+/// `QUEEN_DUEL`, `OPEN_ROOKS` or `BARE_KINGS`, so there the safe difference is
+/// the whole difference.
+#[rstest]
+#[case::start(START, [0.0; 5])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [1.0 / 16.0, -3.0 / 16.0, 0.0, -1.0 / 16.0, 0.0])]
+#[case::queen_duel(QUEEN_DUEL, [0.0, 0.0, 0.0, 0.0, -1.0 / 16.0])]
+#[case::open_rooks(OPEN_ROOKS, [0.0, 0.0, 0.0, 1.0, 0.0])]
+#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0.0, 0.0, 0.0, -1.0, 0.0])]
+#[case::pawn_screen(PAWN_SCREEN, [-3.0 / 16.0, 0.0, 0.0, 11.0 / 16.0, 0.0])]
+#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [3.0 / 16.0, 0.0, 0.0, -11.0 / 16.0, 0.0])]
+#[case::crossfire(CROSSFIRE, [1.0 / 16.0, 0.0, 0.0, 4.0 / 16.0, 0.0])]
+#[case::trenches(TRENCHES, [-1.0 / 16.0, 0.0, 0.0, 0.0, 0.0])]
+#[case::boxed_in(BOXED_IN, [2.0 / 16.0, 0.0, 0.0, 0.0, 0.0])]
+#[case::centre_grip(CENTRE_GRIP, [-5.0 / 16.0, 13.0 / 16.0, 9.0 / 16.0, 0.0, 0.0])]
+#[case::bare_kings(BARE_KINGS, [0.0; 5])]
+fn the_safe_difference_is_our_safe_mobility_less_theirs_by_type(
+    #[case] fen: &str,
+    #[case] diff: [f32; 5],
+) {
+    assert_eq!(encoded(fen, "safe_mobility_diff_by_type"), diff);
+}
+
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::one_knight_out(ONE_KNIGHT_OUT, [0, 2])]

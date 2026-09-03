@@ -145,6 +145,8 @@ fn material(facts: &Facts, w: &mut Writer) {
     w.bit(m.pawns_only);
     w.bit(m.insufficient[0]);
     w.bit(m.insufficient[1]);
+    w.diff(m.bishop_pair_imbalance as f32, 1.0);
+    w.diff((m.non_pawn_value[0] - m.non_pawn_value[1]) as f32, 20.0);
 }
 
 fn pawns(facts: &Facts, w: &mut Writer) {
@@ -465,6 +467,12 @@ fn mobility(facts: &Facts, w: &mut Writer) {
     for side in Side::ALL {
         w.count(m.total[side.index()] as f32, 96.0);
     }
+    for role in 0..5 {
+        w.diff(
+            m.safe_by_role[0][role] as f32 - m.safe_by_role[1][role] as f32,
+            16.0,
+        );
+    }
 }
 
 fn attacks(facts: &Facts, w: &mut Writer) {
@@ -650,6 +658,7 @@ fn planes(facts: &Facts, w: &mut Writer) {
         p.hanging[1],
         p.pinned[0],
         p.pinned[1],
+        p.threatened[1],
     ] {
         w.plane(set, us);
     }

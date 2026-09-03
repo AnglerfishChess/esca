@@ -1,8 +1,8 @@
 """The `planes` group, fact by fact.
 
 Every expectation is worked out from the definitions in `docs/features.md` §1
-and §2.9 for the named position above it. A square set is read on the board; the
-eight encoded planes are read in the mover's view. The cases mirror
+and §2.14 for the named position above it. A square set is read on the board;
+the encoded planes are read in the mover's view. The cases mirror
 `tests/facts_planes.rs`.
 """
 
@@ -232,6 +232,38 @@ def test_an_absolutely_pinned_unit_is_the_one_thing_between_a_slider_and_its_own
 
 
 @pytest.mark.parametrize(
+    ("fen", "us", "them"),
+    [
+        (START, "", ""),
+        (PAWN_DUEL, "d3", "b5 c2"),
+        (LOOSE_PIECES, "c3", "d6"),
+        (CROSS_PINS, "c3", "c6"),
+        (FILE_PINS, "c1", "e6"),
+        (COUNTERPLAY, "d5", "d4"),
+        (THROUGH_THE_KING, "", ""),
+    ],
+    ids=[
+        "start",
+        "pawn_duel",
+        "loose_pieces",
+        "cross_pins",
+        "file_pins",
+        "counterplay",
+        "through_the_king",
+    ],
+)
+def test_a_threatened_unit_is_one_the_opponent_wins_material_by_taking(
+    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+) -> None:
+    """A threatened unit is one the exchange on its square wins material from,
+    so the c4 knight of `TUCKED_KINGS`, defended once but by a rook, is
+    threatened where it is not hanging."""
+    planes = facts_of(fen).planes
+    assert set(planes.threatened[esca.US]) == squares(us)
+    assert set(planes.threatened[esca.THEM]) == squares(them)
+
+
+@pytest.mark.parametrize(
     ("feature", "expected"),
     [
         (
@@ -248,6 +280,7 @@ def test_an_absolutely_pinned_unit_is_the_one_thing_between_a_slider_and_its_own
         ("their_hanging", "e6"),
         ("our_pinned", "c1"),
         ("their_pinned", "e6"),
+        ("their_threatened", "e6"),
     ],
     ids=[
         "attacked_by_us",
@@ -258,6 +291,7 @@ def test_an_absolutely_pinned_unit_is_the_one_thing_between_a_slider_and_its_own
         "their_hanging",
         "our_pinned",
         "their_pinned",
+        "their_threatened",
     ],
 )
 def test_white_to_move_writes_each_plane_as_the_board_stands(feature: str, expected: str, squares: Squares) -> None:
@@ -281,6 +315,7 @@ def test_white_to_move_writes_each_plane_as_the_board_stands(feature: str, expec
         ("their_hanging", "d5"),
         ("our_pinned", "d4"),
         ("their_pinned", "c6"),
+        ("their_threatened", "d5"),
     ],
     ids=[
         "attacked_by_us",
@@ -291,6 +326,7 @@ def test_white_to_move_writes_each_plane_as_the_board_stands(feature: str, expec
         "their_hanging",
         "our_pinned",
         "their_pinned",
+        "their_threatened",
     ],
 )
 def test_black_to_move_writes_each_plane_with_the_ranks_turned_around(
@@ -302,7 +338,7 @@ def test_black_to_move_writes_each_plane_with_the_ranks_turned_around(
 
 
 @pytest.mark.parametrize(
-    ("fen", "attacked", "by_pawns", "hanging", "pinned"),
+    ("fen", "attacked", "by_pawns", "hanging", "pinned", "threatened"),
     [
         (
             TUCKED_KINGS,
@@ -313,6 +349,7 @@ def test_black_to_move_writes_each_plane_with_the_ranks_turned_around(
             ("a3 b3 c3", "a6 b6 c6 e6 g6"),
             ("e6", "g5"),
             ("", ""),
+            ("e6", "c4 g5"),
         ),
         (
             CROSSED_BISHOPS,
@@ -323,6 +360,7 @@ def test_black_to_move_writes_each_plane_with_the_ranks_turned_around(
             ("a3 c3 f3 h3", "f6 g6 h6"),
             ("a2 d4", "c4"),
             ("d4", "c4"),
+            ("a2 d4", "c4"),
         ),
         (
             LOOSE_QUEEN,
@@ -333,6 +371,7 @@ def test_black_to_move_writes_each_plane_with_the_ranks_turned_around(
             ("a4 b3 c4 d3", "f6 g6 h6"),
             ("d4", "c5"),
             ("b3", "g7"),
+            ("d4", "c5"),
         ),
     ],
     ids=["tucked_kings", "crossed_bishops", "loose_queen"],
@@ -343,6 +382,7 @@ def test_the_planes_of_a_chess960_position_read_the_placement_as_they_find_it(
     by_pawns: tuple[str, str],
     hanging: tuple[str, str],
     pinned: tuple[str, str],
+    threatened: tuple[str, str],
     facts_of: FactsOf,
     squares: Squares,
 ) -> None:
@@ -354,3 +394,4 @@ def test_the_planes_of_a_chess960_position_read_the_placement_as_they_find_it(
         assert set(planes.attacked_by_pawns[side]) == squares(by_pawns[side])
         assert set(planes.hanging[side]) == squares(hanging[side])
         assert set(planes.pinned[side]) == squares(pinned[side])
+        assert set(planes.threatened[side]) == squares(threatened[side])

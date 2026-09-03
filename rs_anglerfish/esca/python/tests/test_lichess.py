@@ -48,7 +48,7 @@ def test_min_depth_drops_the_shallow_records() -> None:
 
 def test_a_group_subset_narrows_the_features() -> None:
     (batch,) = list(lichess.batches(SAMPLE, batch_size=64, groups=["state", "material"]))
-    assert batch.features.shape == (12, 16 + 26)
+    assert batch.features.shape == (12, 16 + 28)
 
 
 def test_a_missing_dump_is_an_error() -> None:

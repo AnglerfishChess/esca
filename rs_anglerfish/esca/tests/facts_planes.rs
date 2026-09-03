@@ -1,8 +1,8 @@
 //! The `planes` group, fact by fact.
 //!
 //! Every expectation is worked out from the definitions in `docs/features.md`
-//! §1 and §2.9 for the named position above it. A square set is read on the
-//! board; the eight encoded planes are read in the mover's view.
+//! §1 and §2.14 for the named position above it. A square set is read on the
+//! board; the encoded planes are read in the mover's view.
 
 mod common;
 
@@ -169,6 +169,27 @@ fn an_absolutely_pinned_unit_is_the_one_thing_between_a_slider_and_its_own_king(
     assert_eq!(planes.pinned[Side::Them.index()], squares(them));
 }
 
+/// A threatened unit is one the exchange on its square wins material from, so
+/// the c4 knight of `TUCKED_KINGS`, defended once but by a rook, is threatened
+/// where it is not hanging.
+#[rstest]
+#[case::start(START, "", "")]
+#[case::pawn_duel(PAWN_DUEL, "d3", "b5 c2")]
+#[case::loose_pieces(LOOSE_PIECES, "c3", "d6")]
+#[case::cross_pins(CROSS_PINS, "c3", "c6")]
+#[case::file_pins(FILE_PINS, "c1", "e6")]
+#[case::counterplay(COUNTERPLAY, "d5", "d4")]
+#[case::through_the_king(THROUGH_THE_KING, "", "")]
+fn a_threatened_unit_is_one_the_opponent_wins_material_by_taking(
+    #[case] fen: &str,
+    #[case] us: &str,
+    #[case] them: &str,
+) {
+    let planes = facts_of(fen).planes;
+    assert_eq!(planes.threatened[Side::Us.index()], squares(us));
+    assert_eq!(planes.threatened[Side::Them.index()], squares(them));
+}
+
 #[rstest]
 #[case::attacked_by_us(
     "attacked_by_us",
@@ -184,6 +205,7 @@ fn an_absolutely_pinned_unit_is_the_one_thing_between_a_slider_and_its_own_king(
 #[case::their_hanging("their_hanging", "e6")]
 #[case::our_pinned("our_pinned", "c1")]
 #[case::their_pinned("their_pinned", "e6")]
+#[case::their_threatened("their_threatened", "e6")]
 fn white_to_move_writes_each_plane_as_the_board_stands(#[case] feature: &str, #[case] set: &str) {
     assert_eq!(plane(FILE_PINS, feature), squares(set));
 }
@@ -205,6 +227,7 @@ fn white_to_move_writes_each_plane_as_the_board_stands(#[case] feature: &str, #[
 #[case::their_hanging("their_hanging", "d5")]
 #[case::our_pinned("our_pinned", "d4")]
 #[case::their_pinned("their_pinned", "c6")]
+#[case::their_threatened("their_threatened", "d5")]
 fn black_to_move_writes_each_plane_with_the_ranks_turned_around(
     #[case] feature: &str,
     #[case] set: &str,
@@ -221,7 +244,8 @@ fn black_to_move_writes_each_plane_with_the_ranks_turned_around(
      "a3 a5 a6 a7 a8 b2 b6 b7 b8 c4 c5 c6 c7 c8 d2 d6 d8 e3 e4 e5 e6 e8 f3 f7 f8 g6 g8 h3 h7 h8"],
     ["a3 b3 c3", "a6 b6 c6 e6 g6"],
     ["e6", "g5"],
-    ["", ""]
+    ["", ""],
+    ["e6", "c4 g5"]
 )]
 #[case::crossed_bishops(
     CROSSED_BISHOPS,
@@ -229,7 +253,8 @@ fn black_to_move_writes_each_plane_with_the_ranks_turned_around(
      "a2 a6 a8 b3 b5 b8 c8 d3 d4 d5 d6 d7 e2 e5 e6 e7 e8 f1 f4 f6 f7 f8 g6 g7 g8 h4 h6 h7 h8"],
     ["a3 c3 f3 h3", "f6 g6 h6"],
     ["a2 d4", "c4"],
-    ["d4", "c4"]
+    ["d4", "c4"],
+    ["a2 d4", "c4"]
 )]
 #[case::loose_queen(
     LOOSE_QUEEN,
@@ -237,7 +262,8 @@ fn black_to_move_writes_each_plane_with_the_ranks_turned_around(
      "a3 a7 a8 b3 b4 b5 b6 b7 c8 d4 d6 d8 e7 e8 f6 f8 g6 g7 g8 h6 h7 h8"],
     ["a4 b3 c4 d3", "f6 g6 h6"],
     ["d4", "c5"],
-    ["b3", "g7"]
+    ["b3", "g7"],
+    ["d4", "c5"]
 )]
 fn the_planes_of_a_chess960_position_read_the_placement_as_they_find_it(
     #[case] fen: &str,
@@ -245,6 +271,7 @@ fn the_planes_of_a_chess960_position_read_the_placement_as_they_find_it(
     #[case] by_pawns: [&str; 2],
     #[case] hanging: [&str; 2],
     #[case] pinned: [&str; 2],
+    #[case] threatened: [&str; 2],
 ) {
     let planes = facts_under(&CHESS960, fen).planes;
     for side in Side::ALL {
@@ -253,5 +280,6 @@ fn the_planes_of_a_chess960_position_read_the_placement_as_they_find_it(
         assert_eq!(planes.attacked_by_pawns[i], squares(by_pawns[i]));
         assert_eq!(planes.hanging[i], squares(hanging[i]));
         assert_eq!(planes.pinned[i], squares(pinned[i]));
+        assert_eq!(planes.threatened[i], squares(threatened[i]));
     }
 }

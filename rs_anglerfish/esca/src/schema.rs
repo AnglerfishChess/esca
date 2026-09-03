@@ -44,6 +44,26 @@ pub struct GroupSpec {
     pub features: &'static [FeatureSpec],
 }
 
+impl GroupSpec {
+    /// The group's part of the canonical text: its own line, then one
+    /// indented line per feature.
+    pub fn canonical(&self) -> String {
+        let mut out = format!("{}:{}:{}\n", self.name, self.version, self.width);
+        for feature in self.features {
+            out.push_str(&format!(
+                "  {}:{}:{}\n",
+                feature.name, feature.width, feature.encoding
+            ));
+        }
+        out
+    }
+
+    /// The feature of that name.
+    pub fn feature(&self, name: &str) -> Option<&'static FeatureSpec> {
+        self.features.iter().find(|feature| feature.name == name)
+    }
+}
+
 /// A subset of a schema's groups.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct GroupSet(u16);
@@ -144,6 +164,7 @@ impl FeatureSet {
 pub struct Schema {
     semver: &'static str,
     groups: &'static [GroupSpec],
+    moves: &'static GroupSpec,
 }
 
 impl Schema {
@@ -179,6 +200,12 @@ impl Schema {
         self.groups
     }
 
+    /// The move row: the group named `move`, versioned on its own.
+    #[inline]
+    pub fn moves(&self) -> &'static GroupSpec {
+        self.moves
+    }
+
     /// The group of that name.
     pub fn group(&self, name: &str) -> Option<&'static GroupSpec> {
         self.groups.iter().find(|group| group.name == name)
@@ -208,20 +235,12 @@ impl Schema {
     }
 
     /// The canonical text `id` hashes: one line per group, then one indented
-    /// line per feature.
+    /// line per feature, the position row's groups in order and the move row
+    /// last.
     pub fn canonical(&self) -> String {
         let mut out = String::new();
-        for group in self.groups {
-            out.push_str(&format!(
-                "{}:{}:{}\n",
-                group.name, group.version, group.width
-            ));
-            for feature in group.features {
-                out.push_str(&format!(
-                    "  {}:{}:{}\n",
-                    feature.name, feature.width, feature.encoding
-                ));
-            }
+        for group in self.groups.iter().chain([self.moves]) {
+            out.push_str(&group.canonical());
         }
         out
     }
@@ -322,7 +341,7 @@ static STATE: [FeatureSpec; 6] = feature_specs! {
     "ep_capture_legal", 1, "bit", ANY;
 };
 
-static MATERIAL: [FeatureSpec; 9] = feature_specs! {
+static MATERIAL: [FeatureSpec; 11] = feature_specs! {
     "piece_count", 10, "count/8|4", ANY;
     "piece_count_diff", 5, "diff/4", ANY;
     "non_pawn_material", 2, "count/62", ANY;
@@ -332,6 +351,8 @@ static MATERIAL: [FeatureSpec; 9] = feature_specs! {
     "both_queens", 1, "bit", ANY;
     "pawns_only", 1, "bit", ANY;
     "insufficient_material", 2, "bits", ANY;
+    "bishop_pair_imbalance", 1, "diff/1", ANY;
+    "non_pawn_material_diff", 1, "diff/20", ANY;
 };
 
 static PAWNS: [FeatureSpec; 31] = feature_specs! {
@@ -419,7 +440,7 @@ static KING: [FeatureSpec; 23] = feature_specs! {
     "opposite_side_castling", 1, "bit", ANY;
 };
 
-static MOBILITY: [FeatureSpec; 10] = feature_specs! {
+static MOBILITY: [FeatureSpec; 11] = feature_specs! {
     "mobility_ratio", 1, "ratio", ANY;
     "mobility_by_type", 10, "count/16", ANY;
     "safe_mobility_by_type", 10, "count/16", ANY;
@@ -430,6 +451,7 @@ static MOBILITY: [FeatureSpec; 10] = feature_specs! {
     "extended_centre_control", 2, "count/16", ANY;
     "immobile_pieces", 2, "count/4", ANY;
     "total_mobility", 2, "count/96", ANY;
+    "safe_mobility_diff_by_type", 5, "diff/16", ANY;
 };
 
 static ATTACKS: [FeatureSpec; 12] = feature_specs! {
@@ -582,7 +604,7 @@ static TACTICS: [FeatureSpec; 82] = feature_specs! {
     "them.promotion_see_positive", 1, "bit", ANY;
 };
 
-static PLANES: [FeatureSpec; 8] = feature_specs! {
+static PLANES: [FeatureSpec; 9] = feature_specs! {
     "attacked_by_us", 64, "plane", ANY;
     "attacked_by_them", 64, "plane", ANY;
     "attacked_by_our_pawns", 64, "plane", ANY;
@@ -591,6 +613,43 @@ static PLANES: [FeatureSpec; 8] = feature_specs! {
     "their_hanging", 64, "plane", ANY;
     "our_pinned", 64, "plane", ANY;
     "their_pinned", 64, "plane", ANY;
+    "their_threatened", 64, "plane", ANY;
+};
+
+/// The move row: one group of its own, versioned apart from the position's.
+static MOVE: [FeatureSpec; 25] = feature_specs! {
+    "is_capture", 1, "bit", ANY;
+    "victim_type", 5, "one-hot", ANY;
+    "mover_type", 6, "one-hot", ANY;
+    "promotion_piece", 4, "one-hot", ANY;
+    "gives_check", 1, "bit", ANY;
+    "gives_safe_check", 1, "bit", ANY;
+    "is_safe", 1, "bit", ANY;
+    "captures_hanging", 1, "bit", ANY;
+    "escapes_attack", 1, "bit", ANY;
+    "to_attacked_by_pawn", 1, "bit", ANY;
+    "is_castling", 1, "bit", ANY;
+    "is_en_passant", 1, "bit", ANY;
+    "see", 1, "diff/9", ANY;
+    "threat_created_max", 1, "count/9", ANY;
+    "moves_attacked_unit", 1, "bit", ANY;
+    "blocks_check", 1, "bit", ANY;
+    "advances_passer", 1, "bit", ANY;
+    "creates_passer", 1, "bit", ANY;
+    "creates_weakness", 3, "bits", ANY;
+    "opens_file_at_enemy_king", 1, "bit", ANY;
+    "ring_attack_delta", 2, "diff/4", ANY;
+    "own_hanging_delta", 1, "diff/4", ANY;
+    "their_hanging_delta", 1, "diff/4", ANY;
+    "leaves_unit_hanging", 1, "bit", ANY;
+    "gives_discovered_attack", 1, "bit", ANY;
+};
+
+static V1_MOVE: GroupSpec = GroupSpec {
+    name: "move",
+    version: 1,
+    width: 40,
+    features: &MOVE,
 };
 
 static V1_GROUPS: [GroupSpec; 14] = [
@@ -608,8 +667,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "material",
-        version: 1,
-        width: 26,
+        version: 2,
+        width: 28,
         features: &MATERIAL,
     },
     GroupSpec {
@@ -632,8 +691,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "mobility",
-        version: 1,
-        width: 39,
+        version: 2,
+        width: 44,
         features: &MOBILITY,
     },
     GroupSpec {
@@ -674,8 +733,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "planes",
-        version: 1,
-        width: 512,
+        version: 2,
+        width: 576,
         features: &PLANES,
     },
 ];
@@ -683,6 +742,7 @@ static V1_GROUPS: [GroupSpec; 14] = [
 static V1: Schema = Schema {
     semver: "1.0.0",
     groups: &V1_GROUPS,
+    moves: &V1_MOVE,
 };
 
 #[cfg(test)]
@@ -691,7 +751,8 @@ mod tests {
 
     #[test]
     fn group_widths_are_the_sum_of_their_features() {
-        for group in Schema::v1().groups() {
+        let schema = Schema::v1();
+        for group in schema.groups().iter().chain([schema.moves()]) {
             let sum: usize = group.features.iter().map(|f| f.width).sum();
             assert_eq!(sum, group.width, "group {}", group.name);
             for (index, feature) in group.features.iter().enumerate() {
@@ -703,7 +764,40 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1968);
+        assert_eq!(Schema::v1().width(), 2039);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
+    }
+
+    /// The canonical text tells the two rows apart by that one name.
+    #[test]
+    fn no_group_of_the_position_row_is_named_move() {
+        let schema = Schema::v1();
+        assert_eq!(schema.moves().name, "move");
+        assert!(schema.group("move").is_none());
+    }
+
+    /// A checkpoint stores the id alone, so the id has to move when the move
+    /// row does: the same groups with one move feature renamed hash apart.
+    #[test]
+    fn renaming_a_move_feature_changes_the_id() {
+        let mut features = MOVE;
+        features[12].name = "static_exchange";
+        let renamed = Schema {
+            semver: V1.semver,
+            groups: V1.groups,
+            moves: Box::leak(Box::new(GroupSpec {
+                features: Box::leak(Box::new(features)),
+                ..*V1.moves
+            })),
+        };
+        assert_ne!(renamed.id(), V1.id());
+        assert_eq!(renamed.width(), V1.width());
+        let differing = renamed
+            .canonical()
+            .lines()
+            .zip(V1.canonical().lines())
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differing, 1, "only the renamed feature's line moves");
     }
 }

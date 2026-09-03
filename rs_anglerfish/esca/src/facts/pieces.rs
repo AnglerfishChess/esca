@@ -35,7 +35,7 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
         let dark = bishops & scan.view_dark();
         facts.bishops_light[i] = light.len().min(255) as u8;
         facts.bishops_dark[i] = dark.len().min(255) as u8;
-        facts.bishop_pair[i] = !light.is_empty() && !dark.is_empty();
+        facts.bishop_pair[i] = super::has_bishop_pair(scan, side);
 
         let mut colours = SquareSet::EMPTY;
         if !light.is_empty() {

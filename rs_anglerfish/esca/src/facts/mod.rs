@@ -148,6 +148,9 @@ pub struct MaterialFacts {
     pub pawns_only: bool,
     /// Each side's own material could never deliver mate.
     pub insufficient: [bool; 2],
+    /// Our bishop pair less theirs, a side holding the pair when it has
+    /// bishops of both square colours: -1, 0 or 1.
+    pub bishop_pair_imbalance: i32,
 }
 
 /// Pawn structure.
@@ -678,6 +681,8 @@ pub struct PlaneFacts {
     pub hanging: [SquareSet; 2],
     /// Each side's absolutely pinned units.
     pub pinned: [SquareSet; 2],
+    /// Each side's threatened units.
+    pub threatened: [SquareSet; 2],
 }
 
 /// What one legal move does, beyond what the move itself says.
@@ -1012,6 +1017,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         attacked_by_pawns: attacks.by_pawns,
         hanging: attacks.hanging,
         pinned: attacks.pinned,
+        threatened: threats.threatened,
     };
 
     Facts {
@@ -1049,8 +1055,15 @@ fn state_facts(position: &Position, scan: &Scan, legal: &MoveList) -> StateFacts
     }
 }
 
+/// Whether `side` holds bishops of both square colours.
+fn has_bishop_pair(scan: &Scan, side: Side) -> bool {
+    let bishops = scan.role_units[side.index()][Role::Bishop.index()];
+    !(bishops & scan.view_light()).is_empty() && !(bishops & scan.view_dark()).is_empty()
+}
+
 fn material_facts(scan: &Scan) -> MaterialFacts {
     let mut facts = MaterialFacts::default();
+    let mut bishop_pair = [false; 2];
     let mut phase_points = 0u32;
     for side in Side::ALL {
         let i = side.index();
@@ -1076,7 +1089,9 @@ fn material_facts(scan: &Scan) -> MaterialFacts {
             };
         }
         facts.insufficient[i] = insufficient(&scan.role_units[i]);
+        bishop_pair[i] = has_bishop_pair(scan, side);
     }
+    facts.bishop_pair_imbalance = i32::from(bishop_pair[0]) - i32::from(bishop_pair[1]);
     facts.phase = phase_points.min(24) as f32 / 24.0;
     facts.both_queens =
         facts.count[0][Role::Queen.index()] > 0 && facts.count[1][Role::Queen.index()] > 0;

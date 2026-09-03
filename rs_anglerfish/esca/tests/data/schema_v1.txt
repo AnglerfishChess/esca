@@ -18,7 +18,7 @@ state:2:16
   ep_available:1:bit
   ep_file:8:one-hot
   ep_capture_legal:1:bit
-material:1:26
+material:2:28
   piece_count:10:count/8|4
   piece_count_diff:5:diff/4
   non_pawn_material:2:count/62
@@ -28,6 +28,8 @@ material:1:26
   both_queens:1:bit
   pawns_only:1:bit
   insufficient_material:2:bits
+  bishop_pair_imbalance:1:diff/1
+  non_pawn_material_diff:1:diff/20
 pawns:2:195
   pawn_count_by_file:16:count/3
   pawn_count_by_rank:16:count/8
@@ -107,7 +109,7 @@ king:4:137
   luft:2:bits
   castled_side:6:one-hot
   opposite_side_castling:1:bit
-mobility:1:39
+mobility:2:44
   mobility_ratio:1:ratio
   mobility_by_type:10:count/16
   safe_mobility_by_type:10:count/16
@@ -118,6 +120,7 @@ mobility:1:39
   extended_centre_control:2:count/16
   immobile_pieces:2:count/4
   total_mobility:2:count/96
+  safe_mobility_diff_by_type:5:diff/16
 attacks:2:25
   attacked_square_count:3:count/48
   attacked_count:2:count/8
@@ -256,7 +259,7 @@ history:2:27
   last_move_victim:5:one-hot
   last_move_mover:6:one-hot
   history_known:1:bit
-planes:1:512
+planes:2:576
   attacked_by_us:64:plane
   attacked_by_them:64:plane
   attacked_by_our_pawns:64:plane
@@ -265,3 +268,30 @@ planes:1:512
   their_hanging:64:plane
   our_pinned:64:plane
   their_pinned:64:plane
+  their_threatened:64:plane
+move:1:40
+  is_capture:1:bit
+  victim_type:5:one-hot
+  mover_type:6:one-hot
+  promotion_piece:4:one-hot
+  gives_check:1:bit
+  gives_safe_check:1:bit
+  is_safe:1:bit
+  captures_hanging:1:bit
+  escapes_attack:1:bit
+  to_attacked_by_pawn:1:bit
+  is_castling:1:bit
+  is_en_passant:1:bit
+  see:1:diff/9
+  threat_created_max:1:count/9
+  moves_attacked_unit:1:bit
+  blocks_check:1:bit
+  advances_passer:1:bit
+  creates_passer:1:bit
+  creates_weakness:3:bits
+  opens_file_at_enemy_king:1:bit
+  ring_attack_delta:2:diff/4
+  own_hanging_delta:1:diff/4
+  their_hanging_delta:1:diff/4
+  leaves_unit_hanging:1:bit
+  gives_discovered_attack:1:bit
