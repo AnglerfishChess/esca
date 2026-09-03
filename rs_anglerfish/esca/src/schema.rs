@@ -446,7 +446,20 @@ static EXCHANGE: [FeatureSpec; 8] = feature_specs! {
     "them.see_positive_total", 1, "count/20", ANY;
 };
 
-static THREATS: [FeatureSpec; 0] = feature_specs! {};
+static THREATS: [FeatureSpec; 12] = feature_specs! {
+    "threatened_count", 2, "count/4", ANY;
+    "threatened_value", 2, "count/20", ANY;
+    "threat_max_gain", 2, "count/9", ANY;
+    "attacked_by_lesser_count", 2, "count/4", ANY;
+    "queen_attacked_by_lesser", 2, "bits", ANY;
+    "overloaded_defenders", 2, "count/4", ANY;
+    "removable_defenders", 2, "count/4", ANY;
+    "loose_units", 2, "count/8", ANY;
+    "attacker_surplus_count", 2, "count/4", ANY;
+    "xray_through_enemy", 2, "count/4", ANY;
+    "battery_count", 2, "count/4", ANY;
+    "battery_at_king", 2, "bits", ANY;
+};
 
 static ENDGAME: [FeatureSpec; 7] = feature_specs! {
     "king_centralisation", 2, "count/3", ANY;
@@ -613,8 +626,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "threats",
-        version: 1,
-        width: 0,
+        version: 2,
+        width: 24,
         features: &THREATS,
     },
     GroupSpec {
@@ -666,7 +679,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1906);
+        assert_eq!(Schema::v1().width(), 1930);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

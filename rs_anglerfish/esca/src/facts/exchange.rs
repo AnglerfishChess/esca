@@ -52,8 +52,31 @@ impl Placement {
 }
 
 /// What `side` wins by capturing the unit worth `occupant` on `square`, given
-/// `occupied`; 0 when it has no attacker left, or when taking would cost more
-/// than it wins and it therefore declines.
+/// `occupied`, with that first capture played whatever it costs; `None` when
+/// `side` has no capture there.
+fn forced_swap(
+    placement: &Placement,
+    square: Square,
+    side: Colour,
+    occupant: i32,
+    occupied: SquareSet,
+) -> Option<i32> {
+    let (from, role) = placement.least_valuable(square, side, occupied)?;
+    let left = occupied - from.to_set();
+    // A king captures only what the other side has stopped defending.
+    if role == Role::King && !placement.attackers(square, !side, left).is_empty() {
+        return None;
+    }
+    let promotes = role == Role::Pawn && square.rank().relative_to(side).index() == 7;
+    let landed = if promotes { Role::Queen } else { role };
+    Some(
+        occupant + if promotes { PROMOTION_GAIN } else { 0 }
+            - swap(placement, square, !side, material_value(landed), left),
+    )
+}
+
+/// The same, with `side` free to leave the square alone: 0 when it has no
+/// attacker left, or when taking would cost more than it wins.
 fn swap(
     placement: &Placement,
     square: Square,
@@ -61,19 +84,30 @@ fn swap(
     occupant: i32,
     occupied: SquareSet,
 ) -> i32 {
-    let Some((from, role)) = placement.least_valuable(square, side, occupied) else {
-        return 0;
-    };
-    let left = occupied - from.to_set();
-    // A king captures only what the other side has stopped defending.
-    if role == Role::King && !placement.attackers(square, !side, left).is_empty() {
-        return 0;
+    forced_swap(placement, square, side, occupant, occupied)
+        .unwrap_or(0)
+        .max(0)
+}
+
+/// The signed static exchange evaluation of the unit on `square`: what the side
+/// that does not own it wins by taking it, the first capture played whatever it
+/// costs.
+///
+/// `None` where that side has no capture there: an empty square, a king, a unit
+/// nothing attacks, and a unit whose only attacker is a king the square is
+/// still defended against.
+pub(super) fn signed_see(position: &Position, square: Square) -> Option<i32> {
+    let piece = position.piece_at(square)?;
+    if piece.role == Role::King {
+        return None;
     }
-    let promotes = role == Role::Pawn && square.rank().relative_to(side).index() == 7;
-    let landed = if promotes { Role::Queen } else { role };
-    let gain = occupant + if promotes { PROMOTION_GAIN } else { 0 }
-        - swap(placement, square, !side, material_value(landed), left);
-    gain.max(0)
+    forced_swap(
+        &Placement::new(position),
+        square,
+        !piece.colour,
+        material_value(piece.role),
+        position.occupied(),
+    )
 }
 
 impl Position {
@@ -83,16 +117,7 @@ impl Position {
     /// Never negative — the opponent may leave the unit alone. 0 for an empty
     /// square, for a king, and wherever the exchange wins nothing.
     pub fn see(&self, square: Square) -> i32 {
-        let Some(piece) = self.piece_at(square) else {
-            return 0;
-        };
-        swap(
-            &Placement::new(self),
-            square,
-            !piece.colour,
-            material_value(piece.role),
-            self.occupied(),
-        )
+        signed_see(self, square).unwrap_or(0).max(0)
     }
 
     /// The static exchange evaluation of `mv`: what its side wins if both

@@ -875,6 +875,83 @@ impl PyExchangeFacts {
     }
 }
 
+/// What each side stands to lose, and the slider geometry behind it.
+#[pyclass(frozen, module = "esca", name = "ThreatFacts")]
+pub struct PyThreatFacts {
+    parent: Py<PyFacts>,
+    /// Units whose SEE of a unit is above 0, per side.
+    #[pyo3(get)]
+    threatened: (PySquareSet, PySquareSet),
+    /// Value sum of those, per side.
+    #[pyo3(get)]
+    threatened_value: (i32, i32),
+    /// The largest SEE of a unit over the side's own units, per side.
+    #[pyo3(get)]
+    threat_max_gain: (i32, i32),
+    /// Units an enemy unit of strictly lower value order attacks, per side.
+    #[pyo3(get)]
+    attacked_by_lesser: (PySquareSet, PySquareSet),
+    /// One of those units is a queen, per side.
+    #[pyo3(get)]
+    queen_attacked_by_lesser: (bool, bool),
+    /// Sole defenders of two or more attacked friendly units, per side.
+    #[pyo3(get)]
+    overloaded_defenders: (PySquareSet, PySquareSet),
+    /// Sole defenders the enemy can capture without loss, per side.
+    #[pyo3(get)]
+    removable_defenders: (PySquareSet, PySquareSet),
+    /// Units no unit of their own side defends, per side.
+    #[pyo3(get)]
+    loose: (PySquareSet, PySquareSet),
+    /// Units whose attacker surplus is above 0, per side.
+    #[pyo3(get)]
+    attacker_surplus: (PySquareSet, PySquareSet),
+    /// X-rays onto an enemy unit through one enemy unit, per side.
+    #[pyo3(get)]
+    xray_through_enemy: (u8, u8),
+    /// Batteries, per side.
+    #[pyo3(get)]
+    battery_count: (u8, u8),
+    /// A battery whose line holds a square of the enemy king ring, per side.
+    #[pyo3(get)]
+    battery_at_king: (bool, bool),
+}
+
+impl PyThreatFacts {
+    fn of(facts: &facts::ThreatFacts, parent: Py<PyFacts>) -> PyThreatFacts {
+        PyThreatFacts {
+            parent,
+            threatened: PySquareSet::pair(facts.threatened),
+            threatened_value: pair(facts.threatened_value),
+            threat_max_gain: pair(facts.threat_max_gain),
+            attacked_by_lesser: PySquareSet::pair(facts.attacked_by_lesser),
+            queen_attacked_by_lesser: pair(facts.queen_attacked_by_lesser),
+            overloaded_defenders: PySquareSet::pair(facts.overloaded_defenders),
+            removable_defenders: PySquareSet::pair(facts.removable_defenders),
+            loose: PySquareSet::pair(facts.loose),
+            attacker_surplus: PySquareSet::pair(facts.attacker_surplus),
+            xray_through_enemy: pair(facts.xray_through_enemy),
+            battery_count: pair(facts.battery_count),
+            battery_at_king: pair(facts.battery_at_king),
+        }
+    }
+}
+
+#[pymethods]
+impl PyThreatFacts {
+    fn __repr__(&self) -> String {
+        format!("<ThreatFacts threatened_value={:?}>", self.threatened_value)
+    }
+
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
+        let py = slf.py();
+        Ok((
+            group_reconstructor(py)?,
+            (slf.get().parent.clone_ref(py), "threats"),
+        ))
+    }
+}
+
 /// One side's one-ply tactical options.
 #[pyclass(frozen, module = "esca", name = "TacticsFacts")]
 pub struct PyTacticsFacts {
@@ -1407,6 +1484,12 @@ impl PyFacts {
             PyExchangeFacts::of(&facts[0], slf.clone().unbind(), 0),
             PyExchangeFacts::of(&facts[1], slf.clone().unbind(), 1),
         )
+    }
+
+    /// What each side stands to lose.
+    #[getter]
+    fn threats(slf: &Bound<'_, Self>) -> PyThreatFacts {
+        PyThreatFacts::of(&slf.get().inner.threats, slf.clone().unbind())
     }
 
     /// One-ply tactics, ours then theirs.

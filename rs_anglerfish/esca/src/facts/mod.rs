@@ -14,6 +14,7 @@ mod pawns;
 mod pieces;
 mod scan;
 mod tactics;
+mod threats;
 
 use core::fmt;
 use core::ops::Not;
@@ -409,6 +410,38 @@ pub struct ExchangeFacts {
     pub see_positive_total: i32,
 }
 
+/// What each side stands to lose, and the slider geometry behind it.
+///
+/// Every set is read on the units it is about, so index 0 is what *we* stand to
+/// lose. Kings are in none of them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct ThreatFacts {
+    /// Units whose SEE of a unit is above 0, per side.
+    pub threatened: [SquareSet; 2],
+    /// Value sum of those, per side.
+    pub threatened_value: [i32; 2],
+    /// The largest SEE of a unit over the side's own units, per side.
+    pub threat_max_gain: [i32; 2],
+    /// Units an enemy unit of strictly lower value order attacks, per side.
+    pub attacked_by_lesser: [SquareSet; 2],
+    /// One of those units is a queen, per side.
+    pub queen_attacked_by_lesser: [bool; 2],
+    /// Sole defenders of two or more attacked friendly units, per side.
+    pub overloaded_defenders: [SquareSet; 2],
+    /// Sole defenders the enemy can capture without loss, per side.
+    pub removable_defenders: [SquareSet; 2],
+    /// Units no unit of their own side defends, per side.
+    pub loose: [SquareSet; 2],
+    /// Units whose attacker surplus is above 0, per side.
+    pub attacker_surplus: [SquareSet; 2],
+    /// X-rays onto an enemy unit through one enemy unit, per side.
+    pub xray_through_enemy: [u8; 2],
+    /// Batteries, per side.
+    pub battery_count: [u8; 2],
+    /// A battery whose line holds a square of the enemy king ring, per side.
+    pub battery_at_king: [bool; 2],
+}
+
 /// Which opposition the kings stand in. The side not to move holds it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Opposition {
@@ -689,6 +722,8 @@ pub struct Facts {
     pub attacks: AttackFacts,
     /// Captures by exchange, ours then theirs.
     pub exchange: [ExchangeFacts; 2],
+    /// What each side stands to lose.
+    pub threats: ThreatFacts,
     /// One-ply tactics, ours then theirs.
     pub tactics: [TacticsFacts; 2],
     /// Kings, races and drawn material.
@@ -852,6 +887,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         },
     ];
 
+    let threats = threats::threat_facts(position, &scan);
     let endgame = endgame::endgame_facts(&scan, &pawns, &pieces);
 
     let planes = PlaneFacts {
@@ -874,6 +910,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         mobility,
         attacks,
         exchange,
+        threats,
         tactics: [ours, theirs],
         endgame,
         planes,

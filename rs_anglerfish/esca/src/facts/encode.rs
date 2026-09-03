@@ -471,6 +471,46 @@ fn exchange_block(e: &ExchangeFacts, w: &mut Writer) {
     w.count(e.see_positive_total as f32, 20.0);
 }
 
+fn threats(facts: &Facts, w: &mut Writer) {
+    let t = &facts.threats;
+    for side in Side::ALL {
+        w.count(t.threatened[side.index()].len() as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(t.threatened_value[side.index()] as f32, 20.0);
+    }
+    for side in Side::ALL {
+        w.count(t.threat_max_gain[side.index()] as f32, 9.0);
+    }
+    for side in Side::ALL {
+        w.count(t.attacked_by_lesser[side.index()].len() as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.bit(t.queen_attacked_by_lesser[side.index()]);
+    }
+    for side in Side::ALL {
+        w.count(t.overloaded_defenders[side.index()].len() as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(t.removable_defenders[side.index()].len() as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(t.loose[side.index()].len() as f32, 8.0);
+    }
+    for side in Side::ALL {
+        w.count(t.attacker_surplus[side.index()].len() as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(t.xray_through_enemy[side.index()] as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(t.battery_count[side.index()] as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.bit(t.battery_at_king[side.index()]);
+    }
+}
+
 fn tactics_block(t: &TacticsFacts, w: &mut Writer) {
     w.bit(t.check_available());
     w.count(t.check_count as f32, 8.0);
@@ -586,9 +626,7 @@ impl Facts {
             {
                 let mut writer = Writer::new(slice);
                 match group.name {
-                    // A group with no features yet: its width is zero, so
-                    // nothing is written and no offset moves.
-                    "threats" => {}
+                    "threats" => threats(self, &mut writer),
                     "exchange" => {
                         exchange_block(&self.exchange[0], &mut writer);
                         exchange_block(&self.exchange[1], &mut writer);

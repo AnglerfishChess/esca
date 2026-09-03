@@ -27,13 +27,13 @@ def test_the_schema_is_the_v1_one() -> None:
     assert esca.SCHEMA == esca.SCHEMA_V1
     assert esca.SCHEMA.id == esca.SCHEMA_ID
     assert (DATA / "schema_v1_id.txt").read_text().strip() == esca.SCHEMA_ID
-    assert esca.SCHEMA.width == esca.WIDTH == 1906
+    assert esca.SCHEMA.width == esca.WIDTH == 1930
     assert esca.SCHEMA.canonical() == (DATA / "schema_v1.txt").read_text()
     assert [group["name"] for group in esca.schema()] == esca.SCHEMA.group_names
     assert esca.schema()[0] == {"name": "placement", "version": 1, "width": 768, "offset": 0}
     assert esca.schema()[1] == {"name": "state", "version": 2, "width": 16, "offset": 768}
     assert esca.SCHEMA.width_of(["state", "pawns"]) == 16 + 195
-    assert esca.SCHEMA.width_of(["threats"]) == 0
+    assert esca.SCHEMA.width_of(["threats", "endgame"]) == 24 + 15
 
 
 def test_encode_returns_a_contiguous_float32_matrix() -> None:

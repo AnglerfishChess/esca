@@ -30,7 +30,7 @@ let facts = game.facts();              // side-relative, in the mover's view
 println!("{}", facts.tactics[Side::Us.index()].legal_move_count);
 println!("{}", facts.summary());
 
-let schema = Schema::v1();             // the row a net eats: 1906 f32
+let schema = Schema::v1();             // the row a net eats: 1930 f32
 println!("{}", facts.encode(schema, schema.all()).len());
 ```
 
@@ -56,7 +56,7 @@ facts = game.facts()  # side-relative: index with esca.US / esca.THEM
 print(facts.tactics[esca.US].legal_move_count)
 print(facts.summary())
 
-rows = esca.encode([game.position.fen])  # (1, 1906) float32, ready for a net
+rows = esca.encode([game.position.fen])  # (1, 1930) float32, ready for a net
 print(rows.shape, esca.SCHEMA_ID)
 ```
 
@@ -72,9 +72,10 @@ encoded batches with their targets.
 - UCI move text in either castling spelling, and SAN with the disambiguation it needs.
 - Checkmate, stalemate, insufficient material, the fifty- and seventy-five-move rules, and
   threefold and fivefold repetition.
-- `Facts`: nine groups of cheap position facts — state, material, pawns, pieces, king, mobility,
-  attacks, one-ply tactics and attack planes — plus `MoveFacts` for every legal move, all
-  side-relative and in the mover's view.
+- `Facts`: fourteen groups of cheap position facts — the board itself, game state, material,
+  pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics, endgame, history
+  and attack planes — plus `MoveFacts` for every legal move, all side-relative and in the
+  mover's view.
 - `Schema`, a versioned manifest with a `schema_id`, and batch encoders that write `f32` rows
   without allocating.
 

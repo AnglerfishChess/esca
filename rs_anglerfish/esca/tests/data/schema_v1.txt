@@ -128,7 +128,19 @@ exchange:1:8
   them.see_positive_capture_count:1:count/8
   them.see_equal_capture_count:1:count/8
   them.see_positive_total:1:count/20
-threats:1:0
+threats:2:24
+  threatened_count:2:count/4
+  threatened_value:2:count/20
+  threat_max_gain:2:count/9
+  attacked_by_lesser_count:2:count/4
+  queen_attacked_by_lesser:2:bits
+  overloaded_defenders:2:count/4
+  removable_defenders:2:count/4
+  loose_units:2:count/8
+  attacker_surplus_count:2:count/4
+  xray_through_enemy:2:count/4
+  battery_count:2:count/4
+  battery_at_king:2:bits
 tactics:2:120
   us.check_available:1:bit
   us.check_count:1:count/8

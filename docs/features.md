@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1906 f32 per position | value head, policy head |
+| `position` | one vector of 1930 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -67,7 +67,11 @@ feature distinguishes actual White from actual Black.
 | **exchange on a square** | Both sides capture on one square in turn, each with its least valuable attacker of that square, until one has no attacker left or stops. Attackers are read from the occupancy of the moment, so a slider standing behind a departed attacker on the same ray joins in. Pins are ignored: a pinned defender still counts. A king captures only when the square is no longer attacked by the other side, so it is the last attacker of its side. A pawn capturing onto its relative rank 8 promotes to a queen: that capture wins 8 more, and a queen stands on the square from then on. |
 | **SEE** | Static exchange evaluation, in value units, signed, positive for material won. Of a capture: the value its side wins from the exchange that capture begins, each side stopping as soon as going on would cost it material. The move itself is played whatever it costs, so a capture's SEE may be negative. Of a quiet move: the same reckoning with nothing captured, so 0 or negative. Of castling: 0. |
 | **SEE of a unit** | The SEE of the exchange the opponent begins by capturing that unit. Never negative — the opponent may leave it alone. 0 for a square no enemy unit attacks, and for a king. |
+| **signed SEE of a unit** | The same exchange with the opponent's first capture played whatever it costs, so it may be negative. Absent where the opponent has no capture there: an unattacked unit, a king, and a unit whose only attacker is a king the square is still defended against. |
 | **max gain** | The largest SEE over a side's captures. |
+| **threatened** | A unit whose SEE of a unit is above 0: the opponent wins material by taking it now. The exchange-exact form of *en prise*. |
+| **loose unit** | A unit no unit of its own side defends, attacked or not. Never a king. |
+| **attacker surplus** | On a unit: the enemy units attacking it, less the friendly units defending it, counting on both sides only units whose value order is at most the unit's own. A king is above every value order, so it counts on neither side. |
 
 ### History
 
@@ -78,6 +82,16 @@ feature distinguishes actual White from actual Black.
 
 An exchange is a one-square reckoning, not a search: it answers "what does
 taking here cost", never "is taking here best".
+
+### Defenders, x-rays and batteries
+
+| Term | Definition |
+|---|---|
+| **sole defender** | The one unit defending a unit that exactly one friendly unit defends. |
+| **overloaded defender** | The sole defender of two or more friendly units that are each attacked. |
+| **removable defender** | A sole defender of an attacked friendly unit, itself attacked and with a signed SEE of a unit of at least 0: taking it costs the capturer nothing. |
+| **x-ray attack** | A slider's attack on a square that exists once the single unit standing between them is removed. *Through own*: that unit is the slider's own. *Through enemy*: it is not. Counted per (slider, target) pair. |
+| **battery** | Two friendly sliders on one rank, file or diagonal that both move along it — Q+R and R+R on a rank or file, Q+B and B+B on a diagonal, Q+Q on either — with nothing between them but friendly sliders that also move along it. Counted per pair, so three sliders in a row are three batteries. |
 
 ### Pawns
 
@@ -378,9 +392,31 @@ reports.
 Only one of a side's captures can be played, so `see_positive_total` says how
 many ways there are to win material, not how much is to be won.
 
-### 2.10 `threats` — what is about to be lost (width 0)
+### 2.10 `threats` — what is about to be lost (width 24)
 
-Reserved. No features yet.
+Every row is a pair: us then them. A threat is read on the units it is against,
+so `threats.threatened_count[us]` counts what *we* stand to lose. Kings are left
+out of every set: they cannot be captured. The last three rows are threats not
+yet made — the geometry a pin, a skewer or a piled-up attack comes from.
+
+| Feature | Width | Encoding | Cost | Head |
+|---|---|---|---|---|
+| `threatened_count` | 2 | per side, own threatened units, / 4 | B·E | B |
+| `threatened_value` | 2 | per side, value sum of those, / 20 | B·E | B |
+| `threat_max_gain` | 2 | per side, largest SEE of a unit over its own units, / 9 | B·E | B |
+| `attacked_by_lesser_count` | 2 | per side, own units an enemy unit of strictly lower value order attacks, / 4 | B | B |
+| `queen_attacked_by_lesser` | 2 | bit per side: one of those units is a queen | A | B |
+| `overloaded_defenders` | 2 | per side, / 4 | B | V |
+| `removable_defenders` | 2 | per side, / 4 | B·E | V |
+| `loose_units` | 2 | per side, / 8 | A | V |
+| `attacker_surplus_count` | 2 | per side, own units whose attacker surplus is above 0, / 4 | B | V |
+| `xray_through_enemy` | 2 | per side, x-rays through one enemy unit onto an enemy unit, / 4 | B | P |
+| `battery_count` | 2 | per side, / 4 | B | P |
+| `battery_at_king` | 2 | bit per side: a battery whose line holds a square of the enemy king ring | B | B |
+
+`threatened_count` answers exactly what `attacks.en_prise_count` approximates:
+a unit an enemy pawn attacks is en prise whatever defends it, and threatened
+only when the exchange on its square wins material.
 
 ### 2.11 `tactics` — one-ply tactics (width 120)
 
@@ -511,13 +547,13 @@ width and is the natural first ablation target.
 | `mobility` | 39 | B |
 | `attacks` | 25 | B |
 | `exchange` | 8 | C·E |
-| `threats` | 0 | — |
+| `threats` | 24 | B·E |
 | `tactics` | 120 | C, plus 2 features at D |
 | `endgame` | 15 | A |
 | `history` | 27 | A |
 | `planes` | 512 | A |
-| **total** | **1906** | |
-| total without `placement` and `planes` | 626 | |
+| **total** | **1930** | |
+| total without `placement` and `planes` | 650 | |
 
 ---
 
@@ -570,7 +606,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1906 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1930 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -592,7 +628,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "a430d5b96c3c2cd37a8e9b4d0072d845"   # 128-bit, hex
+schema_id = "16606f2b054a3281622fd2296f5ca13d"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

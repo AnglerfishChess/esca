@@ -51,8 +51,8 @@ pub use error::{FenError, IllegalMove, MoveParseError, PositionError};
 pub use facts::{
     AnnotatedMove, AttackFacts, DrawishMaterial, EndgameFacts, ExchangeFacts, Facts, HistoryFacts,
     KingFacts, MaterialFacts, MobilityFacts, MoveFacts, Opposition, PawnFacts, PieceFacts,
-    PlacementFacts, PlaneFacts, RowError, Scratch, Side, StateFacts, TacticsFacts, encode_fens,
-    encode_positions,
+    PlacementFacts, PlaneFacts, RowError, Scratch, Side, StateFacts, TacticsFacts, ThreatFacts,
+    encode_fens, encode_positions,
 };
 pub use game::Game;
 pub use moves::{MAX_MOVES, Move, MoveKind, MoveList};

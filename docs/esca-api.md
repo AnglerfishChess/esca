@@ -329,6 +329,7 @@ pub struct Facts {
     pub mobility: MobilityFacts,
     pub attacks: AttackFacts,
     pub exchange: [ExchangeFacts; 2],
+    pub threats: ThreatFacts,
     pub tactics: [TacticsFacts; 2],
     pub endgame: EndgameFacts,
     pub planes: PlaneFacts,
@@ -427,6 +428,23 @@ impl AttackFacts {
     pub fn units(&self, side: Side) -> SquareSet;
 }
 
+/// Every set is read on the units it is about: index 0 is what we stand to
+/// lose. Kings are in none of them.
+pub struct ThreatFacts {
+    pub threatened: [SquareSet; 2],
+    pub threatened_value: [i32; 2],
+    pub threat_max_gain: [i32; 2],
+    pub attacked_by_lesser: [SquareSet; 2],
+    pub queen_attacked_by_lesser: [bool; 2],
+    pub overloaded_defenders: [SquareSet; 2],
+    pub removable_defenders: [SquareSet; 2],
+    pub loose: [SquareSet; 2],
+    pub attacker_surplus: [SquareSet; 2],
+    pub xray_through_enemy: [u8; 2],
+    pub battery_count: [u8; 2],
+    pub battery_at_king: [bool; 2],
+}
+
 pub struct AnnotatedMove {
     pub mv: Move,
     pub facts: MoveFacts,
@@ -493,7 +511,7 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 1906 values.
+    /// The v1 schema of `features.md`: 14 groups, 1930 values.
     pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
@@ -596,7 +614,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v1 id is `a430d5b96c3c2cd37a8e9b4d0072d845`; its canonical text is checked
+The v1 id is `16606f2b054a3281622fd2296f5ca13d`; its canonical text is checked
 in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ---
@@ -711,13 +729,14 @@ p.see("e5"), p.see_capture(mv)  # static exchange evaluation, in value units
 f.side("b")  # esca.US or esca.THEM, whichever Black plays
 f.pawns.passed[esca.US]  # SquareSet
 list(f.attacks.hanging[esca.THEM])  # ["e5", …]
+list(f.threats.threatened[esca.US])  # what we stand to lose
 f.king.ring_attack_weight[esca.US]
 print(f.summary())
 
 # Schema and batch encoding
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
 esca.SCHEMA_ID  # "16a7…", 32 hex chars
-esca.WIDTH  # 1906
+esca.WIDTH  # 1930
 esca.MOVE_WIDTH  # 24
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
