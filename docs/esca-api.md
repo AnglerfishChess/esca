@@ -15,6 +15,7 @@ Cargo features:
 |---|---|---|
 | `python` | no | The PyO3 module, built by maturin. |
 | `lichess` | no | The `lichess` module: streaming reader for the evaluation dump. |
+| `pgn` | no | The `pgn` module: reading and writing games. |
 | `serde` | no | `Serialize`/`Deserialize` for `Position`, `Move`, `Schema` and the manifest types. |
 
 ---
@@ -666,6 +667,19 @@ moves, mx, cuts = esca.encode_moves(fens)  # per FEN, (total, 24), (n + 1,) int6
 # Lichess dump
 for batch in esca.lichess.batches(path, batch_size=8192, min_depth=20):
     batch.fens, batch.features, batch.cp, batch.mate, batch.best_moves
+
+# PGN
+for pg in esca.pgn.read(path):  # or read_string(text); skip_errors=True drops bad games
+    pg.headers  # dict[str, str], in the order the tags were set
+    pg.comment, pg.result  # "", "1-0"
+    pg.variant, pg.start_position  # Variant, Position
+    for node in pg.mainline():
+        node.move, node.san, node.nags, node.comment_before, node.comment_after
+        node.variations  # list[list[Node]]
+    pg.game()  # esca.Game of the mainline
+    print(pg.to_string())
+esca.pgn.count(path)  # games that read without error
+esca.pgn.Game.from_game(g)  # or g.to_pgn()
 ```
 
 Every function that encodes takes keyword-only `variant`, `schema` and
@@ -687,5 +701,128 @@ esca.lichess.batches(path, *, batch_size=8192, min_depth=0,
 | A malformed FEN raises `ValueError` naming the row index. | |
 | `encode_moves` takes one FEN or a sequence of them. A sequence stacks every position's move rows into one `(total, 24)` array and returns the `(n + 1,)` int64 offsets that cut it, so FEN `i` owns `rows[offsets[i]:offsets[i + 1]]`: no padding, and one array per call rather than one per position. | |
 | `Position`, `Move`, `Facts` and their groups are immutable and picklable; `Position` and `Move` are hashable. | |
+| A malformed game raises `ValueError` naming the line and column; the stream goes on with the next game. | |
 | A batch row takes the deepest evaluation that reaches `min_depth`, and its best line; a record with none, with a placement no game can reach, or with an unreadable line is skipped. | |
 | `batch.cp` and `batch.mate` are both `(n,)` float32 and side-relative: a row is a mate row when `mate` is not 0.0, and a centipawn row otherwise. | |
+
+---
+
+## 10. `pgn` — games as text (feature `pgn`)
+
+```rust
+pub mod pgn {
+    /// The game-termination marker.
+    pub enum GameResult { White, Black, Draw, Unknown }
+
+    impl GameResult {
+        pub fn from_text(text: &str) -> Option<GameResult>;
+        pub fn as_str(self) -> &'static str;
+    }
+
+    /// The tag pairs, in the order they were set.
+    pub struct Headers { /* … */ }
+
+    impl Headers {
+        pub const SEVEN_TAG_ROSTER: [&'static str; 7];
+        pub fn new() -> Headers;
+        pub fn get(&self, name: &str) -> Option<&str>;
+        pub fn contains(&self, name: &str) -> bool;
+        pub fn set(&mut self, name: &str, value: &str);
+        pub fn remove(&mut self, name: &str) -> Option<String>;
+        pub fn iter(&self) -> impl Iterator<Item = (&str, &str)>;
+        pub fn len(&self) -> usize;
+        pub fn is_empty(&self) -> bool;
+        /// The roster first, in roster order, then the rest as they were set.
+        pub fn export_order(&self) -> Vec<(&str, &str)>;
+    }
+
+    /// One move of a game tree.
+    pub struct Node {
+        pub mv: Move,
+        /// The move's own text, as written, less any `!`/`?` suffix.
+        pub san: String,
+        pub nags: Vec<u16>,
+        pub comment_before: String,
+        pub comment_after: String,
+        /// Alternatives to this move, each a line from the same position.
+        pub variations: Vec<Vec<Node>>,
+    }
+
+    impl Node { pub fn new(mv: Move, san: &str) -> Node; }
+
+    pub struct Game {
+        pub headers: Headers,
+        /// The comment before the first move.
+        pub comment: String,
+        pub moves: Vec<Node>,
+        pub result: GameResult,
+    }
+
+    impl Game {
+        pub fn new() -> Game;
+        pub fn mainline(&self) -> &[Node];
+        /// The rules and the start position the `Variant` and `FEN` tags name.
+        pub fn setup(&self) -> Result<(Arc<dyn Variant>, Position), PgnError>;
+        pub fn mainline_game(&self) -> Result<crate::Game, PgnError>;
+        pub fn from_game(game: &crate::Game) -> Game;
+    }
+
+    /// Export format: tag pairs one per line, a blank line, then the movetext
+    /// wrapped at `EXPORT_WIDTH`.
+    impl fmt::Display for Game { /* … */ }
+    pub const EXPORT_WIDTH: usize = 80;
+
+    impl crate::Game { pub fn to_pgn(&self) -> Game; }
+
+    /// Games read one at a time.
+    pub struct Reader<R> { /* … */ }
+
+    impl<R: BufRead> Reader<R> {
+        pub fn new(input: R) -> Reader<R>;
+        /// Drops malformed games instead of reporting them.
+        pub fn skipping(self) -> Reader<R>;
+        pub fn read_game(&mut self) -> Option<Result<Game, PgnError>>;
+    }
+
+    impl<R: BufRead> Iterator for Reader<R> { type Item = Result<Game, PgnError>; }
+
+    pub fn read(path: &Path) -> io::Result<Reader<BufReader<File>>>;
+    pub fn read_str(text: &str) -> Reader<&[u8]>;
+    /// Games that read without error.
+    pub fn count_games<R: BufRead>(input: R) -> usize;
+
+    pub struct PgnError { pub line: usize, pub column: usize, pub kind: ErrorKind }
+
+    pub enum ErrorKind {
+        UnterminatedComment, UnterminatedString, MalformedTag,
+        UnterminatedVariation, UnexpectedVariationEnd, StrayVariation,
+        IllegalMove(String), AmbiguousMove(String), Syntax(String),
+        UnknownVariant(String), BadFen(FenError), BadSetup(PositionError),
+        Io(String),
+    }
+}
+```
+
+`Variant` selects the rules: absent, `Chess`, `Standard`, `Normal` or
+`From Position` is classic chess, and `Chess960`, `Chess 960` or
+`Fischerandom` is Chess960, case and separators ignored; any other value is
+`UnknownVariant` naming it. A `FEN` tag is read in either castling dialect —
+`KQkq`, where a letter means the outermost rook on that wing, or the rook
+files `AHah` — and is used whatever `SetUp` says. The FEN `from_game` writes
+is the one `Position::fen` renders: `KQkq` where the rook files are the
+classic ones, rook files otherwise.
+
+The reader tolerates the forms that occur in the wild: a missing result, a
+move number glued to its move, `...` continuations, `%` escape lines, `{}`
+comments spanning lines, `;` comments to the end of a line, `$` glyphs and
+`!`/`?` suffixes, and glyphs after a variation. It resynchronises on the next
+tag section after a malformed game, so one bad game does not lose the rest of
+the stream. Line and column are 1-based, and 0 when the error did not come
+from text.
+
+Writing is deterministic, and reading its own output changes nothing. It
+writes the tag pairs the game holds — `from_game` is what supplies a roster —
+a `12.` before every White move and a `12...` before a Black move that
+follows a comment or a variation, and a comment as one `{…}` with its
+whitespace collapsed. A move number and its move are one token, so a line
+break never falls between them.

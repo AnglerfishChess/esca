@@ -50,6 +50,13 @@ defined before it is used.
 | **UCI move notation** | Origin square, destination square, and for a promotion the lower-case promotion role: `e2e4`, `e7e8q`. The move format engines speak. |
 | **UCI castling encoding** | In classic chess, castling is written as the king's two-square move (`e1g1`). In Chess960 it is written king-to-rook (`e1h1`), because the king's destination can coincide with its origin. |
 | **SAN** | *Standard Algebraic Notation*: the human notation used in books and PGN — `Nf3`, `exd5`, `O-O`, `Qxh7#` — with only as much origin information as disambiguation needs. |
+| **PGN** | *Portable Game Notation*: the text format for a whole game — a tag section of `[Name "value"]` pairs, then the movetext in SAN, ending in a result. |
+| **tag pair** | One `[Name "value"]` line of a PGN tag section. |
+| **seven-tag roster** | The tags every PGN game carries, in this order: `Event`, `Site`, `Date`, `Round`, `White`, `Black`, `Result`. |
+| **movetext** | The moves of a PGN game, with their move numbers, comments, glyphs and variations, and the result marker that ends them. |
+| **RAV** (recursive annotation variation) | A `( … )` alternative inside movetext, replacing the move it follows and holding movetext of its own, variations included. |
+| **NAG** (numeric annotation glyph) | A `$n` annotation of a move. `$1`–`$6` are the `!`, `?`, `!!`, `??`, `!?` and `?!` suffixes; esca keeps every glyph as its number. |
+| **export format** | The strict PGN a program writes: the seven-tag roster first, one blank line, movetext wrapped at 80 columns, one space between tokens. |
 | **PV** (principal variation) | The sequence of moves an engine considers best from a position; its first move is the best move. |
 | **multi-PV** | Several PVs from one position, ranked, each with its own score. |
 | **centipawn** (cp) | A score unit: 100 cp is nominally one pawn. `mate n` is a separate kind of score meaning forced mate in *n* moves. |

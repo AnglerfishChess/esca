@@ -34,8 +34,9 @@ let schema = Schema::v0();             // the row a net eats: 1065 f32
 println!("{}", facts.encode(schema, schema.all()).len());
 ```
 
-Cargo features, neither on by default: `lichess` (streaming reader for the Lichess evaluation
-dump) and `python` (the PyO3 module the wheel is built from).
+Cargo features, none on by default: `lichess` (streaming reader for the Lichess evaluation
+dump), `pgn` (reading and writing games as PGN) and `python` (the PyO3 module the wheel is
+built from).
 
 ## Python
 
