@@ -37,4 +37,4 @@ Issues = "https://github.com/AnglerfishChess/anglerfish/issues"
 [tool.maturin]
 python-source = "python"
 module-name = "esca._esca"
-features = ["python", "lichess", "pyo3/extension-module"]
+features = ["python", "lichess", "pgn", "pyo3/extension-module"]

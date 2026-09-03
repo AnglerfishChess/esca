@@ -450,8 +450,13 @@ pub struct PyGame {
 }
 
 impl PyGame {
-    fn seeded(inner: Game, variant: PyVariant) -> PyGame {
+    pub(crate) fn seeded(inner: Game, variant: PyVariant) -> PyGame {
         PyGame { inner, variant }
+    }
+
+    #[cfg(feature = "pgn")]
+    pub(crate) fn played(&self) -> &Game {
+        &self.inner
     }
 }
 
@@ -614,6 +619,12 @@ impl PyGame {
     /// The facts of the current position, repetition and history included.
     fn facts(&self) -> PyFacts {
         PyFacts::of_game(&self.inner, self.variant.clone())
+    }
+
+    /// This game as PGN, with a seven-tag roster of placeholders.
+    #[cfg(feature = "pgn")]
+    fn to_pgn(&self) -> super::pgn::PyPgnGame {
+        super::pgn::PyPgnGame::new(self.inner.to_pgn())
     }
 
     fn __repr__(&self) -> String {

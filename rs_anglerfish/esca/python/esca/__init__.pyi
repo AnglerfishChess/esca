@@ -1,4 +1,4 @@
-from . import lichess
+from . import lichess, pgn
 from ._esca import (
     CHESS960,
     CLASSIC,
@@ -71,5 +71,6 @@ __all__ = [
     "encode_moves",
     "features_for",
     "lichess",
+    "pgn",
     "schema",
 ]

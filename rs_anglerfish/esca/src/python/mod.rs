@@ -9,6 +9,8 @@ mod encode;
 mod facts;
 #[cfg(feature = "lichess")]
 mod lichess;
+#[cfg(feature = "pgn")]
+mod pgn;
 
 use pyo3::prelude::*;
 
@@ -63,6 +65,16 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<lichess::PyBatch>()?;
         module.add_class::<lichess::PyBatches>()?;
         module.add_function(wrap_pyfunction!(lichess::batches, module)?)?;
+    }
+
+    #[cfg(feature = "pgn")]
+    {
+        module.add_class::<pgn::PyPgnGame>()?;
+        module.add_class::<pgn::PyPgnNode>()?;
+        module.add_class::<pgn::PyPgnReader>()?;
+        module.add_function(wrap_pyfunction!(pgn::pgn_read, module)?)?;
+        module.add_function(wrap_pyfunction!(pgn::pgn_read_string, module)?)?;
+        module.add_function(wrap_pyfunction!(pgn::pgn_count, module)?)?;
     }
 
     module.add("CLASSIC", PyVariant::new(classic()))?;

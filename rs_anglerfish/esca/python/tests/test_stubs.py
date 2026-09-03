@@ -55,6 +55,10 @@ def test_the_lichess_module_exports_what_its_stub_declares() -> None:
     assert esca.lichess.__all__ == stub_all("lichess.pyi")
 
 
+def test_the_pgn_module_exports_what_its_stub_declares() -> None:
+    assert esca.pgn.__all__ == stub_all("pgn.pyi")
+
+
 def test_every_exported_name_exists() -> None:
     assert [name for name in esca.__all__ if not hasattr(esca, name)] == []
 
