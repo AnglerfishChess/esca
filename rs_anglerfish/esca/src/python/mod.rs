@@ -11,6 +11,8 @@ mod facts;
 mod lichess;
 #[cfg(feature = "pgn")]
 mod pgn;
+#[cfg(feature = "uci")]
+mod uci;
 
 use pyo3::prelude::*;
 
@@ -76,6 +78,9 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_function(wrap_pyfunction!(pgn::pgn_read_string, module)?)?;
         module.add_function(wrap_pyfunction!(pgn::pgn_count, module)?)?;
     }
+
+    #[cfg(feature = "uci")]
+    uci::register(module)?;
 
     module.add("CLASSIC", PyVariant::new(classic()))?;
     module.add("CHESS960", PyVariant::new(chess960()))?;

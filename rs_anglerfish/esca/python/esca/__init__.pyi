@@ -1,4 +1,4 @@
-from . import lichess, pgn
+from . import lichess, pgn, uci
 from ._esca import (
     CHESS960,
     CLASSIC,
@@ -73,4 +73,5 @@ __all__ = [
     "lichess",
     "pgn",
     "schema",
+    "uci",
 ]

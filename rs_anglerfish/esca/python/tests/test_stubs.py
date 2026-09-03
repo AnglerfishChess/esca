@@ -38,12 +38,11 @@ def declared_members(body: list[ast.stmt]) -> set[str]:
 
 
 def stub_classes() -> dict[str, set[str]]:
-    """The classes `_esca.pyi` declares, less the stub-only TypedDicts."""
+    """The classes `_esca.pyi` declares in full: the ones that inherit are described by their base."""
     return {
         node.name: declared_members(node.body)
         for node in parsed("_esca.pyi").body
-        if isinstance(node, ast.ClassDef)
-        and not any(isinstance(base, ast.Name) and base.id == "TypedDict" for base in node.bases)
+        if isinstance(node, ast.ClassDef) and not node.bases
     }
 
 

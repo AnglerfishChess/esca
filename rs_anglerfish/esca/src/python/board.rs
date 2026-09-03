@@ -454,7 +454,7 @@ impl PyGame {
         PyGame { inner, variant }
     }
 
-    #[cfg(feature = "pgn")]
+    #[cfg(any(feature = "pgn", feature = "uci"))]
     pub(crate) fn played(&self) -> &Game {
         &self.inner
     }
