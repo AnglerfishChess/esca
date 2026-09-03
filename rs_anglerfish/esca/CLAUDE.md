@@ -18,6 +18,12 @@ show, and a test reads as an example of the language's own API. Helpers live in
 `tests/common/mod.rs` and `python/tests/conftest.py`; tests share no mutable
 state and run in parallel (`cargo test -- --test-threads 4`, pytest `-n auto`).
 
+## Every other module, the same way
+
+Anything esca exposes (rules, text, PGN, UCI, readers) is covered by
+parameterized cases in both languages, mirrored case for case, hand-derived
+and readable as usage examples, independent and parallel-safe.
+
 ## Changing what a fact computes
 
 Fix the Rust and the Python reference together, bump that group's `version` in
