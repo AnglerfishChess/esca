@@ -61,8 +61,7 @@ impl Not for Side {
     }
 }
 
-/// Game-state flags: check, castling rights, the en-passant square, the
-/// halfmove clock and repetition.
+/// Game-state flags: check, castling rights and the en-passant square.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct StateFacts {
     /// The side to move stands in check.
@@ -77,17 +76,25 @@ pub struct StateFacts {
     pub en_passant: Option<File>,
     /// Some legal move captures en passant.
     pub ep_capture_legal: bool,
+}
+
+/// What the plies before this position say: the clock, repetition, and how
+/// forcing the recent play was.
+///
+/// Everything but the halfmove clock, which the position itself carries, is
+/// zero unless `known` is true.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct HistoryFacts {
+    /// A position history was supplied.
+    pub known: bool,
     /// Plies since the last capture or pawn move.
     pub halfmove_clock: u32,
     /// The position carried a halfmove clock.
     pub halfmove_known: bool,
     /// This position occurred before in the supplied history.
     pub repetition_seen: bool,
-    /// Each side can reach a position of the supplied history in one move;
-    /// `Side::Them` is judged after a null move.
-    pub repetition_available: [bool; 2],
-    /// A position history was supplied.
-    pub history_known: bool,
+    /// Some legal move reaches a position of the supplied history.
+    pub repetition_available: bool,
 }
 
 /// Material and phase.
@@ -181,8 +188,8 @@ pub struct PieceFacts {
     pub trapped_rook: [bool; 2],
     /// Outpost squares, per side.
     pub outposts: [SquareSet; 2],
-    /// Knights standing on an own outpost square, per side.
-    pub knights_on_outpost: [u8; 2],
+    /// Knights and bishops standing on an own outpost square, per side.
+    pub minors_on_outpost: [u8; 2],
     /// Unoccupied outpost squares, per side.
     pub outpost_squares_free: [u8; 2],
     /// Knights on file a or h, or on relative rank 1 or 8, per side.
@@ -269,6 +276,8 @@ pub struct AttackFacts {
     pub by_pawns: [SquareSet; 2],
     /// Each side's attack map by role.
     pub by_role: [[SquareSet; 6]; 2],
+    /// Units the opponent attacks, defended or not; never a king.
+    pub attacked: [SquareSet; 2],
     /// Units attacked by the opponent and not defended; never a king.
     pub hanging: [SquareSet; 2],
     /// Units hanging or attacked by a cheaper enemy unit; never a king.
@@ -277,10 +286,16 @@ pub struct AttackFacts {
     pub pinned: [SquareSet; 2],
     /// Units standing on a square their own side attacks.
     pub defended: [SquareSet; 2],
+    /// Value sum of the attacked units, per side.
+    pub attacked_value: [i32; 2],
     /// Value sum of the hanging units, per side.
     pub hanging_value: [i32; 2],
+    /// Value sum of the units en prise, per side.
+    pub en_prise_value: [i32; 2],
     /// Largest value en prise, per side.
     pub en_prise_max_value: [i32; 2],
+    /// Value sum of the absolutely pinned units, per side.
+    pub pinned_value: [i32; 2],
     /// Enemy unit pairs this side's sliders skewer, per side.
     pub skewer_candidates: [u8; 2],
     units: [SquareSet; 2],
@@ -522,12 +537,14 @@ impl fmt::Debug for Scratch {
     }
 }
 
-/// Everything the v0 schema says about one position, plus its annotated legal
+/// Everything the v1 schema says about one position, plus its annotated legal
 /// moves.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Facts {
     /// Game-state flags.
     pub state: StateFacts,
+    /// What the plies before this position say.
+    pub history: HistoryFacts,
     /// Material and phase.
     pub material: MaterialFacts,
     /// Pawn structure.
@@ -658,6 +675,11 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
     legal.clear();
     variant.legal_moves(position, legal);
     let state = state_facts(position, &scan, legal);
+    let history = HistoryFacts {
+        halfmove_clock: position.halfmove_clock(),
+        halfmove_known: position.clocks_known(),
+        ..HistoryFacts::default()
+    };
 
     let mut moves = MoveList::new();
     let ours = tactics::tactics(
@@ -697,6 +719,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
 
     Facts {
         state,
+        history,
         material,
         pawns,
         pieces,
@@ -720,11 +743,6 @@ fn state_facts(position: &Position, scan: &Scan, legal: &MoveList) -> StateFacts
         castle_long: Side::ALL.map(|side| rights.long(scan.colour(side)).is_some()),
         en_passant: position.en_passant().map(|square| square.file()),
         ep_capture_legal: legal.iter().any(|mv| mv.is_en_passant()),
-        halfmove_clock: position.halfmove_clock(),
-        halfmove_known: position.clocks_known(),
-        repetition_seen: false,
-        repetition_available: [false; 2],
-        history_known: false,
     }
 }
 
@@ -794,12 +812,16 @@ fn attack_facts(position: &Position, scan: &Scan) -> AttackFacts {
             scan.by_role[1][Role::Pawn.index()],
         ],
         by_role: scan.by_role,
+        attacked: [SquareSet::EMPTY; 2],
         hanging: [SquareSet::EMPTY; 2],
         en_prise: [SquareSet::EMPTY; 2],
         pinned: [SquareSet::EMPTY; 2],
         defended: [SquareSet::EMPTY; 2],
+        attacked_value: [0; 2],
         hanging_value: [0; 2],
+        en_prise_value: [0; 2],
         en_prise_max_value: [0; 2],
+        pinned_value: [0; 2],
         skewer_candidates: [0; 2],
         units: scan.units,
         role_units: scan.role_units,
@@ -820,6 +842,8 @@ fn attack_facts(position: &Position, scan: &Scan) -> AttackFacts {
             if attackers.is_empty() {
                 continue;
             }
+            facts.attacked[i].insert(square);
+            facts.attacked_value[i] += material_value(role);
             let defended = scan.by[i].contains(square);
             let cheaper = attackers.into_iter().any(|from| {
                 let attacker = position
@@ -834,10 +858,21 @@ fn attack_facts(position: &Position, scan: &Scan) -> AttackFacts {
             }
             if !defended || cheaper {
                 facts.en_prise[i].insert(square);
+                facts.en_prise_value[i] += material_value(role);
                 facts.en_prise_max_value[i] = facts.en_prise_max_value[i].max(material_value(role));
             }
         }
         facts.pinned[i] = absolute_pins(scan, side);
+        facts.pinned_value[i] = facts.pinned[i]
+            .into_iter()
+            .map(|square| {
+                let role = position
+                    .piece_at(square)
+                    .expect("a pinned unit stands on its own square")
+                    .role;
+                material_value(role)
+            })
+            .sum();
         facts.skewer_candidates[i] = skewers(position, scan, side);
     }
     facts

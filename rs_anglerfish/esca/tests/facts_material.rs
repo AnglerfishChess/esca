@@ -60,7 +60,7 @@ const NINE_SIXTY: &str = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB
 /// The values `material.<feature>` encodes to for `fen`, taken from the group's
 /// own row at the offset and width the schema gives the feature.
 fn encoded(fen: &str, feature: &str) -> Vec<f32> {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let spec = schema
         .group("material")
         .and_then(|group| group.features.iter().find(|spec| spec.name == feature))

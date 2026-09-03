@@ -41,7 +41,7 @@ fn read_fens(path: &Path) -> Vec<String> {
 }
 
 fn write_vectors(path: &Path, variant: &dyn Variant, fens: &[String]) {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let borrowed: Vec<&str> = fens.iter().map(String::as_str).collect();
     let mut values = vec![0.0f32; borrowed.len() * schema.width()];
     encode_fens(variant, &borrowed, schema, schema.all(), &mut values)
@@ -77,10 +77,10 @@ fn chess960_fens() -> Vec<String> {
 
 fn main() {
     let dir = data_dir();
-    let schema = Schema::v0();
+    let schema = Schema::v1();
 
-    fs::write(dir.join("schema_v0.txt"), schema.canonical()).expect("the canonical text");
-    fs::write(dir.join("schema_v0_id.txt"), format!("{}\n", schema.id())).expect("the schema id");
+    fs::write(dir.join("schema_v1.txt"), schema.canonical()).expect("the canonical text");
+    fs::write(dir.join("schema_v1_id.txt"), format!("{}\n", schema.id())).expect("the schema id");
 
     let classic = read_fens(&dir.join("fens_classic.txt"));
     for fen in &classic {

@@ -68,7 +68,7 @@ def material_layout() -> dict[str, slice]:
     layout: dict[str, slice] = {}
     at = 0
     inside = False
-    for line in esca.SCHEMA_V0.canonical().splitlines():
+    for line in esca.SCHEMA.canonical().splitlines():
         if not line.startswith(" "):
             inside = line.startswith("material:")
         elif inside:

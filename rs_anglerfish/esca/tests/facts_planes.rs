@@ -49,7 +49,7 @@ const LOOSE_QUEEN: &str = "1r5k/6pp/8/2b5/3Q4/1P6/P1P5/1K6 w - - 0 1";
 /// at the offset and width the schema gives the feature, and named in the
 /// mover's view.
 fn plane(fen: &str, feature: &str) -> SquareSet {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let spec = schema
         .group("planes")
         .and_then(|group| group.features.iter().find(|spec| spec.name == feature))

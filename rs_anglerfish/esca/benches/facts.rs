@@ -16,7 +16,7 @@ fn corpus() -> Vec<Position> {
 
 fn benchmarks(c: &mut Criterion) {
     let positions = corpus();
-    let schema = Schema::v0();
+    let schema = Schema::v1();
 
     let mut group = c.benchmark_group("facts");
     group.throughput(criterion::Throughput::Elements(positions.len() as u64));

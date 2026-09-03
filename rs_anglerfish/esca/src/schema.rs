@@ -147,9 +147,9 @@ pub struct Schema {
 }
 
 impl Schema {
-    /// The v0 schema: nine groups, 1065 values.
-    pub fn v0() -> &'static Schema {
-        &V0
+    /// The v1 schema: the fourteen groups of `features.md`, in its order.
+    pub fn v1() -> &'static Schema {
+        &V1
     }
 
     /// The schema's semantic version.
@@ -298,19 +298,15 @@ macro_rules! feature_specs {
     };
 }
 
-static STATE: [FeatureSpec; 12] = feature_specs! {
+static PLACEMENT: [FeatureSpec; 0] = feature_specs! {};
+
+static STATE: [FeatureSpec; 6] = feature_specs! {
     "in_check", 1, "bit", ANY;
     "double_check", 1, "bit", ANY;
     "castle_rights", 4, "bits", ANY;
     "ep_available", 1, "bit", ANY;
     "ep_file", 8, "one-hot", ANY;
     "ep_capture_legal", 1, "bit", ANY;
-    "halfmove_bucket", 8, "one-hot", ANY;
-    "halfmove_known", 1, "bit", ANY;
-    "repetition_seen", 1, "bit", ANY;
-    "repetition_available_us", 1, "bit", ANY;
-    "repetition_available_them", 1, "bit", ANY;
-    "history_known", 1, "bit", ANY;
 };
 
 static MATERIAL: [FeatureSpec; 9] = feature_specs! {
@@ -359,7 +355,7 @@ static PIECES: [FeatureSpec; 17] = feature_specs! {
     "rook_behind_own_passer", 2, "count/2", ANY;
     "rook_behind_enemy_passer", 2, "count/2", ANY;
     "trapped_rook", 2, "bits", ANY;
-    "knights_on_outpost", 2, "count/2", ANY;
+    "minors_on_outpost", 2, "count/2", ANY;
     "outpost_squares_free", 2, "count/4", ANY;
     "knights_on_rim", 2, "count/2", ANY;
     "minors_undeveloped", 2, "count/4", CLASSIC_ONLY;
@@ -380,7 +376,7 @@ static KING: [FeatureSpec; 16] = feature_specs! {
     "ring_holes", 2, "count/8", ANY;
     "king_escape_squares", 2, "count/8", ANY;
     "back_rank_risk", 2, "bits", ANY;
-    "king_distance", 8, "one-hot", ANY;
+    "king_distance", 6, "one-hot", ANY;
     "king_tropism", 2, "count/8", ANY;
     "virtual_mobility", 2, "count/27", ANY;
 };
@@ -398,15 +394,33 @@ static MOBILITY: [FeatureSpec; 10] = feature_specs! {
     "total_mobility", 2, "count/96", ANY;
 };
 
-static ATTACKS: [FeatureSpec; 8] = feature_specs! {
+static ATTACKS: [FeatureSpec; 12] = feature_specs! {
     "attacked_square_count", 3, "count/48", ANY;
+    "attacked_count", 2, "count/8", ANY;
+    "attacked_value", 2, "count/20", ANY;
     "hanging_count", 2, "count/4", ANY;
     "hanging_value", 2, "count/20", ANY;
     "en_prise_count", 2, "count/4", ANY;
+    "en_prise_value", 2, "count/20", ANY;
     "en_prise_max_value", 2, "count/9", ANY;
     "pinned_count", 2, "count/4", ANY;
+    "pinned_value", 2, "count/20", ANY;
     "skewer_candidates", 2, "count/4", ANY;
     "defended_count", 2, "count/16", ANY;
+};
+
+static EXCHANGE: [FeatureSpec; 0] = feature_specs! {};
+
+static THREATS: [FeatureSpec; 0] = feature_specs! {};
+
+static ENDGAME: [FeatureSpec; 0] = feature_specs! {};
+
+static HISTORY: [FeatureSpec; 5] = feature_specs! {
+    "halfmove_bucket", 8, "one-hot", ANY;
+    "halfmove_known", 1, "bit", ANY;
+    "repetition_seen", 1, "bit", ANY;
+    "repetition_available_us", 1, "bit", ANY;
+    "history_known", 1, "bit", ANY;
 };
 
 static TACTICS: [FeatureSpec; 70] = feature_specs! {
@@ -493,11 +507,17 @@ static PLANES: [FeatureSpec; 8] = feature_specs! {
     "their_pinned", 64, "plane", ANY;
 };
 
-static V0_GROUPS: [GroupSpec; 9] = [
+static V1_GROUPS: [GroupSpec; 14] = [
+    GroupSpec {
+        name: "placement",
+        version: 1,
+        width: 0,
+        features: &PLACEMENT,
+    },
     GroupSpec {
         name: "state",
-        version: 1,
-        width: 29,
+        version: 2,
+        width: 16,
         features: &STATE,
     },
     GroupSpec {
@@ -514,14 +534,14 @@ static V0_GROUPS: [GroupSpec; 9] = [
     },
     GroupSpec {
         name: "pieces",
-        version: 1,
+        version: 2,
         width: 35,
         features: &PIECES,
     },
     GroupSpec {
         name: "king",
-        version: 2,
-        width: 122,
+        version: 3,
+        width: 120,
         features: &KING,
     },
     GroupSpec {
@@ -532,15 +552,39 @@ static V0_GROUPS: [GroupSpec; 9] = [
     },
     GroupSpec {
         name: "attacks",
-        version: 1,
-        width: 17,
+        version: 2,
+        width: 25,
         features: &ATTACKS,
+    },
+    GroupSpec {
+        name: "exchange",
+        version: 1,
+        width: 0,
+        features: &EXCHANGE,
+    },
+    GroupSpec {
+        name: "threats",
+        version: 1,
+        width: 0,
+        features: &THREATS,
     },
     GroupSpec {
         name: "tactics",
         version: 1,
         width: 120,
         features: &TACTICS,
+    },
+    GroupSpec {
+        name: "endgame",
+        version: 1,
+        width: 0,
+        features: &ENDGAME,
+    },
+    GroupSpec {
+        name: "history",
+        version: 1,
+        width: 12,
+        features: &HISTORY,
     },
     GroupSpec {
         name: "planes",
@@ -550,9 +594,9 @@ static V0_GROUPS: [GroupSpec; 9] = [
     },
 ];
 
-static V0: Schema = Schema {
-    semver: "0.1.0",
-    groups: &V0_GROUPS,
+static V1: Schema = Schema {
+    semver: "1.0.0",
+    groups: &V1_GROUPS,
 };
 
 #[cfg(test)]
@@ -561,7 +605,7 @@ mod tests {
 
     #[test]
     fn group_widths_are_the_sum_of_their_features() {
-        for group in Schema::v0().groups() {
+        for group in Schema::v1().groups() {
             let sum: usize = group.features.iter().map(|f| f.width).sum();
             assert_eq!(sum, group.width, "group {}", group.name);
             for (index, feature) in group.features.iter().enumerate() {
@@ -572,8 +616,8 @@ mod tests {
     }
 
     #[test]
-    fn the_schema_is_1065_values_wide() {
-        assert_eq!(Schema::v0().width(), 1065);
-        assert!(Schema::v0().feature_count() <= MAX_FEATURES);
+    fn the_schema_is_as_wide_as_features_md_says() {
+        assert_eq!(Schema::v1().width(), 1070);
+        assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

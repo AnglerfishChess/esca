@@ -127,6 +127,6 @@ def test_repetition_needs_the_game() -> None:
         game.play(move)
     assert game.repetitions() == 3
     assert "threefold_repetition" in game.claims()
-    assert game.facts().state.repetition_seen
-    assert game.facts().state.history_known
-    assert not game.position.facts().state.history_known
+    assert game.facts().history.repetition_seen
+    assert game.facts().history.known
+    assert not game.position.facts().history.known

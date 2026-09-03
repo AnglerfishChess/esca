@@ -30,7 +30,7 @@ fn vectors(bytes: &[u8], width: usize) -> Vec<Vec<f32>> {
 /// The name of the feature the value at `index` belongs to.
 fn feature_at(index: usize) -> String {
     let mut at = 0;
-    for group in Schema::v0().groups() {
+    for group in Schema::v1().groups() {
         if index < at + group.width {
             let inside = index - at;
             for feature in group.features {
@@ -50,7 +50,7 @@ fn feature_at(index: usize) -> String {
 }
 
 fn check_golden(variant: &dyn Variant, fens: &str, expected: &[u8]) {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let fens = corpus(fens);
     let expected = vectors(expected, schema.width());
     assert_eq!(fens.len(), expected.len(), "corpus and fixture disagree");
@@ -95,7 +95,7 @@ fn the_chess960_golden_vectors_still_hold() {
 
 #[test]
 fn chess960_zeroes_the_features_it_does_not_define() {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let fen = corpus(include_str!("data/fens_chess960.txt"))[0];
     let position = Position::from_fen(fen).expect("a corpus FEN is legal");
     let values = position.facts(&CHESS960).encode(schema, schema.all());
@@ -292,37 +292,25 @@ fn a_move_encodes_to_its_declared_width() {
 fn a_game_supplies_the_repetition_facts_a_position_cannot() {
     let mut game = Game::new(classic());
     let facts = game.facts();
-    assert!(facts.state.history_known);
-    assert!(!facts.state.repetition_seen);
-    assert!(!facts.state.repetition_available[0]);
+    assert!(facts.history.known);
+    assert!(!facts.history.repetition_seen);
+    assert!(!facts.history.repetition_available);
 
     for uci in ["g1f3", "g8f6", "f3g1", "f6g8"] {
         game.play_uci(uci).expect("a legal move");
     }
     let facts = game.facts();
-    assert!(facts.state.repetition_seen);
-    assert!(facts.state.history_known);
-    assert!(!game.position().facts(game.variant()).state.history_known);
+    assert!(facts.history.repetition_seen);
+    assert!(facts.history.known);
+    assert!(!game.position().facts(game.variant()).history.known);
 
-    assert!(
-        facts.state.repetition_available[Side::Us.index()],
-        "Nf3 repeats"
-    );
+    assert!(facts.history.repetition_available, "Nf3 repeats");
     assert_eq!(game.annotated_moves().len(), game.legal_moves().len());
-
-    // A king triangulation, so that after a null move Black's opponent can
-    // walk back into a position the game has already held.
-    let mut game =
-        Game::from_fen(classic(), "k7/8/8/8/8/8/8/K7 b - - 0 1").expect("a legal position");
-    for uci in ["a8b8", "a1b1", "b8a8", "b1b2", "a8b8", "b2a1"] {
-        game.play_uci(uci).expect("a legal move");
-    }
-    assert!(game.facts().state.repetition_available[Side::Them.index()]);
 }
 
 #[test]
 fn a_selected_group_writes_only_its_own_width() {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let facts = facts_of("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
     let all = facts.encode(schema, schema.all());
     let mut at = 0;
@@ -337,7 +325,7 @@ fn a_selected_group_writes_only_its_own_width() {
 
 #[test]
 fn a_bad_row_names_itself() {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let fens = ["8/8/8/4k3/8/8/8/4K3 w - - 0 1", "not a fen"];
     let mut out = vec![0.0f32; fens.len() * schema.width()];
     let error = encode_fens(&CLASSIC, &fens, schema, schema.all(), &mut out)

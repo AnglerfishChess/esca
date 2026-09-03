@@ -315,6 +315,7 @@ impl Side {
 
 pub struct Facts {
     pub state: StateFacts,
+    pub history: HistoryFacts,
     pub material: MaterialFacts,
     pub pawns: PawnFacts,
     pub pieces: PieceFacts,
@@ -351,12 +352,16 @@ pub struct AttackFacts {
     pub by: [SquareSet; 2],
     pub by_pawns: [SquareSet; 2],
     pub by_role: [[SquareSet; 6]; 2],
+    pub attacked: [SquareSet; 2],
     pub hanging: [SquareSet; 2],
     pub en_prise: [SquareSet; 2],
     pub pinned: [SquareSet; 2],
     pub defended: [SquareSet; 2],
+    pub attacked_value: [i32; 2],
     pub hanging_value: [i32; 2],
+    pub en_prise_value: [i32; 2],
     pub en_prise_max_value: [i32; 2],
+    pub pinned_value: [i32; 2],
     pub skewer_candidates: [u8; 2],
     /* the placement the sets were read from */
 }
@@ -419,9 +424,9 @@ Facts are computed from the position and the variant's legal move list, so a
 feature holds under every variant whose rules its definition assumes; the
 schema names which those are (§6). A `Variant` supplies rules, never facts.
 
-The repetition and history facts of `state` come from `Game::facts` and
+The `history` facts other than the halfmove clock come from `Game::facts` and
 `Game::facts_in`, which have the history; `Position::facts` and
-`Position::facts_in` emit them as zero, `history_known` included.
+`Position::facts_in` emit them as zero, `known` included.
 
 ---
 
@@ -433,8 +438,8 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v0 schema of `features.md`: 9 groups, 1065 values.
-    pub fn v0() -> &'static Schema;
+    /// The v1 schema of `features.md`: 14 groups, 1070 values.
+    pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
     pub fn width(&self) -> usize;
@@ -536,8 +541,8 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v0 id is `a40a02ef18e4219b754d0f32410d803f`; its canonical text is checked
-in as `rs_anglerfish/esca/tests/data/schema_v0.txt`.
+The v1 id is `35d58f76bda968e13521215fb7f38321`; its canonical text is checked
+in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ---
 
@@ -596,7 +601,7 @@ impl Variant for Horde {
 
 let game = Game::new(Arc::new(Horde));
 let facts = game.facts();     // unchanged code
-let defined = Schema::v0().features_for(game.variant());
+let defined = Schema::v1().features_for(game.variant());
 ```
 
 The model a variant must fit: an 8×8 board, the six standard roles, two
@@ -653,9 +658,9 @@ f.king.ring_attack_weight[esca.US]
 print(f.summary())
 
 # Schema and batch encoding
-esca.SCHEMA_V0  # Schema
-esca.SCHEMA_ID  # "b8d5…", 32 hex chars
-esca.WIDTH  # 1065
+esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
+esca.SCHEMA_ID  # "35d5…", 32 hex chars
+esca.WIDTH  # 1070
 esca.MOVE_WIDTH  # 24
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
@@ -711,7 +716,7 @@ async with uci.AsyncEngine("stockfish") as engine:  # the same surface, awaited
 ```
 
 Every function that encodes takes keyword-only `variant`, `schema` and
-`groups`, defaulting to `esca.CLASSIC`, `esca.SCHEMA_V0` and every group:
+`groups`, defaulting to `esca.CLASSIC`, `esca.SCHEMA` and every group:
 
 ```python
 esca.encode(fens, *, variant=..., schema=..., groups=None) -> np.ndarray

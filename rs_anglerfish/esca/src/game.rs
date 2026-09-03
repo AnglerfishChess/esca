@@ -4,7 +4,7 @@ use core::fmt;
 use std::sync::Arc;
 
 use crate::error::{FenError, IllegalMove, MoveParseError, PositionError};
-use crate::facts::{AnnotatedMove, Facts, Scratch, Side};
+use crate::facts::{AnnotatedMove, Facts, Scratch};
 use crate::moves::{Move, MoveList};
 use crate::position::Position;
 use crate::variant::{CastlingOutput, DrawClaim, Outcome, Variant};
@@ -186,12 +186,9 @@ impl Game {
     /// The facts of the current position, reusing `scratch`.
     pub fn facts_in(&self, scratch: &mut Scratch) -> Facts {
         let mut facts = self.position().facts_in(self.variant(), scratch);
-        facts.state.history_known = true;
-        facts.state.repetition_seen = self.repetitions() >= 2;
-        facts.state.repetition_available[Side::Us.index()] = self.reaches_history(self.position());
-        if let Some(null) = self.position().null_move() {
-            facts.state.repetition_available[Side::Them.index()] = self.reaches_history(&null);
-        }
+        facts.history.known = true;
+        facts.history.repetition_seen = self.repetitions() >= 2;
+        facts.history.repetition_available = self.reaches_history(self.position());
         facts
     }
 

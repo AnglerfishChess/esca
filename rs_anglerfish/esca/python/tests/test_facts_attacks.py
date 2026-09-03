@@ -38,6 +38,12 @@ BEHIND = "2n3k1/Rrr5/b6b/8/q7/8/3K4/2Q5 w - - 0 1"
 #: A castled middlegame: the pinned f7-pawn is neither hanging nor en prise.
 CASTLED = "3q1rk1/5ppp/3p1n2/8/1bBP4/2N1P3/5PPP/3Q1RK1 w - - 0 1"
 
+#: The white queen is the only unit between the black rook and its own king.
+PINNED_QUEEN = "k3r3/8/8/8/8/8/4Q3/4K3 w - - 0 1"
+
+#: The same board with Black to move, so the pinned queen is theirs.
+PINNED_QUEEN_BLACK = "k3r3/8/8/8/8/8/4Q3/4K3 b - - 0 1"
+
 #: A Chess960 middlegame: three loose pawns a side, and a bishop loose on b3.
 NINE_SIXTY = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10"
 
@@ -138,6 +144,50 @@ def test_the_map_is_kept_per_role_as_well(facts_of: FactsOf, squares: Squares) -
     ("fen", "us", "them"),
     [
         (START, "", ""),
+        (RAYS, "", "a1"),
+        (LOOSE, "c3 d1 f5", "b4 d8"),
+        (CHECKED, "b1", "e2"),
+        (PINS, "b5 c3 e3", "c6"),
+        (PINS_THEIRS, "c6", "b5 c3 e3"),
+        (SKEWERS, "b5 d1 e5", "d5"),
+        (BEHIND, "a7 c1", "a6 b7 c7"),
+        (CASTLED, "c3", "f7"),
+    ],
+    ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "skewers", "behind", "castled"],
+)
+def test_an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
+    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+) -> None:
+    attacks = facts_of(fen).attacks
+    assert set(attacks.attacked[esca.US]) == squares(us)
+    assert set(attacks.attacked[esca.THEM]) == squares(them)
+
+
+@pytest.mark.parametrize(
+    ("fen", "value"),
+    [
+        (START, (0, 0)),
+        (RAYS, (0, 5)),
+        (LOOSE, (9, 8)),
+        (CHECKED, (5, 5)),
+        (PINS, (9, 3)),
+        (PINS_THEIRS, (3, 9)),
+        (SKEWERS, (11, 9)),
+        (BEHIND, (14, 13)),
+        (CASTLED, (3, 1)),
+    ],
+    ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "skewers", "behind", "castled"],
+)
+def test_the_attacked_value_adds_up_what_stands_under_attack(
+    fen: str, value: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).attacks.attacked_value == value
+
+
+@pytest.mark.parametrize(
+    ("fen", "us", "them"),
+    [
+        (START, "", ""),
         (RAYS, "", ""),
         (LOOSE, "d1", "d8"),
         (CHECKED, "b1", ""),
@@ -204,6 +254,25 @@ def test_a_unit_is_en_prise_when_it_hangs_or_a_cheaper_unit_attacks_it(
     [
         (START, (0, 0)),
         (RAYS, (0, 5)),
+        (LOOSE, (8, 8)),
+        (CHECKED, (5, 0)),
+        (PINS, (3, 3)),
+        (PINS_THEIRS, (3, 3)),
+        (SKEWERS, (11, 9)),
+        (BEHIND, (14, 0)),
+        (CASTLED, (3, 0)),
+    ],
+    ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "skewers", "behind", "castled"],
+)
+def test_the_en_prise_value_adds_up_what_stands_en_prise(fen: str, value: tuple[int, int], facts_of: FactsOf) -> None:
+    assert facts_of(fen).attacks.en_prise_value == value
+
+
+@pytest.mark.parametrize(
+    ("fen", "value"),
+    [
+        (START, (0, 0)),
+        (RAYS, (0, 5)),
         (LOOSE, (5, 5)),
         (CHECKED, (5, 0)),
         (PINS, (3, 3)),
@@ -230,8 +299,21 @@ def test_the_en_prise_maximum_is_the_largest_value_standing_en_prise(
         (PINS_THEIRS, "c6", "c3 e3"),
         (BEHIND, "", ""),
         (CASTLED, "", "f7"),
+        (PINNED_QUEEN, "e2", ""),
+        (PINNED_QUEEN_BLACK, "", "e2"),
     ],
-    ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "behind", "castled"],
+    ids=[
+        "start",
+        "rays",
+        "loose",
+        "checked",
+        "pins",
+        "pins_theirs",
+        "behind",
+        "castled",
+        "pinned_queen",
+        "pinned_queen_black",
+    ],
 )
 def test_a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
     fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
@@ -239,6 +321,23 @@ def test_a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
     attacks = facts_of(fen).attacks
     assert set(attacks.pinned[esca.US]) == squares(us)
     assert set(attacks.pinned[esca.THEM]) == squares(them)
+
+
+@pytest.mark.parametrize(
+    ("fen", "value"),
+    [
+        (START, (0, 0)),
+        (LOOSE, (0, 0)),
+        (PINS, (6, 3)),
+        (PINS_THEIRS, (3, 6)),
+        (CASTLED, (0, 1)),
+        (PINNED_QUEEN, (9, 0)),
+        (PINNED_QUEEN_BLACK, (0, 9)),
+    ],
+    ids=["start", "loose", "pins", "pins_theirs", "castled", "pinned_queen", "pinned_queen_black"],
+)
+def test_the_pinned_value_adds_up_what_may_not_move(fen: str, value: tuple[int, int], facts_of: FactsOf) -> None:
+    assert facts_of(fen).attacks.pinned_value == value
 
 
 @pytest.mark.parametrize(

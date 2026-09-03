@@ -28,9 +28,9 @@ fn default_variant() -> PyVariant {
     PyVariant::new(classic())
 }
 
-/// The v0 schema, the default wherever a schema is optional.
+/// The v1 schema, the default wherever a schema is optional.
 fn default_schema() -> PySchema {
-    PySchema::new(Schema::v0())
+    PySchema::new(Schema::v1())
 }
 
 #[pymodule]
@@ -44,6 +44,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<encode::PySchema>()?;
     module.add_class::<facts::PyFacts>()?;
     module.add_class::<facts::PyStateFacts>()?;
+    module.add_class::<facts::PyHistoryFacts>()?;
     module.add_class::<facts::PyMaterialFacts>()?;
     module.add_class::<facts::PyPawnFacts>()?;
     module.add_class::<facts::PyPieceFacts>()?;
@@ -88,9 +89,10 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("THEM", 1usize)?;
     module.add("KING_TO_ROOK", "king_to_rook")?;
     module.add("KING_TWO_SQUARES", "king_two_squares")?;
-    module.add("SCHEMA_V0", default_schema())?;
-    module.add("SCHEMA_ID", Schema::v0().id().to_string())?;
-    module.add("WIDTH", Schema::v0().width())?;
+    module.add("SCHEMA_V1", default_schema())?;
+    module.add("SCHEMA", default_schema())?;
+    module.add("SCHEMA_ID", Schema::v1().id().to_string())?;
+    module.add("WIDTH", Schema::v1().width())?;
     module.add("MOVE_WIDTH", MoveFacts::WIDTH)?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

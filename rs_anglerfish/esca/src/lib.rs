@@ -23,8 +23,8 @@
 //! assert!(facts.pawns.open_files.is_empty());
 //! assert_eq!(facts.tactics[Side::Us.index()].legal_move_count, 29);
 //!
-//! let schema = Schema::v0();
-//! assert_eq!(facts.encode(schema, schema.all()).len(), 1065);
+//! let schema = Schema::v1();
+//! assert_eq!(facts.encode(schema, schema.all()).len(), schema.width());
 //! ```
 
 #![deny(missing_docs)]
@@ -49,9 +49,9 @@ mod variant;
 
 pub use error::{FenError, IllegalMove, MoveParseError, PositionError};
 pub use facts::{
-    AnnotatedMove, AttackFacts, Facts, KingFacts, MaterialFacts, MobilityFacts, MoveFacts,
-    PawnFacts, PieceFacts, PlaneFacts, RowError, Scratch, Side, StateFacts, TacticsFacts,
-    encode_fens, encode_positions,
+    AnnotatedMove, AttackFacts, Facts, HistoryFacts, KingFacts, MaterialFacts, MobilityFacts,
+    MoveFacts, PawnFacts, PieceFacts, PlaneFacts, RowError, Scratch, Side, StateFacts,
+    TacticsFacts, encode_fens, encode_positions,
 };
 pub use game::Game;
 pub use moves::{MAX_MOVES, Move, MoveKind, MoveList};

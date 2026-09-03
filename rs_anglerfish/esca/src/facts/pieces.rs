@@ -81,7 +81,7 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
         facts.trapped_rook[i] = trapped_rook(scan, side, rooks);
 
         facts.outposts[i] = outposts(scan, pawns, side);
-        facts.knights_on_outpost[i] = (knights & facts.outposts[i]).len().min(255) as u8;
+        facts.minors_on_outpost[i] = ((knights | bishops) & facts.outposts[i]).len().min(255) as u8;
         facts.outpost_squares_free[i] = (facts.outposts[i] - scan.occupied).len().min(255) as u8;
         facts.knights_on_rim[i] = knights
             .into_iter()

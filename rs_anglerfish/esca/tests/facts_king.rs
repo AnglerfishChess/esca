@@ -336,7 +336,7 @@ fn the_home_square_bit_is_left_out_of_a_chess960_vector() {
     let facts = facts_under(&CHESS960, NINE_SIXTY_HOME);
     assert_eq!(facts.king.on_home_square, [true, true]);
     assert!(
-        !Schema::v0()
+        !Schema::v1()
             .features_for(&CHESS960)
             .contains("king", "king_on_home_square")
     );
@@ -350,7 +350,7 @@ fn the_castled_zone_bits_are_left_out_of_a_chess960_vector() {
     assert_eq!(facts.king.castled_kingside, [true, true]);
     assert_eq!(facts.king.castled_queenside, [false, false]);
     assert!(
-        !Schema::v0()
+        !Schema::v1()
             .features_for(&CHESS960)
             .contains("king", "king_castled_zone")
     );

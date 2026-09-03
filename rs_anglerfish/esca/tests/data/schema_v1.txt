@@ -1,16 +1,11 @@
-state:1:29
+placement:1:0
+state:2:16
   in_check:1:bit
   double_check:1:bit
   castle_rights:4:bits
   ep_available:1:bit
   ep_file:8:one-hot
   ep_capture_legal:1:bit
-  halfmove_bucket:8:one-hot
-  halfmove_known:1:bit
-  repetition_seen:1:bit
-  repetition_available_us:1:bit
-  repetition_available_them:1:bit
-  history_known:1:bit
 material:1:26
   piece_count:10:count/8|4
   piece_count_diff:5:diff/4
@@ -40,7 +35,7 @@ pawns:1:165
   defended_pawns:2:count/8
   levers:2:count/4
   rams:1:count/8
-pieces:1:35
+pieces:2:35
   bishop_pair:2:bits
   bishops_by_square_colour:4:count/2
   opposite_coloured_bishops:1:bit
@@ -53,12 +48,12 @@ pieces:1:35
   rook_behind_own_passer:2:count/2
   rook_behind_enemy_passer:2:count/2
   trapped_rook:2:bits
-  knights_on_outpost:2:count/2
+  minors_on_outpost:2:count/2
   outpost_squares_free:2:count/4
   knights_on_rim:2:count/2
   minors_undeveloped:2:count/4
   queen_developed:2:bits
-king:2:122
+king:3:120
   king_file:16:one-hot
   king_rank:16:one-hot
   king_on_home_square:2:bits
@@ -72,7 +67,7 @@ king:2:122
   ring_holes:2:count/8
   king_escape_squares:2:count/8
   back_rank_risk:2:bits
-  king_distance:8:one-hot
+  king_distance:6:one-hot
   king_tropism:2:count/8
   virtual_mobility:2:count/27
 mobility:1:39
@@ -86,15 +81,21 @@ mobility:1:39
   extended_centre_control:2:count/16
   immobile_pieces:2:count/4
   total_mobility:2:count/96
-attacks:1:17
+attacks:2:25
   attacked_square_count:3:count/48
+  attacked_count:2:count/8
+  attacked_value:2:count/20
   hanging_count:2:count/4
   hanging_value:2:count/20
   en_prise_count:2:count/4
+  en_prise_value:2:count/20
   en_prise_max_value:2:count/9
   pinned_count:2:count/4
+  pinned_value:2:count/20
   skewer_candidates:2:count/4
   defended_count:2:count/16
+exchange:1:0
+threats:1:0
 tactics:1:120
   us.check_available:1:bit
   us.check_count:1:count/8
@@ -166,6 +167,13 @@ tactics:1:120
   them.legal_move_count:1:count/64
   them.only_moves:1:bit
   them.facts_available:1:bit
+endgame:1:0
+history:1:12
+  halfmove_bucket:8:one-hot
+  halfmove_known:1:bit
+  repetition_seen:1:bit
+  repetition_available_us:1:bit
+  history_known:1:bit
 planes:1:512
   attacked_by_us:64:plane
   attacked_by_them:64:plane

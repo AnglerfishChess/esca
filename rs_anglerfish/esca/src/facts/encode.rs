@@ -88,12 +88,15 @@ fn state(facts: &Facts, w: &mut Writer) {
     w.bit(state.en_passant.is_some());
     w.one_hot(state.en_passant.map(|file| file.index()), 8);
     w.bit(state.ep_capture_legal);
-    w.one_hot(Some(halfmove_bucket(state.halfmove_clock)), 8);
-    w.bit(state.halfmove_known);
-    w.bit(state.repetition_seen);
-    w.bit(state.repetition_available[0]);
-    w.bit(state.repetition_available[1]);
-    w.bit(state.history_known);
+}
+
+fn history(facts: &Facts, w: &mut Writer) {
+    let history = &facts.history;
+    w.one_hot(Some(halfmove_bucket(history.halfmove_clock)), 8);
+    w.bit(history.halfmove_known);
+    w.bit(history.repetition_seen);
+    w.bit(history.repetition_available);
+    w.bit(history.known);
 }
 
 fn material(facts: &Facts, w: &mut Writer) {
@@ -213,7 +216,7 @@ fn pieces(facts: &Facts, w: &mut Writer) {
         w.bit(p.trapped_rook[side.index()]);
     }
     for side in Side::ALL {
-        w.count(p.knights_on_outpost[side.index()] as f32, 2.0);
+        w.count(p.minors_on_outpost[side.index()] as f32, 2.0);
     }
     for side in Side::ALL {
         w.count(p.outpost_squares_free[side.index()] as f32, 4.0);
@@ -281,7 +284,14 @@ fn king(facts: &Facts, w: &mut Writer) {
     for side in Side::ALL {
         w.bit(k.back_rank_risk[side.index()]);
     }
-    w.one_hot(Some(k.distance as usize - 1), 8);
+    // Two kings stand 2 to 7 squares apart; the one-hot has no slot for the
+    // distances a legal position cannot show.
+    w.one_hot(
+        (2..=7)
+            .contains(&k.distance)
+            .then(|| k.distance as usize - 2),
+        6,
+    );
     for side in Side::ALL {
         w.count(k.tropism[side.index()], 8.0);
     }
@@ -358,6 +368,12 @@ fn attacks(facts: &Facts, w: &mut Writer) {
     w.count(a.by[1].len() as f32, 48.0);
     w.diff(a.by[0].len() as f32 - a.by[1].len() as f32, 48.0);
     for side in Side::ALL {
+        w.count(a.attacked[side.index()].len() as f32, 8.0);
+    }
+    for side in Side::ALL {
+        w.count(a.attacked_value[side.index()] as f32, 20.0);
+    }
+    for side in Side::ALL {
         w.count(a.hanging[side.index()].len() as f32, 4.0);
     }
     for side in Side::ALL {
@@ -367,10 +383,16 @@ fn attacks(facts: &Facts, w: &mut Writer) {
         w.count(a.en_prise[side.index()].len() as f32, 4.0);
     }
     for side in Side::ALL {
+        w.count(a.en_prise_value[side.index()] as f32, 20.0);
+    }
+    for side in Side::ALL {
         w.count(a.en_prise_max_value[side.index()] as f32, 9.0);
     }
     for side in Side::ALL {
         w.count(a.pinned[side.index()].len() as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(a.pinned_value[side.index()] as f32, 20.0);
     }
     for side in Side::ALL {
         w.count(a.skewer_candidates[side.index()] as f32, 4.0);
@@ -461,7 +483,11 @@ impl Facts {
             {
                 let mut writer = Writer::new(slice);
                 match group.name {
+                    // Groups with no features yet: their width is zero, so
+                    // nothing is written and no offset moves.
+                    "placement" | "exchange" | "threats" | "endgame" => {}
                     "state" => state(self, &mut writer),
+                    "history" => history(self, &mut writer),
                     "material" => material(self, &mut writer),
                     "pawns" => pawns(self, &mut writer),
                     "pieces" => pieces(self, &mut writer),

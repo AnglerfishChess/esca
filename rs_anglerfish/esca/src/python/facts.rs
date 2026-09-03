@@ -72,8 +72,7 @@ pub(crate) fn facts_group<'py>(
     }
 }
 
-/// Game-state flags: check, castling rights, the en-passant square, the
-/// halfmove clock and repetition.
+/// Game-state flags: check, castling rights and the en-passant square.
 #[pyclass(frozen, module = "esca", name = "StateFacts")]
 pub struct PyStateFacts {
     parent: Py<PyFacts>,
@@ -95,21 +94,6 @@ pub struct PyStateFacts {
     /// Some legal move captures en passant.
     #[pyo3(get)]
     ep_capture_legal: bool,
-    /// Plies since the last capture or pawn move.
-    #[pyo3(get)]
-    halfmove_clock: u32,
-    /// The position carried a halfmove clock.
-    #[pyo3(get)]
-    halfmove_known: bool,
-    /// This position occurred before in the game's history.
-    #[pyo3(get)]
-    repetition_seen: bool,
-    /// Each side can reach a position of the history in one move.
-    #[pyo3(get)]
-    repetition_available: (bool, bool),
-    /// A position history was supplied.
-    #[pyo3(get)]
-    history_known: bool,
 }
 
 impl PyStateFacts {
@@ -122,11 +106,6 @@ impl PyStateFacts {
             castle_long: pair(facts.castle_long),
             en_passant: facts.en_passant.map(|file| file.to_char().to_string()),
             ep_capture_legal: facts.ep_capture_legal,
-            halfmove_clock: facts.halfmove_clock,
-            halfmove_known: facts.halfmove_known,
-            repetition_seen: facts.repetition_seen,
-            repetition_available: pair(facts.repetition_available),
-            history_known: facts.history_known,
         }
     }
 }
@@ -142,6 +121,56 @@ impl PyStateFacts {
         Ok((
             group_reconstructor(py)?,
             (slf.get().parent.clone_ref(py), "state"),
+        ))
+    }
+}
+
+/// What the plies before this position say: the clock, repetition, and how
+/// forcing the recent play was.
+#[pyclass(frozen, module = "esca", name = "HistoryFacts")]
+pub struct PyHistoryFacts {
+    parent: Py<PyFacts>,
+    /// A position history was supplied.
+    #[pyo3(get)]
+    known: bool,
+    /// Plies since the last capture or pawn move.
+    #[pyo3(get)]
+    halfmove_clock: u32,
+    /// The position carried a halfmove clock.
+    #[pyo3(get)]
+    halfmove_known: bool,
+    /// This position occurred before in the game's history.
+    #[pyo3(get)]
+    repetition_seen: bool,
+    /// Some legal move reaches a position of the history.
+    #[pyo3(get)]
+    repetition_available: bool,
+}
+
+impl PyHistoryFacts {
+    fn of(facts: &facts::HistoryFacts, parent: Py<PyFacts>) -> PyHistoryFacts {
+        PyHistoryFacts {
+            parent,
+            known: facts.known,
+            halfmove_clock: facts.halfmove_clock,
+            halfmove_known: facts.halfmove_known,
+            repetition_seen: facts.repetition_seen,
+            repetition_available: facts.repetition_available,
+        }
+    }
+}
+
+#[pymethods]
+impl PyHistoryFacts {
+    fn __repr__(&self) -> String {
+        format!("<HistoryFacts known={}>", self.known)
+    }
+
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
+        let py = slf.py();
+        Ok((
+            group_reconstructor(py)?,
+            (slf.get().parent.clone_ref(py), "history"),
         ))
     }
 }
@@ -353,9 +382,9 @@ pub struct PyPieceFacts {
     /// Outpost squares, per side.
     #[pyo3(get)]
     outposts: (PySquareSet, PySquareSet),
-    /// Knights standing on an own outpost square, per side.
+    /// Knights and bishops standing on an own outpost square, per side.
     #[pyo3(get)]
-    knights_on_outpost: (u8, u8),
+    minors_on_outpost: (u8, u8),
     /// Unoccupied outpost squares, per side.
     #[pyo3(get)]
     outpost_squares_free: (u8, u8),
@@ -388,7 +417,7 @@ impl PyPieceFacts {
             rook_behind_enemy_passer: pair(facts.rook_behind_enemy_passer),
             trapped_rook: pair(facts.trapped_rook),
             outposts: PySquareSet::pair(facts.outposts),
-            knights_on_outpost: pair(facts.knights_on_outpost),
+            minors_on_outpost: pair(facts.minors_on_outpost),
             outpost_squares_free: pair(facts.outpost_squares_free),
             knights_on_rim: pair(facts.knights_on_rim),
             minors_undeveloped: pair(facts.minors_undeveloped),
@@ -593,6 +622,9 @@ pub struct PyAttackFacts {
     /// Each side's attack map by role P, N, B, R, Q, K.
     #[pyo3(get)]
     by_role: (Vec<PySquareSet>, Vec<PySquareSet>),
+    /// Units the opponent attacks, defended or not; never a king.
+    #[pyo3(get)]
+    attacked: (PySquareSet, PySquareSet),
     /// Units attacked by the opponent and not defended; never a king.
     #[pyo3(get)]
     hanging: (PySquareSet, PySquareSet),
@@ -605,12 +637,21 @@ pub struct PyAttackFacts {
     /// Units standing on a square their own side attacks.
     #[pyo3(get)]
     defended: (PySquareSet, PySquareSet),
+    /// Value sum of the attacked units, per side.
+    #[pyo3(get)]
+    attacked_value: (i32, i32),
     /// Value sum of the hanging units, per side.
     #[pyo3(get)]
     hanging_value: (i32, i32),
+    /// Value sum of the units en prise, per side.
+    #[pyo3(get)]
+    en_prise_value: (i32, i32),
     /// Largest value en prise, per side.
     #[pyo3(get)]
     en_prise_max_value: (i32, i32),
+    /// Value sum of the absolutely pinned units, per side.
+    #[pyo3(get)]
+    pinned_value: (i32, i32),
     /// Enemy unit pairs this side's sliders skewer, per side.
     #[pyo3(get)]
     skewer_candidates: (u8, u8),
@@ -624,12 +665,16 @@ impl PyAttackFacts {
             by: PySquareSet::pair(facts.by),
             by_pawns: PySquareSet::pair(facts.by_pawns),
             by_role: set_list_pair(facts.by_role),
+            attacked: PySquareSet::pair(facts.attacked),
             hanging: PySquareSet::pair(facts.hanging),
             en_prise: PySquareSet::pair(facts.en_prise),
             pinned: PySquareSet::pair(facts.pinned),
             defended: PySquareSet::pair(facts.defended),
+            attacked_value: pair(facts.attacked_value),
             hanging_value: pair(facts.hanging_value),
+            en_prise_value: pair(facts.en_prise_value),
             en_prise_max_value: pair(facts.en_prise_max_value),
+            pinned_value: pair(facts.pinned_value),
             skewer_candidates: pair(facts.skewer_candidates),
         }
     }
@@ -997,7 +1042,7 @@ impl PyAnnotatedMove {
     }
 }
 
-/// Everything the v0 schema says about one position, plus its annotated legal
+/// Everything the v1 schema says about one position, plus its annotated legal
 /// moves.
 ///
 /// Pickling re-reads the facts from the position they were computed for, so
@@ -1069,6 +1114,11 @@ impl PyFacts {
     #[getter]
     fn state(slf: &Bound<'_, Self>) -> PyStateFacts {
         PyStateFacts::of(&slf.get().inner.state, slf.clone().unbind())
+    }
+
+    #[getter]
+    fn history(slf: &Bound<'_, Self>) -> PyHistoryFacts {
+        PyHistoryFacts::of(&slf.get().inner.history, slf.clone().unbind())
     }
 
     #[getter]

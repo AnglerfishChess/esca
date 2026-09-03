@@ -48,6 +48,17 @@ const BATTERY: &str = "6k1/8/6r1/2P3r1/8/6p1/2R5/2R3K1 w - - 0 1";
 /// Three outpost squares a side, two of White's held by knights and one of Black's.
 const OUTPOSTS: &str = "6k1/8/3p1p2/1N1Nn3/2P1P3/8/8/6K1 w - - 0 1";
 
+/// The same three White outpost squares, two of them held by a knight and a
+/// bishop; Black has minors on none of its own.
+const MINOR_OUTPOSTS: &str = "7k/8/3p1p2/1N1B4/2P1P3/8/8/6K1 w - - 0 1";
+
+/// The same placement with Black to move: the two occupied outposts are theirs.
+const MINOR_OUTPOSTS_BLACK: &str = "7k/8/3p1p2/1N1B4/2P1P3/8/8/6K1 b - - 0 1";
+
+/// The mirror image: a black knight and a black bishop on black outpost
+/// squares, and White with three free ones.
+const MINOR_OUTPOSTS_MIRROR: &str = "6k1/8/8/2p1p3/1n1b4/3P1P2/7K/8 w - - 0 1";
+
 /// The a7 and h7 pawns veto b5 and g5; the knights stand on no outpost at all.
 const HOLES: &str = "6k1/p6p/8/1N4n1/2P1P3/8/8/6K1 w - - 0 1";
 
@@ -243,15 +254,18 @@ fn an_outpost_square_is_pawn_held_ground_on_ranks_four_to_six(
 
 #[rstest]
 #[case::outposts(OUTPOSTS, [2, 1])]
+#[case::minor_outposts(MINOR_OUTPOSTS, [2, 0])]
+#[case::minor_outposts_black(MINOR_OUTPOSTS_BLACK, [0, 2])]
+#[case::minor_outposts_mirror(MINOR_OUTPOSTS_MIRROR, [0, 2])]
 #[case::flipped(FLIPPED, [1, 0])]
 #[case::holes(HOLES, [0, 0])]
 #[case::rim(RIM, [0, 0])]
 #[case::start(START, [0, 0])]
-fn a_knight_on_an_outpost_stands_on_an_outpost_square_of_its_own_side(
+fn a_minor_on_an_outpost_is_a_knight_or_a_bishop_on_an_own_outpost_square(
     #[case] fen: &str,
-    #[case] knights: [u8; 2],
+    #[case] minors: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.knights_on_outpost, knights);
+    assert_eq!(facts_of(fen).pieces.minors_on_outpost, minors);
 }
 
 #[rstest]
@@ -329,7 +343,7 @@ fn the_piece_facts_of_a_chess960_position_read_the_placement_as_they_find_it() {
 /// classic chess only; the group's last four values are those two facts.
 #[test]
 fn chess960_writes_the_two_facts_that_assume_the_starting_squares_as_zeros() {
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let group = schema.group_set(&["pieces"]).expect("pieces is a group");
     let classic = facts_of(NINE_SIXTY_CLASSIC).encode(schema, group);
     let nine_sixty = facts_under(&CHESS960, NINE_SIXTY_CLASSIC).encode(schema, group);

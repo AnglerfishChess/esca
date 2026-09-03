@@ -23,14 +23,17 @@ def vectors(name: str, rows: int) -> np.ndarray:
     return np.asarray(values, dtype=np.float32).reshape(rows, esca.WIDTH)
 
 
-def test_the_schema_is_the_v0_one() -> None:
-    assert esca.SCHEMA_V0.id == esca.SCHEMA_ID
-    assert (DATA / "schema_v0_id.txt").read_text().strip() == esca.SCHEMA_ID
-    assert esca.SCHEMA_V0.width == esca.WIDTH == 1065
-    assert esca.SCHEMA_V0.canonical() == (DATA / "schema_v0.txt").read_text()
-    assert [group["name"] for group in esca.schema()] == esca.SCHEMA_V0.group_names
-    assert esca.schema()[0] == {"name": "state", "version": 1, "width": 29, "offset": 0}
-    assert esca.SCHEMA_V0.width_of(["state", "pawns"]) == 29 + 165
+def test_the_schema_is_the_v1_one() -> None:
+    assert esca.SCHEMA == esca.SCHEMA_V1
+    assert esca.SCHEMA.id == esca.SCHEMA_ID
+    assert (DATA / "schema_v1_id.txt").read_text().strip() == esca.SCHEMA_ID
+    assert esca.SCHEMA.width == esca.WIDTH == 1070
+    assert esca.SCHEMA.canonical() == (DATA / "schema_v1.txt").read_text()
+    assert [group["name"] for group in esca.schema()] == esca.SCHEMA.group_names
+    assert esca.schema()[0] == {"name": "placement", "version": 1, "width": 0, "offset": 0}
+    assert esca.schema()[1] == {"name": "state", "version": 2, "width": 16, "offset": 0}
+    assert esca.SCHEMA.width_of(["state", "pawns"]) == 16 + 165
+    assert esca.SCHEMA.width_of(["exchange", "threats", "endgame"]) == 0
 
 
 def test_encode_returns_a_contiguous_float32_matrix() -> None:
@@ -59,8 +62,8 @@ def test_a_group_subset_is_the_matching_slice() -> None:
     fens = corpus("fens_classic.txt")[:8]
     whole = esca.encode(fens)
     state = esca.encode(fens, groups=["state"])
-    assert state.shape == (8, 29)
-    assert np.array_equal(state, whole[:, :29])
+    assert state.shape == (8, 16)
+    assert np.array_equal(state, whole[:, :16])
     with pytest.raises(ValueError, match="groups of the schema"):
         esca.encode(fens, groups=["nonsense"])
 
@@ -132,4 +135,4 @@ def test_features_for_drops_what_a_variant_does_not_define() -> None:
     assert ("pieces", "minors_undeveloped") not in chess960
     assert ("king", "king_on_home_square") not in chess960
     assert set(chess960) < set(classic)
-    assert esca.SCHEMA_V0.features_for(esca.CHESS960) == chess960
+    assert esca.SCHEMA.features_for(esca.CHESS960) == chess960

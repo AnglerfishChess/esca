@@ -95,10 +95,10 @@ proptest! {
     }
 }
 
-/// Everything the v0 facts of any position must satisfy.
+/// Everything the v1 facts of any position must satisfy.
 fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCaseError> {
     let fen = position.fen();
-    let schema = Schema::v0();
+    let schema = Schema::v1();
     let facts = position.facts(variant);
     let mut scratch = Scratch::new();
 
@@ -108,7 +108,6 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
 
     let values = facts.encode(schema, schema.all());
     prop_assert_eq!(values.len(), schema.width_of(schema.all()));
-    prop_assert_eq!(values.len(), 1065);
     for (index, value) in values.iter().enumerate() {
         prop_assert!(
             value.is_finite() && (-1.0..=1.0).contains(value),

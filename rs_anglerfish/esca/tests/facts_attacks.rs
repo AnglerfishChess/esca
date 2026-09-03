@@ -36,6 +36,12 @@ const BEHIND: &str = "2n3k1/Rrr5/b6b/8/q7/8/3K4/2Q5 w - - 0 1";
 /// A castled middlegame: the pinned f7-pawn is neither hanging nor en prise.
 const CASTLED: &str = "3q1rk1/5ppp/3p1n2/8/1bBP4/2N1P3/5PPP/3Q1RK1 w - - 0 1";
 
+/// The white queen is the only unit between the black rook and its own king.
+const PINNED_QUEEN: &str = "k3r3/8/8/8/8/8/4Q3/4K3 w - - 0 1";
+
+/// The same board with Black to move, so the pinned queen is theirs.
+const PINNED_QUEEN_BLACK: &str = "k3r3/8/8/8/8/8/4Q3/4K3 b - - 0 1";
+
 /// A Chess960 middlegame: three loose pawns a side, and a bishop loose on b3.
 const NINE_SIXTY: &str = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10";
 
@@ -138,6 +144,40 @@ fn the_map_is_kept_per_role_as_well() {
 
 #[rstest]
 #[case::start(START, "", "")]
+#[case::rays(RAYS, "", "a1")]
+#[case::loose(LOOSE, "c3 d1 f5", "b4 d8")]
+#[case::checked(CHECKED, "b1", "e2")]
+#[case::pins(PINS, "b5 c3 e3", "c6")]
+#[case::pins_theirs(PINS_THEIRS, "c6", "b5 c3 e3")]
+#[case::skewers(SKEWERS, "b5 d1 e5", "d5")]
+#[case::behind(BEHIND, "a7 c1", "a6 b7 c7")]
+#[case::castled(CASTLED, "c3", "f7")]
+fn an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
+    #[case] fen: &str,
+    #[case] us: &str,
+    #[case] them: &str,
+) {
+    let facts = facts_of(fen);
+    assert_eq!(facts.attacks.attacked[Side::Us.index()], squares(us));
+    assert_eq!(facts.attacks.attacked[Side::Them.index()], squares(them));
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::rays(RAYS, [0, 5])]
+#[case::loose(LOOSE, [9, 8])]
+#[case::checked(CHECKED, [5, 5])]
+#[case::pins(PINS, [9, 3])]
+#[case::pins_theirs(PINS_THEIRS, [3, 9])]
+#[case::skewers(SKEWERS, [11, 9])]
+#[case::behind(BEHIND, [14, 13])]
+#[case::castled(CASTLED, [3, 1])]
+fn the_attacked_value_adds_up_what_stands_under_attack(#[case] fen: &str, #[case] value: [i32; 2]) {
+    assert_eq!(facts_of(fen).attacks.attacked_value, value);
+}
+
+#[rstest]
+#[case::start(START, "", "")]
 #[case::rays(RAYS, "", "")]
 #[case::loose(LOOSE, "d1", "d8")]
 #[case::checked(CHECKED, "b1", "")]
@@ -194,6 +234,20 @@ fn a_unit_is_en_prise_when_it_hangs_or_a_cheaper_unit_attacks_it(
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::rays(RAYS, [0, 5])]
+#[case::loose(LOOSE, [8, 8])]
+#[case::checked(CHECKED, [5, 0])]
+#[case::pins(PINS, [3, 3])]
+#[case::pins_theirs(PINS_THEIRS, [3, 3])]
+#[case::skewers(SKEWERS, [11, 9])]
+#[case::behind(BEHIND, [14, 0])]
+#[case::castled(CASTLED, [3, 0])]
+fn the_en_prise_value_adds_up_what_stands_en_prise(#[case] fen: &str, #[case] value: [i32; 2]) {
+    assert_eq!(facts_of(fen).attacks.en_prise_value, value);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::rays(RAYS, [0, 5])]
 #[case::loose(LOOSE, [5, 5])]
 #[case::checked(CHECKED, [5, 0])]
 #[case::pins(PINS, [3, 3])]
@@ -216,6 +270,8 @@ fn the_en_prise_maximum_is_the_largest_value_standing_en_prise(
 #[case::pins_theirs(PINS_THEIRS, "c6", "c3 e3")]
 #[case::behind(BEHIND, "", "")]
 #[case::castled(CASTLED, "", "f7")]
+#[case::pinned_queen(PINNED_QUEEN, "e2", "")]
+#[case::pinned_queen_black(PINNED_QUEEN_BLACK, "", "e2")]
 fn a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
     #[case] fen: &str,
     #[case] us: &str,
@@ -224,6 +280,18 @@ fn a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
     let facts = facts_of(fen);
     assert_eq!(facts.attacks.pinned[Side::Us.index()], squares(us));
     assert_eq!(facts.attacks.pinned[Side::Them.index()], squares(them));
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::loose(LOOSE, [0, 0])]
+#[case::pins(PINS, [6, 3])]
+#[case::pins_theirs(PINS_THEIRS, [3, 6])]
+#[case::castled(CASTLED, [0, 1])]
+#[case::pinned_queen(PINNED_QUEEN, [9, 0])]
+#[case::pinned_queen_black(PINNED_QUEEN_BLACK, [0, 9])]
+fn the_pinned_value_adds_up_what_may_not_move(#[case] fen: &str, #[case] value: [i32; 2]) {
+    assert_eq!(facts_of(fen).attacks.pinned_value, value);
 }
 
 #[rstest]

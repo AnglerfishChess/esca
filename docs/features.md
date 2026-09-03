@@ -1,21 +1,24 @@
-# Feature catalogue v0
+# Feature catalogue v1
 
-Fixed-width vectors of cheaply derivable position facts, fed to the net
-alongside the raw board. Everything here is derivable from the current
-position plus at most one ply of lookahead (the legal move list and the
-attack maps). Rust is the single source of truth; the Python trainer calls
-the same code through the PyO3 binding.
+Fixed-width vectors of cheaply derivable position facts. Everything here is
+derivable from the current position plus at most one ply of lookahead (the
+legal move list, the attack maps and one exchange loop per square), or from a
+supplied game history. Rust is the single source of truth; the Python trainer
+calls the same code through the PyO3 binding.
 
 Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1065 f32 per position | value head, policy head |
+| `position` | one vector of 1070 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
-The raw board (12 piece-colour planes × 64 squares = 768) is **not** part of
-either schema; it is produced separately and is the baseline the augmentation
-is measured against.
+The raw board is the `placement` group, first in the schema order, so that a
+run measuring the augmentation against the board alone selects one group
+rather than building its own input.
+
+[`features-v1.md`](features-v1.md) is the candidate list this catalogue is
+being filled from; it never overrides an entry here.
 
 ---
 
@@ -140,10 +143,18 @@ features are written us-block first, them-block second.
 
 ## 2. Groups
 
-Nine groups, in schema order. "Head" says which head the feature is expected
-to serve: **V** value, **P** policy, **B** both.
+Fourteen groups, in schema order. "Head" says which head the feature is
+expected to serve: **V** value, **P** policy, **B** both.
 
-### 2.1 `state` — game-state flags (width 29)
+A group with no features is named and ordered anyway: its width is 0, it
+writes nothing, and the group after it keeps its offset when the empty one is
+filled.
+
+### 2.1 `placement` — piece planes (width 0)
+
+Reserved. No features yet.
+
+### 2.2 `state` — game-state flags (width 16)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -153,18 +164,10 @@ to serve: **V** value, **P** policy, **B** both.
 | `ep_available` | 1 | bit: the FEN names an en-passant file | A | P |
 | `ep_file` | 8 | one-hot, zeros when none | A | P |
 | `ep_capture_legal` | 1 | bit: some legal move actually captures en passant | C | P |
-| `halfmove_bucket` | 8 | one-hot over 0 / 1–3 / 4–9 / 10–19 / 20–39 / 40–69 / 70–89 / 90 and above | A | V |
-| `halfmove_known` | 1 | bit: the caller supplied a halfmove clock | A | V |
-| `repetition_seen` | 1 | bit: this position occurred before in the supplied history | A | V |
-| `repetition_available_us` | 1 | bit: some legal move reaches a position in the history | C | V |
-| `repetition_available_them` | 1 | bit: same, after a null move | C | V |
-| `history_known` | 1 | bit: the caller supplied a position history | A | V |
 
-The Lichess evaluation dump carries 4-field FENs (no halfmove clock, no move
-number). With that source `halfmove_known` and `history_known` are 0 for every
-training row — see [§5](#5-open-questions).
+The clock and the repetition facts are the `history` group's ([§2.13](#213-history--what-the-plies-before-say-width-12)).
 
-### 2.2 `material` — material and phase (width 26)
+### 2.3 `material` — material and phase (width 26)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -178,7 +181,7 @@ training row — see [§5](#5-open-questions).
 | `pawns_only` | 1 | bit: no piece other than kings and pawns | A | V |
 | `insufficient_material` | 2 | bit per side: no pawn, rook or queen, and either at most one minor or no knight and bishops of a single square colour | A | V |
 
-### 2.3 `pawns` — pawn structure (width 165)
+### 2.4 `pawns` — pawn structure (width 165)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -201,7 +204,7 @@ training row — see [§5](#5-open-questions).
 | `levers` | 2 | count per side, / 4 | A | P |
 | `rams` | 1 | count of blocked pawn pairs, / 8 | A | V |
 
-### 2.4 `pieces` — bishops, rooks, knights, queens (width 35)
+### 2.5 `pieces` — bishops, rooks, knights, queens (width 35)
 
 Every row is a pair: us then them.
 
@@ -219,13 +222,13 @@ Every row is a pair: us then them.
 | `rook_behind_own_passer` | 2 | count / 2 | A | V |
 | `rook_behind_enemy_passer` | 2 | count / 2 | A | V |
 | `trapped_rook` | 2 | bit: a rook with ≤2 non-capture destinations, on a file beyond its own king's on the wing the king stands on, its side having lost both castling rights | B | V |
-| `knights_on_outpost` | 2 | count / 2 | B | V |
+| `minors_on_outpost` | 2 | knights and bishops on an own outpost square, count / 2 | B | V |
 | `outpost_squares_free` | 2 | count of unoccupied outpost squares, / 4 | A | P |
 | `knights_on_rim` | 2 | count on files a/h or relative ranks 1/8, / 2 | A | V |
 | `minors_undeveloped` | 2 | knights and bishops still on their classic starting squares b1, c1, f1, g1 relative, / 4 | A | V |
 | `queen_developed` | 2 | bit: a queen stands off its classic starting square d1 relative | A | V |
 
-### 2.5 `king` — king safety and shelter (width 122)
+### 2.6 `king` — king safety and shelter (width 120)
 
 Every row is a pair: our king then their king, unless noted.
 
@@ -244,11 +247,11 @@ Every row is a pair: our king then their king, unless noted.
 | `ring_holes` | 2 | ring squares attacked by the enemy and not defended, / 8 | A | V |
 | `king_escape_squares` | 2 | adjacent squares that are empty or capturable and not attacked, / 8 | A | V |
 | `back_rank_risk` | 2 | bit: king on its relative rank 1 with every forward-adjacent square occupied by a friendly unit | A | V |
-| `king_distance` | 8 | one-hot over Chebyshev distance 1–8 between the kings, shared | A | V |
+| `king_distance` | 6 | one-hot over Chebyshev distance 2–7 between the kings, shared; two kings stand neither nearer nor further apart | A | V |
 | `king_tropism` | 2 | mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king, 0 when it has none, / 8 | B | V |
 | `virtual_mobility` | 2 | see glossary, / 27 | A | V |
 
-### 2.6 `mobility` — mobility and space (width 39)
+### 2.7 `mobility` — mobility and space (width 39)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
@@ -266,20 +269,32 @@ Every row is a pair: our king then their king, unless noted.
 `immobile_pieces` reads a unit's destinations off its attack map alone, so a
 piece under an absolute pin is not immobile.
 
-### 2.7 `attacks` — attack-map summary (width 17)
+### 2.8 `attacks` — attack-map summary (width 25)
 
 | Feature | Width | Encoding | Cost | Head |
 |---|---|---|---|---|
 | `attacked_square_count` | 3 | us, them, difference, / 48 | A | V |
+| `attacked_count` | 2 | per side, own units the opponent attacks, defended or not, / 8 | A | B |
+| `attacked_value` | 2 | per side, value sum of those, / 20 | B | B |
 | `hanging_count` | 2 | per side, / 4 | A | B |
 | `hanging_value` | 2 | per side, value sum of hanging units, / 20 | B | B |
 | `en_prise_count` | 2 | per side, / 4 | B | B |
+| `en_prise_value` | 2 | per side, value sum of the units en prise, / 20 | B | B |
 | `en_prise_max_value` | 2 | per side, largest value en prise, / 9 | B | B |
 | `pinned_count` | 2 | per side, absolute pins, / 4 | B | B |
+| `pinned_value` | 2 | per side, value sum of those, / 20 | B | B |
 | `skewer_candidates` | 2 | per side, / 4 | B | P |
 | `defended_count` | 2 | per side, own units that are defended, / 16 | A | V |
 
-### 2.8 `tactics` — one-ply tactics (width 120)
+### 2.9 `exchange` — static exchange evaluation (width 0)
+
+Reserved. No features yet.
+
+### 2.10 `threats` — what is about to be lost (width 0)
+
+Reserved. No features yet.
+
+### 2.11 `tactics` — one-ply tactics (width 120)
 
 The same 60-wide block twice: `tactics.us` then `tactics.them`, the second
 computed after a null move. The schema names the two blocks' features
@@ -323,7 +338,28 @@ computed after a null move. The schema names the two blocks' features
 | `only_moves` | 1 | bit: at most 2 legal moves | C | V |
 | `facts_available` | 1 | bit: 0 when the block could not be computed (in check, for the them block) | A | B |
 
-### 2.9 `planes` — attack and status bitboards (width 512)
+### 2.12 `endgame` — endgame facts (width 0)
+
+Reserved. No features yet.
+
+### 2.13 `history` — what the plies before say (width 12)
+
+The halfmove clock is the position's own; every other value is 0 with
+`history_known` = 0 unless the caller supplies a game.
+
+| Feature | Width | Encoding | Cost | Head |
+|---|---|---|---|---|
+| `halfmove_bucket` | 8 | one-hot over 0 / 1–3 / 4–9 / 10–19 / 20–39 / 40–69 / 70–89 / 90 and above | A | V |
+| `halfmove_known` | 1 | bit: the position carried a halfmove clock | A | V |
+| `repetition_seen` | 1 | bit: this position occurred before in the supplied history | A | V |
+| `repetition_available_us` | 1 | bit: some legal move reaches a position in the history | C | V |
+| `history_known` | 1 | bit: the caller supplied a position history | A | V |
+
+The Lichess evaluation dump carries 4-field FENs (no halfmove clock, no move
+number), so the whole group is constant across it — see
+[§5](#5-open-questions).
+
+### 2.14 `planes` — attack and status bitboards (width 512)
 
 Eight 64-square planes, in the mover's view. This group carries most of the
 width and is the natural first ablation target.
@@ -339,21 +375,26 @@ width and is the natural first ablation target.
 | `our_pinned` | our units under an absolute pin | B | B |
 | `their_pinned` | their units under an absolute pin | B | B |
 
-### 2.10 Totals
+### 2.15 Totals
 
 | Group | Width | Dominant cost |
 |---|---|---|
-| `state` | 29 | A |
+| `placement` | 0 | A |
+| `state` | 16 | A |
 | `material` | 26 | A |
 | `pawns` | 165 | A |
 | `pieces` | 35 | A/B |
-| `king` | 122 | A/B |
+| `king` | 120 | A/B |
 | `mobility` | 39 | B |
-| `attacks` | 17 | B |
+| `attacks` | 25 | B |
+| `exchange` | 0 | — |
+| `threats` | 0 | — |
 | `tactics` | 120 | C, plus 2 features at D |
+| `endgame` | 0 | — |
+| `history` | 12 | A |
 | `planes` | 512 | A |
-| **total** | **1065** | |
-| total without `planes` | 553 | |
+| **total** | **1070** | |
+| total without `placement` and `planes` | 558 | |
 
 ---
 
@@ -401,13 +442,13 @@ computes them itself where it needs them.
 
 ## 5. Open questions
 
-1. **Clock and repetition in training.** The Lichess dump has 4-field FENs, so
-   `halfmove_*`, `repetition_*` and `history_known` are constant-zero across
-   the whole training set. A feature that is always "unknown" during training
-   is unusable at play time. Either drop the 13 affected values from the
-   trained schema, or find a second source that carries clocks (game PGNs).
-   v0 keeps them in the schema and excludes them from the trained group list.
-2. **`planes` width.** 512 of 1065 values. Ablation (§7) decides whether it
+1. **Clock and history in training.** The Lichess dump has 4-field FENs, so
+   the whole `history` group is constant across the training set. A feature
+   that is always "unknown" during training is unusable at play time. Either
+   omit the group from the trained schema — it is a group of its own so that
+   this costs one name — or find a second source that carries clocks (game
+   PGNs).
+2. **`planes` width.** 512 of 1070 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -423,13 +464,14 @@ A schema is an ordered list of groups. Each group has a name, an integer
 version, a width and an ordered list of feature entries.
 
 ```
-schema_semver = "0.1.0"
+schema_semver = "1.0.0"
 groups = [
-  { name = "state",    version = 1, width =  29, offset =   0 },
-  { name = "material", version = 1, width =  26, offset =  29 },
+  { name = "placement", version = 1, width =   0, offset =   0 },
+  { name = "state",     version = 2, width =  16, offset =   0 },
+  { name = "material",  version = 1, width =  26, offset =  16 },
   ...
 ]
-schema_id = "a40a02ef18e4219b754d0f32410d803f"   # 128-bit, hex
+schema_id = "35d58f76bda968e13521215fb7f38321"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering
@@ -446,7 +488,7 @@ changes, and only then.
 `bit`, `bits`, `one-hot`, `mask8`, `plane`, `ratio`, `count/S` and `diff/S`,
 where `S` is the feature's scale; `count/8|4` marks `piece_count`, whose scale
 is 8 for pawns and 4 for the rest. The full text is checked in as
-`rs_anglerfish/esca/tests/data/schema_v0.txt`.
+`rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ### Contract
 
@@ -463,6 +505,7 @@ is 8 for pawns and 4 for the rest. The full text is checked in as
 |---|---|---|
 | Append a new group at the end | New `schema_id`; old groups untouched | keep working — their manifest names a subset the extractor still emits |
 | Add or reorder features inside a group | Bump that group's version; it becomes a distinct group id | keep working while the previous version's implementation is retained |
+| Give a group of width 0 its first features | Bump that group's version; every later group's offset moves | stop working; refused at load |
 | Remove a group | Bump `schema_semver` major | stop working; refused at load |
 
 At most two versions of any group are kept compiled. Dropping an old version
@@ -476,8 +519,8 @@ is a major release.
 
 | Run | Input |
 |---|---|
-| `B0` baseline | board planes only (768) |
-| `B1` augmented | board planes + all groups (768 + 1065) |
+| `B0` baseline | `placement` only |
+| `B1` augmented | every group |
 | `A-<group>` | `B1` minus one group |
 | `S-<group>` | `B0` plus one group only |
 
