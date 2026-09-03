@@ -43,6 +43,8 @@ mod position;
 mod python;
 mod schema;
 mod types;
+#[cfg(feature = "uci")]
+pub mod uci;
 mod variant;
 
 pub use error::{FenError, IllegalMove, MoveParseError, PositionError};
