@@ -36,6 +36,8 @@ mod game;
 #[cfg(feature = "lichess")]
 pub mod lichess;
 mod moves;
+#[cfg(feature = "pgn")]
+pub mod pgn;
 mod position;
 #[cfg(feature = "python")]
 mod python;

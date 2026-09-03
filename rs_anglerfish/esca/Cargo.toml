@@ -20,6 +20,8 @@ crate-type = ["cdylib", "rlib"]
 default = []
 # The dump reader.
 lichess = ["dep:serde", "dep:serde_json", "dep:zstd"]
+# PGN reading and writing.
+pgn = []
 # The PyO3 module and its batch encoders. A wheel adds
 # `pyo3/extension-module` on top; a test binary links the interpreter instead.
 python = ["dep:numpy", "dep:pyo3", "dep:rayon"]
