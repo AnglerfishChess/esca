@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1930 f32 per position | value head, policy head |
+| `position` | one vector of 1947 f32 per position | value head, policy head |
 | `move` | one vector of 40 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -56,8 +56,12 @@ feature distinguishes actual White from actual Black.
 | **safe check** | A checking move whose destination is a safe destination. |
 | **king ring** | The up-to-8 squares adjacent to a king. A king does not defend its own ring: its own attacks are left out of "defended" there. |
 | **ring attacker** | An enemy knight, bishop, rook or queen attacking a king ring square. Pawns and the enemy king do not count. The same set is what tropism averages over. |
+| **ring defender** | A knight, bishop, rook or queen of the king's own side attacking a king ring square. Pawns and the king itself do not count, so the set mirrors the ring attackers exactly. |
 | **king files** | The three files a king's shelter and storm are read on: the king's own file clamped to b–g, and its two neighbours, in ascending order. |
 | **virtual mobility** | The number of squares a queen placed on our own king's square would attack. A cheap proxy for how exposed the king is. |
+| **open ray** | One of the eight directions from a king, when it holds at least one square of the board and every one of them, out to the edge, is empty. A direction that leaves the board at once — southward from a king on its first rank — holds no square and is therefore not open. |
+| **luft** | A king on its relative rank 1 with at least one of the up-to-three squares diagonally or straight ahead of it empty and unattacked by the enemy. A king off its relative rank 1 has none. |
+| **castled side** | Read off the king's square and the castling rights alone, never off the moves played: *short* when the side has no castling right left and its king stands on files g or h, *long* when it has none left and its king stands on files a to c, *none* otherwise. The rights are the ones the position declares, the same ones `state.castle_short` and `castle_long` report, so a right the side could not in fact exercise still counts as one held. |
 
 ### Values and exchange
 
@@ -318,7 +322,7 @@ Every row is a pair: us then them.
 | `minors_undeveloped` | 2 | knights and bishops still on their classic starting squares b1, c1, f1, g1 relative, / 4 | A | V |
 | `queen_developed` | 2 | bit: a queen stands off its classic starting square d1 relative | A | V |
 
-### 2.6 `king` — king safety and shelter (width 120)
+### 2.6 `king` — king safety and shelter (width 137)
 
 Every row is a pair: our king then their king, unless noted.
 
@@ -340,6 +344,24 @@ Every row is a pair: our king then their king, unless noted.
 | `king_distance` | 6 | one-hot over Chebyshev distance 2–7 between the kings, shared; two kings stand neither nearer nor further apart | A | V |
 | `king_tropism` | 2 | mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king, 0 when it has none, / 8 | B | V |
 | `virtual_mobility` | 2 | see glossary, / 27 | A | V |
+| `ring_defenders` | 2 | count of ring defenders, / 6 | B | V |
+| `ring_defence_weight` | 2 | Σ over defenders of (N,B = 1, R = 2, Q = 4), / 16 | B | V |
+| `ring_attacker_surplus` | 2 | `ring_attack_weight` less `ring_defence_weight`, / 16 | B | V |
+| `open_rays_to_king` | 2 | open rays from the king, / 8 | A | V |
+| `luft` | 2 | bit: the king has luft | A | V |
+| `castled_side` | 6 | per side, one-hot 3 over short / long / none; classic chess only | A | V |
+| `opposite_side_castling` | 1 | bit: the two kings stand on opposite wings, shared | A | V |
+
+`ring_defenders` counts the pieces bearing on the ring where `ring_defended`
+counts the squares they cover, so a lone rook raking three ring squares is one
+defender. `ring_attacker_surplus` is signed: it is negative for the king whose
+own side outweighs the besiegers.
+
+`castled_side` reads the geometry, not the game: a king that walked to g1 and
+lost its rights is short, a king holding a right is none wherever it stands,
+and a king that castled and then walked back to the centre is none again.
+Chess960 starts kings anywhere on the first rank, so the feature is written as
+zeros there, as §4 says.
 
 ### 2.7 `mobility` — mobility and space (width 39)
 
@@ -545,7 +567,7 @@ width and is the natural first ablation target.
 | `material` | 26 | A |
 | `pawns` | 195 | A |
 | `pieces` | 35 | A/B |
-| `king` | 120 | A/B |
+| `king` | 137 | A/B |
 | `mobility` | 39 | B |
 | `attacks` | 25 | B |
 | `exchange` | 8 | C·E |
@@ -554,8 +576,8 @@ width and is the natural first ablation target.
 | `endgame` | 15 | A |
 | `history` | 27 | A |
 | `planes` | 512 | A |
-| **total** | **1930** | |
-| total without `placement` and `planes` | 650 | |
+| **total** | **1947** | |
+| total without `placement` and `planes` | 667 | |
 
 ---
 
@@ -623,7 +645,7 @@ computes them itself where it needs them.
 | Piece-square tables and any hand-tuned score | The net learns them from the board planes. |
 | Move number / opening classification | Absent from the training source, and phase already covers what it would proxy. |
 | Absolute colour | The mover's-view flip removes it; nothing in chess depends on it. |
-| Chess960 castling geometry | Four features assume the classic starting squares and are defined for classic chess only: `pieces.minors_undeveloped`, `pieces.queen_developed`, `king.king_on_home_square`, `king.king_castled_zone`. Under another variant they are written as zeros, so widths and offsets do not move. Every other feature is 960-safe. |
+| Chess960 castling geometry | Five features assume the classic starting squares and are defined for classic chess only: `pieces.minors_undeveloped`, `pieces.queen_developed`, `king.king_on_home_square`, `king.king_castled_zone`, `king.castled_side`. Under another variant they are written as zeros, so widths and offsets do not move. Every other feature is 960-safe. |
 | Game history beyond the plies a `Game` holds | The library does not track games; the caller passes what it knows, and `history` reports what the plies it was given say. |
 
 ---
@@ -636,7 +658,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1930 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1947 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -658,7 +680,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "16606f2b054a3281622fd2296f5ca13d"   # 128-bit, hex
+schema_id = "8030a54d6f6a11e0efa97d3f90117baa"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

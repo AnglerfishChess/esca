@@ -10,7 +10,8 @@ use crate::variant::Variant;
 
 use super::pawns::files_of;
 use super::{
-    DrawishMaterial, ExchangeFacts, Facts, MoveFacts, Opposition, Scratch, Side, TacticsFacts,
+    CastledSide, DrawishMaterial, ExchangeFacts, Facts, MoveFacts, Opposition, Scratch, Side,
+    TacticsFacts,
 };
 
 /// A cursor over the values of one group.
@@ -360,6 +361,35 @@ fn king(facts: &Facts, w: &mut Writer) {
     for side in Side::ALL {
         w.count(k.virtual_mobility[side.index()] as f32, 27.0);
     }
+    for side in Side::ALL {
+        w.count(k.ring_defenders[side.index()] as f32, 6.0);
+    }
+    for side in Side::ALL {
+        w.count(k.ring_defence_weight[side.index()] as f32, 16.0);
+    }
+    let surplus = k.ring_attacker_surplus();
+    for side in Side::ALL {
+        w.diff(surplus[side.index()] as f32, 16.0);
+    }
+    for side in Side::ALL {
+        w.count(k.open_rays[side.index()] as f32, 8.0);
+    }
+    for side in Side::ALL {
+        w.bit(k.luft[side.index()]);
+    }
+    // The third slot is "castled neither way", so one of the three is always
+    // set.
+    for side in Side::ALL {
+        w.one_hot(
+            Some(match k.castled_side[side.index()] {
+                Some(CastledSide::Short) => 0,
+                Some(CastledSide::Long) => 1,
+                None => 2,
+            }),
+            3,
+        );
+    }
+    w.bit(k.opposite_side_castling);
 }
 
 /// Which of "one rank ahead / two / three or more / none" a shield distance is.

@@ -53,6 +53,14 @@ NINE_SIXTY_HOME = "nnqrkrbb/pppppppp/8/8/8/8/PPPPPPPP/NNQRKRBB w FDfd - 0 1"
 #: A Chess960 array whose kings start on g1 and g8, castled zone and all.
 NINE_SIXTY_WING = "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w HFhf - 0 1"
 
+#: The same array with the rights spent: a static read calls both kings castled
+#: short although neither has moved.
+NINE_SIXTY_SPENT = "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w - - 0 1"
+
+#: A right the position declares but could never play: White's king already
+#: stands on g1 and the FEN still claims the long one.
+STALE_RIGHT = "r1q2rk1/1pb2pp1/p1n3np/P1NpPb2/1P3B2/2P2N2/3Q1PPP/R3R1K1 w Q - 0 1"
+
 #: The helper `conftest.py` hands over.
 FactsOf = Callable[..., esca.Facts]
 
@@ -419,3 +427,167 @@ def test_the_castled_zone_bits_are_left_out_of_a_chess960_vector(facts_of: Facts
     assert facts.king.castled_kingside == (True, True)
     assert facts.king.castled_queenside == (False, False)
     assert ("king", "king_castled_zone") not in esca.features_for(esca.CHESS960)
+
+
+@pytest.mark.parametrize(
+    ("fen", "defenders"),
+    [
+        (START, (5, 5)),
+        (DEVELOPED, (4, 3)),
+        (UNCASTLED, (2, 2)),
+        (SIEGE, (2, 2)),
+        (HOLES, (1, 0)),
+        (ENDGAME, (0, 0)),
+        (BARE_KINGS, (0, 0)),
+    ],
+    ids=["start", "developed", "uncastled", "siege", "holes", "endgame", "bare_kings"],
+)
+def test_a_ring_defender_is_a_friendly_piece_bearing_on_a_square_next_to_the_king(
+    fen: str, defenders: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.ring_defenders == defenders
+
+
+@pytest.mark.parametrize(
+    ("fen", "weight"),
+    [
+        (START, (8, 8)),
+        (DEVELOPED, (8, 7)),
+        (UNCASTLED, (4, 4)),
+        (SIEGE, (3, 3)),
+        (HOLES, (2, 0)),
+        (ENDGAME, (0, 0)),
+        (BARE_KINGS, (0, 0)),
+    ],
+    ids=["start", "developed", "uncastled", "siege", "holes", "endgame", "bare_kings"],
+)
+def test_ring_defence_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
+    fen: str, weight: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.ring_defence_weight == weight
+
+
+@pytest.mark.parametrize(
+    ("fen", "surplus"),
+    [
+        (START, (-8, -8)),
+        (DEVELOPED, (-8, -6)),
+        (UNCASTLED, (-4, -4)),
+        (SIEGE, (5, 4)),
+        (HOLES, (2, 2)),
+        (CORNERS, (0, 0)),
+        (ENDGAME, (0, 0)),
+    ],
+    ids=["start", "developed", "uncastled", "siege", "holes", "corners", "endgame"],
+)
+def test_the_ring_attacker_surplus_is_the_besieging_weight_less_the_defending_one(
+    fen: str, surplus: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.ring_attacker_surplus == surplus
+
+
+@pytest.mark.parametrize(
+    ("fen", "rays"),
+    [
+        (START, (0, 0)),
+        (DEVELOPED, (1, 1)),
+        (SIEGE, (1, 2)),
+        (CORNERS, (2, 2)),
+        (HOLES, (3, 7)),
+        (ENDGAME, (6, 6)),
+        (BARE_KINGS, (8, 5)),
+    ],
+    ids=["start", "developed", "siege", "corners", "holes", "endgame", "bare_kings"],
+)
+def test_an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
+    fen: str, rays: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.open_rays == rays
+
+
+@pytest.mark.parametrize(
+    ("fen", "luft"),
+    [
+        (START, (False, False)),
+        (SIEGE, (False, False)),
+        (ENDGAME, (False, False)),
+        (UNCASTLED, (True, False)),
+        (UNCASTLED_THEIRS, (False, True)),
+        (CORNERS, (True, True)),
+        (BOXED, (True, False)),
+        (BARE_KINGS, (False, True)),
+    ],
+    ids=[
+        "start",
+        "siege",
+        "endgame",
+        "uncastled",
+        "uncastled_theirs",
+        "corners",
+        "boxed",
+        "bare_kings",
+    ],
+)
+def test_luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_rank(
+    fen: str, luft: tuple[bool, bool], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.luft == luft
+
+
+@pytest.mark.parametrize(
+    ("fen", "castled"),
+    [
+        (START, (None, None)),
+        (ENDGAME, (None, None)),
+        (DEVELOPED, ("short", "short")),
+        (UNCASTLED, (None, "short")),
+        (UNCASTLED_THEIRS, ("short", None)),
+        (CORNERS, ("short", "long")),
+        (SIEGE, ("short", "long")),
+        (BARE_KINGS, (None, "short")),
+        (STALE_RIGHT, (None, "short")),
+    ],
+    ids=[
+        "start",
+        "endgame",
+        "developed",
+        "uncastled",
+        "uncastled_theirs",
+        "corners",
+        "siege",
+        "bare_kings",
+        "stale_right",
+    ],
+)
+def test_a_castled_side_is_the_kings_own_file_once_its_rights_are_spent(
+    fen: str, castled: tuple[str | None, str | None], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.castled_side == castled
+
+
+@pytest.mark.parametrize(
+    ("fen", "opposite"),
+    [
+        (START, False),
+        (DEVELOPED, False),
+        (UNCASTLED, False),
+        (CORNERS, True),
+        (SIEGE, True),
+        (HOLES, True),
+        (ENDGAME, True),
+        (BARE_KINGS, True),
+    ],
+    ids=["start", "developed", "uncastled", "corners", "siege", "holes", "endgame", "bare_kings"],
+)
+def test_opposite_side_castling_is_the_two_kings_standing_on_different_wings(
+    fen: str, opposite: bool, facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).king.opposite_side_castling is opposite
+
+
+def test_the_castled_side_is_left_out_of_a_chess960_vector(facts_of: FactsOf) -> None:
+    """The same for `castled_side`: a Chess960 array can spend its rights with the
+    kings still on the squares they started on, and no castling ever played."""
+    facts = facts_of(NINE_SIXTY_SPENT, esca.CHESS960)
+    assert facts.king.castled_side == ("short", "short")
+    assert ("king", "castled_side") not in esca.features_for(esca.CHESS960)

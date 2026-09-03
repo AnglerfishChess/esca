@@ -388,7 +388,7 @@ static PIECES: [FeatureSpec; 17] = feature_specs! {
     "queen_developed", 2, "bits", CLASSIC_ONLY;
 };
 
-static KING: [FeatureSpec; 16] = feature_specs! {
+static KING: [FeatureSpec; 23] = feature_specs! {
     "king_file", 16, "one-hot", ANY;
     "king_rank", 16, "one-hot", ANY;
     "king_on_home_square", 2, "bits", CLASSIC_ONLY;
@@ -405,6 +405,13 @@ static KING: [FeatureSpec; 16] = feature_specs! {
     "king_distance", 6, "one-hot", ANY;
     "king_tropism", 2, "count/8", ANY;
     "virtual_mobility", 2, "count/27", ANY;
+    "ring_defenders", 2, "count/6", ANY;
+    "ring_defence_weight", 2, "count/16", ANY;
+    "ring_attacker_surplus", 2, "diff/16", ANY;
+    "open_rays_to_king", 2, "count/8", ANY;
+    "luft", 2, "bits", ANY;
+    "castled_side", 6, "one-hot", CLASSIC_ONLY;
+    "opposite_side_castling", 1, "bit", ANY;
 };
 
 static MOBILITY: [FeatureSpec; 10] = feature_specs! {
@@ -602,8 +609,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "king",
-        version: 3,
-        width: 120,
+        version: 4,
+        width: 137,
         features: &KING,
     },
     GroupSpec {
@@ -679,7 +686,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1930);
+        assert_eq!(Schema::v1().width(), 1947);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

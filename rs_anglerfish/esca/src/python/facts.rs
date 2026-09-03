@@ -618,6 +618,27 @@ pub struct PyKingFacts {
     /// Squares a queen on this king's square would attack, per side.
     #[pyo3(get)]
     virtual_mobility: (u8, u8),
+    /// Own knights, bishops, rooks and queens attacking the ring, per side.
+    #[pyo3(get)]
+    ring_defenders: (u8, u8),
+    /// Sum over those defenders of N, B = 1, R = 2, Q = 4, per side.
+    #[pyo3(get)]
+    ring_defence_weight: (u8, u8),
+    /// Directions from the king holding at least one square, all of them empty
+    /// out to the edge, per side.
+    #[pyo3(get)]
+    open_rays: (u8, u8),
+    /// The king stands on its relative rank 1 with a square ahead of it empty
+    /// and unattacked, per side.
+    #[pyo3(get)]
+    luft: (bool, bool),
+    /// `"short"`, `"long"` or `None`, per side; read off the king's square and
+    /// its spent castling rights.
+    #[pyo3(get)]
+    castled_side: (Option<String>, Option<String>),
+    /// The two kings stand on opposite wings.
+    #[pyo3(get)]
+    opposite_side_castling: bool,
 }
 
 impl PyKingFacts {
@@ -643,12 +664,39 @@ impl PyKingFacts {
             distance: facts.distance,
             tropism: pair(facts.tropism),
             virtual_mobility: pair(facts.virtual_mobility),
+            ring_defenders: pair(facts.ring_defenders),
+            ring_defence_weight: pair(facts.ring_defence_weight),
+            open_rays: pair(facts.open_rays),
+            luft: pair(facts.luft),
+            castled_side: (
+                facts.castled_side[0].map(castled_side_name),
+                facts.castled_side[1].map(castled_side_name),
+            ),
+            opposite_side_castling: facts.opposite_side_castling,
         }
     }
 }
 
+/// The name a castled side carries in Python.
+fn castled_side_name(side: facts::CastledSide) -> String {
+    match side {
+        facts::CastledSide::Short => "short",
+        facts::CastledSide::Long => "long",
+    }
+    .to_string()
+}
+
 #[pymethods]
 impl PyKingFacts {
+    /// The weight besieging each king's ring, less the weight defending it.
+    #[getter]
+    fn ring_attacker_surplus(&self) -> (i32, i32) {
+        (
+            i32::from(self.ring_attack_weight.0) - i32::from(self.ring_defence_weight.0),
+            i32::from(self.ring_attack_weight.1) - i32::from(self.ring_defence_weight.1),
+        )
+    }
+
     fn __repr__(&self) -> String {
         format!("<KingFacts square={:?}>", self.square)
     }

@@ -6,8 +6,10 @@
 mod common;
 
 use common::{facts_of, facts_under};
-use esca::{CHESS960, Rank, Schema, Side};
+use esca::{CHESS960, CastledSide, Rank, Schema, Side};
 use rstest::rstest;
+
+use CastledSide::{Long, Short};
 
 /// The untouched array: both kings home, walled in by their own first rank.
 const START: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -50,6 +52,14 @@ const NINE_SIXTY_HOME: &str = "nnqrkrbb/pppppppp/8/8/8/8/PPPPPPPP/NNQRKRBB w FDf
 
 /// A Chess960 array whose kings start on g1 and g8, castled zone and all.
 const NINE_SIXTY_WING: &str = "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w HFhf - 0 1";
+
+/// The same array with the rights spent: a static read calls both kings castled
+/// short although neither has moved.
+const NINE_SIXTY_SPENT: &str = "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w - - 0 1";
+
+/// A right the position declares but could never play: White's king already
+/// stands on g1 and the FEN still claims the long one.
+const STALE_RIGHT: &str = "r1q2rk1/1pb2pp1/p1n3np/P1NpPb2/1P3B2/2P2N2/3Q1PPP/R3R1K1 w Q - 0 1";
 
 #[rstest]
 #[case::start(START, 'e', 'e')]
@@ -328,6 +338,115 @@ fn virtual_mobility_is_what_a_queen_on_the_kings_square_would_attack(
     assert_eq!(facts_of(fen).king.virtual_mobility, mobility);
 }
 
+#[rstest]
+#[case::start(START, [5, 5])]
+#[case::developed(DEVELOPED, [4, 3])]
+#[case::uncastled(UNCASTLED, [2, 2])]
+#[case::siege(SIEGE, [2, 2])]
+#[case::holes(HOLES, [1, 0])]
+#[case::endgame(ENDGAME, [0, 0])]
+#[case::bare_kings(BARE_KINGS, [0, 0])]
+fn a_ring_defender_is_a_friendly_piece_bearing_on_a_square_next_to_the_king(
+    #[case] fen: &str,
+    #[case] defenders: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).king.ring_defenders, defenders);
+}
+
+#[rstest]
+#[case::start(START, [8, 8])]
+#[case::developed(DEVELOPED, [8, 7])]
+#[case::uncastled(UNCASTLED, [4, 4])]
+#[case::siege(SIEGE, [3, 3])]
+#[case::holes(HOLES, [2, 0])]
+#[case::endgame(ENDGAME, [0, 0])]
+#[case::bare_kings(BARE_KINGS, [0, 0])]
+fn ring_defence_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
+    #[case] fen: &str,
+    #[case] weight: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).king.ring_defence_weight, weight);
+}
+
+#[rstest]
+#[case::start(START, [-8, -8])]
+#[case::developed(DEVELOPED, [-8, -6])]
+#[case::uncastled(UNCASTLED, [-4, -4])]
+#[case::siege(SIEGE, [5, 4])]
+#[case::holes(HOLES, [2, 2])]
+#[case::corners(CORNERS, [0, 0])]
+#[case::endgame(ENDGAME, [0, 0])]
+fn the_ring_attacker_surplus_is_the_besieging_weight_less_the_defending_one(
+    #[case] fen: &str,
+    #[case] surplus: [i32; 2],
+) {
+    assert_eq!(facts_of(fen).king.ring_attacker_surplus(), surplus);
+}
+
+#[rstest]
+#[case::start(START, [0, 0])]
+#[case::developed(DEVELOPED, [1, 1])]
+#[case::siege(SIEGE, [1, 2])]
+#[case::corners(CORNERS, [2, 2])]
+#[case::holes(HOLES, [3, 7])]
+#[case::endgame(ENDGAME, [6, 6])]
+#[case::bare_kings(BARE_KINGS, [8, 5])]
+fn an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
+    #[case] fen: &str,
+    #[case] rays: [u8; 2],
+) {
+    assert_eq!(facts_of(fen).king.open_rays, rays);
+}
+
+#[rstest]
+#[case::start(START, [false, false])]
+#[case::siege(SIEGE, [false, false])]
+#[case::endgame(ENDGAME, [false, false])]
+#[case::uncastled(UNCASTLED, [true, false])]
+#[case::uncastled_theirs(UNCASTLED_THEIRS, [false, true])]
+#[case::corners(CORNERS, [true, true])]
+#[case::boxed(BOXED, [true, false])]
+#[case::bare_kings(BARE_KINGS, [false, true])]
+fn luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_rank(
+    #[case] fen: &str,
+    #[case] luft: [bool; 2],
+) {
+    assert_eq!(facts_of(fen).king.luft, luft);
+}
+
+#[rstest]
+#[case::start(START, [None, None])]
+#[case::endgame(ENDGAME, [None, None])]
+#[case::developed(DEVELOPED, [Some(Short), Some(Short)])]
+#[case::uncastled(UNCASTLED, [None, Some(Short)])]
+#[case::uncastled_theirs(UNCASTLED_THEIRS, [Some(Short), None])]
+#[case::corners(CORNERS, [Some(Short), Some(Long)])]
+#[case::siege(SIEGE, [Some(Short), Some(Long)])]
+#[case::bare_kings(BARE_KINGS, [None, Some(Short)])]
+#[case::stale_right(STALE_RIGHT, [None, Some(Short)])]
+fn a_castled_side_is_the_kings_own_file_once_its_rights_are_spent(
+    #[case] fen: &str,
+    #[case] castled: [Option<CastledSide>; 2],
+) {
+    assert_eq!(facts_of(fen).king.castled_side, castled);
+}
+
+#[rstest]
+#[case::start(START, false)]
+#[case::developed(DEVELOPED, false)]
+#[case::uncastled(UNCASTLED, false)]
+#[case::corners(CORNERS, true)]
+#[case::siege(SIEGE, true)]
+#[case::holes(HOLES, true)]
+#[case::endgame(ENDGAME, true)]
+#[case::bare_kings(BARE_KINGS, true)]
+fn opposite_side_castling_is_the_two_kings_standing_on_different_wings(
+    #[case] fen: &str,
+    #[case] opposite: bool,
+) {
+    assert_eq!(facts_of(fen).king.opposite_side_castling, opposite);
+}
+
 /// `features.md` §4 keeps `king_on_home_square` to classic chess: a Chess960
 /// array can start a king on e1 that has never moved, so the vector drops the
 /// bit the facts still read off the geometry.
@@ -353,5 +472,18 @@ fn the_castled_zone_bits_are_left_out_of_a_chess960_vector() {
         !Schema::v1()
             .features_for(&CHESS960)
             .contains("king", "king_castled_zone")
+    );
+}
+
+/// The same for `castled_side`: a Chess960 array can spend its rights with the
+/// kings still on the squares they started on, and no castling ever played.
+#[test]
+fn the_castled_side_is_left_out_of_a_chess960_vector() {
+    let facts = facts_under(&CHESS960, NINE_SIXTY_SPENT);
+    assert_eq!(facts.king.castled_side, [Some(Short), Some(Short)]);
+    assert!(
+        !Schema::v1()
+            .features_for(&CHESS960)
+            .contains("king", "castled_side")
     );
 }

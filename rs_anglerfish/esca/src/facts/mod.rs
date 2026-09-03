@@ -307,6 +307,42 @@ pub struct KingFacts {
     pub tropism: [f32; 2],
     /// Squares a queen on this king's square would attack, per side.
     pub virtual_mobility: [u8; 2],
+    /// Own knights, bishops, rooks and queens attacking the ring, per side.
+    pub ring_defenders: [u8; 2],
+    /// Σ over those defenders of N, B = 1, R = 2, Q = 4, per side.
+    pub ring_defence_weight: [u8; 2],
+    /// Directions from the king holding at least one square, all of them
+    /// empty out to the edge, per side.
+    pub open_rays: [u8; 2],
+    /// The king stands on its relative rank 1 with a square ahead of it empty
+    /// and unattacked, per side.
+    pub luft: [bool; 2],
+    /// The side the king's square and its spent castling rights read as, per
+    /// side.
+    pub castled_side: [Option<CastledSide>; 2],
+    /// The two kings stand on opposite wings.
+    pub opposite_side_castling: bool,
+}
+
+impl KingFacts {
+    /// The weight besieging each king's ring, less the weight defending it:
+    /// negative for a king whose own side outweighs the attackers.
+    #[inline]
+    pub fn ring_attacker_surplus(&self) -> [i32; 2] {
+        [0, 1].map(|i: usize| {
+            i32::from(self.ring_attack_weight[i]) - i32::from(self.ring_defence_weight[i])
+        })
+    }
+}
+
+/// The side a king's square and its spent castling rights read as. A side that
+/// still holds a castling right has castled neither way.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum CastledSide {
+    /// The king stands on file g or h.
+    Short,
+    /// The king stands on file a, b or c.
+    Long,
 }
 
 /// Mobility and space.

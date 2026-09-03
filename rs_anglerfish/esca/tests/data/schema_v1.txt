@@ -78,7 +78,7 @@ pieces:2:35
   knights_on_rim:2:count/2
   minors_undeveloped:2:count/4
   queen_developed:2:bits
-king:3:120
+king:4:137
   king_file:16:one-hot
   king_rank:16:one-hot
   king_on_home_square:2:bits
@@ -95,6 +95,13 @@ king:3:120
   king_distance:6:one-hot
   king_tropism:2:count/8
   virtual_mobility:2:count/27
+  ring_defenders:2:count/6
+  ring_defence_weight:2:count/16
+  ring_attacker_surplus:2:diff/16
+  open_rays_to_king:2:count/8
+  luft:2:bits
+  castled_side:6:one-hot
+  opposite_side_castling:1:bit
 mobility:1:39
   mobility_ratio:1:ratio
   mobility_by_type:10:count/16
