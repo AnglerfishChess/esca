@@ -160,3 +160,20 @@ defined before it is used.
 | **lever / ram** | A pawn that can capture an enemy pawn / a pawn blocked head-on by one. |
 | **pawn shield / pawn storm** | The friendly pawns in front of one's own king / the enemy pawns advancing on it. |
 | **win probability** | A score mapped to [0, 1] (or [−1, 1]) through a fitted logistic, the scale value heads are trained on. |
+
+---
+
+## 7. The UCI protocol
+
+| Term | Definition |
+|---|---|
+| **UCI** | *Universal Chess Interface*: the line-based text protocol a GUI speaks to an engine over its standard input and output. Commands go out one line at a time; the engine answers with `id`, `option`, `uciok`, `readyok`, `info` and `bestmove` lines. |
+| **handshake** | The `uci` command and everything the engine writes up to `uciok`: its name, its author, and every option it offers. Nothing else may be asked of it until then. |
+| **engine option** | A named setting an engine declares in its handshake, with a type and a domain, and that a GUI sets with `setoption`. |
+| **check / spin / combo / button / string** | The five option types: a boolean / an integer with a `min` and a `max` / one of a listed set of names / an action carrying no value / free text. |
+| **`<empty>`** | The protocol's spelling of an empty string option value. |
+| **`UCI_Chess960`** | The `check` option that puts an engine into Chess960. An engine that offers it also reads and writes castling king-to-rook. |
+| **ponder** | Searching on the move the engine expects the opponent to play, while it is the opponent's turn. `ponderhit` says the guess was right and the search goes on as a normal one; `stop` says it was wrong. |
+| **bound** | A score the engine did not search out exactly: `lowerbound` means the true score is at least this, `upperbound` that it is at most this. |
+| **WDL** | Win, draw and loss in permille, from the side to move's point of view: an engine's estimate of the outcome, reported beside the score. |
+| **null move token** | The move text an engine writes when it has none: `(none)` or `0000`. |

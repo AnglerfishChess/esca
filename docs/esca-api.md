@@ -16,6 +16,7 @@ Cargo features:
 | `python` | no | The PyO3 module, built by maturin. |
 | `lichess` | no | The `lichess` module: streaming reader for the evaluation dump. |
 | `pgn` | no | The `pgn` module: reading and writing games. |
+| `uci` | no | The `uci` module: the protocol as values, and engines as subprocesses. |
 | `serde` | no | `Serialize`/`Deserialize` for `Position`, `Move`, `Schema` and the manifest types. |
 
 ---
@@ -609,7 +610,8 @@ Built from the same crate with feature `python`; distributed with `.pyi` stubs,
 so every signature below is typed and checkable. Squares, roles, colours,
 outcomes and castling styles are text on this surface, and a file set is the
 string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
-`Position`, `Game`, `Schema`, `Facts` with its groups, and `lichess.Batch`.
+`Position`, `Game`, `Schema`, `Facts` with its groups, `lichess.Batch`,
+`pgn.Game`, and `uci.Engine` with its `Limits`, `Option`, `Info` and `Answer`.
 
 ```python
 import esca
@@ -680,6 +682,32 @@ for pg in esca.pgn.read(path):  # or read_string(text); skip_errors=True drops b
     print(pg.to_string())
 esca.pgn.count(path)  # games that read without error
 esca.pgn.Game.from_game(g)  # or g.to_pgn()
+
+# Engines. Times are seconds, moves are Move objects, scores are cp/mate.
+from esca import uci
+
+with uci.Engine("stockfish") as engine:
+    engine.handshake()
+    engine.name, engine.author, engine.options  # str | None, str | None, dict[str, uci.Option]
+    engine.set_option("Hash", 256)  # bool / int / str / None, by the option's type
+    engine.new_game()
+
+    answer = engine.play(game, uci.Limits(movetime=0.5))  # uci.Answer
+    answer.best, answer.ponder  # Move | None, Move | None
+
+    lines = engine.analyse(game, uci.Limits(depth=20), multipv=3)  # list[uci.Info]
+    lines[0].cp, lines[0].mate, lines[0].pv  # int | None, int | None, list[Move]
+
+    with engine.go(uci.Limits(infinite=True)) as search:  # streams reports
+        for report in search:
+            if report.depth and report.depth >= 12:
+                search.stop()
+        best = search.answer()
+
+async with uci.AsyncEngine("stockfish") as engine:  # the same surface, awaited
+    await engine.handshake()
+    async for report in await engine.go(uci.Limits(depth=20)):
+        print(report.depth, report.cp)
 ```
 
 Every function that encodes takes keyword-only `variant`, `schema` and
@@ -826,3 +854,95 @@ a `12.` before every White move and a `12...` before a Black move that
 follows a comment or a variation, and a comment as one `{…}` with its
 whitespace collapsed. A move number and its move are one token, so a line
 break never falls between them.
+
+---
+
+## 11. `uci` — talking to an engine (feature `uci`)
+
+Three layers: the protocol as values, which does no I/O; the engine as a
+subprocess, which blocks and bounds every wait; and the variant handling that
+keeps Chess960 honest. No async runtime, in either language.
+
+```rust
+pub mod uci {
+    pub mod protocol {
+        pub enum Command { Uci, Debug(bool), IsReady, SetOption { name: String, value: Option<String> },
+                           Register(Register), NewGame, Position(Setup), Go(Limits),
+                           Stop, PonderHit, Quit }
+        impl Command { pub fn to_line(&self) -> String; pub fn keyword(&self) -> &'static str; }
+
+        pub struct Setup { pub fen: Option<String>, pub moves: Vec<String> }
+        impl Setup {
+            /// The moves played, each written where it was played, castling as `style` asks.
+            pub fn of_game(game: &Game, style: CastlingOutput) -> Setup;
+        }
+
+        /// Every limit a `go` may name; they combine.
+        pub struct Limits { pub search_moves: Vec<String>, pub ponder: bool,
+                            pub white_time: Option<Duration>, /* … */ pub infinite: bool }
+
+        pub enum Message { Id { key: String, value: String }, UciOk, ReadyOk, Option(OptionSpec),
+                           Info(Box<Info>), BestMove(BestMove), Registration(Status),
+                           CopyProtection(Status), Raw(String) }
+
+        pub struct OptionSpec { pub name: String, pub kind: OptionKind }
+        pub enum OptionKind { Check { .. }, Spin { .. }, Combo { .. }, Button, String { .. } }
+        impl OptionSpec { pub fn accepts(&self, value: &OptionValue) -> Result<(), String>; }
+
+        /// Every standard `info` field; moves stay text until a game reads them.
+        pub struct Info { pub depth: Option<u32>, pub score: Option<Score>, pub bound: Option<Bound>,
+                          pub pv: Vec<String>, /* … */ pub unknown: Vec<String> }
+        impl Info { pub fn pv_moves(&self, game: &Game) -> Vec<Move>; }
+
+        /// Which commands may go out and which messages may come in.
+        pub struct Session { /* … */ }
+        impl Session {
+            pub fn state(&self) -> State;
+            pub fn sent(&mut self, command: &Command) -> Result<(), ProtocolError>;
+            pub fn received(&mut self, message: &Message) -> Result<(), ProtocolError>;
+        }
+        pub enum State { Started, Identifying, Idle, Searching, Pondering, Quitting }
+
+        /// Never fails: a line it cannot read is `Message::Raw`.
+        pub fn parse(line: &str) -> Message;
+    }
+
+    pub struct Engine { /* … */ }
+    impl Engine {
+        pub fn spawn(program: impl AsRef<OsStr>, args: impl IntoIterator<Item = impl AsRef<OsStr>>)
+            -> Result<Engine, Error>;
+        pub fn handshake(&mut self) -> Result<&Identity, Error>;
+        pub fn options(&self) -> &[OptionSpec];
+        pub fn set_option(&mut self, name: &str, value: OptionValue) -> Result<(), Error>;
+        pub fn new_game(&mut self) -> Result<(), Error>;
+        pub fn set_position(&mut self, game: &Game) -> Result<(), Error>;
+        pub fn go(&mut self, limits: &Limits, budget: Duration) -> Result<Search<'_>, Error>;
+        pub fn play(&mut self, game: &Game, limits: &Limits, budget: Duration)
+            -> Result<Answer, Error>;
+        pub fn is_ready(&mut self) -> Result<(), Error>;
+        pub fn stop(&mut self) -> Result<(), Error>;
+        pub fn ponderhit(&mut self) -> Result<(), Error>;
+        pub fn quit(&mut self) -> Result<Option<i32>, Error>;
+        /// The line-level interface, for tools and diagnostics.
+        pub fn send_line(&mut self, text: &str) -> Result<(), Error>;
+        pub fn next_line(&mut self, timeout: Duration) -> Result<Option<String>, Error>;
+    }
+
+    /// An iterator over a search's reports, ending with the engine's answer.
+    pub struct Search<'a> { /* … */ }
+    pub struct Answer { pub best: Option<Move>, pub ponder: Option<Move> }
+
+    pub enum Error { Io(io::Error), Timeout { .. }, Died { .. }, Protocol(ProtocolError),
+                     NotIdentified, NoSuchOption(String), BadValue { .. } }
+}
+```
+
+| Contract | |
+|---|---|
+| Every wait is bounded. A search takes its own budget; everything else takes the engine's `timeout`. | |
+| An engine that has exited is `Error::Died` on every call after, and is killed when the `Engine` is dropped. | |
+| A line that breaks the grammar is `Message::Raw`, and a token that does lands in `Info::unknown`. Reading engine output never fails. | |
+| A message the [`Session`] has no room for — a second `bestmove`, a `readyok` no `isready` asked for — is logged and dropped, not delivered. | |
+| Dropping a `Search` stops it and waits for the answer, so the engine is left idle. | |
+| `set_position` on a Chess960 game sets `UCI_Chess960` and writes castling king-to-rook; an engine that does not offer the option is an error, not a game played by the wrong rules. Classic games are written king-two-squares, and both spellings are read. | |
+| Every wire line is logged through `log` at debug, `>>` out and `<<` in. | |
