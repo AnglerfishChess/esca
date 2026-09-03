@@ -1,6 +1,6 @@
 [package]
 name = "esca"
-version = "0.1.0"
+version = "0.2.0"
 description = "A chess model that answers what is true about a position: variants, positions, games, and move text."
 keywords = ["chess", "chess960", "fen", "san", "position"]
 categories = ["games", "game-development"]
