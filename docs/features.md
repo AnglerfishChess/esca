@@ -11,7 +11,7 @@ Two schemas are defined:
 | Schema | Shape | Consumer |
 |---|---|---|
 | `position` | one vector of 1930 f32 per position | value head, policy head |
-| `move` | one vector of 24 f32 per legal move | policy head |
+| `move` | one vector of 40 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
 run measuring the augmentation against the board alone selects one group
@@ -174,11 +174,13 @@ the legal move list).
 | **C** | One pass over the legal move list (typically 20–40 moves), a few ops each. | ~50–300 ns |
 | **D** | Make-move plus movegen for a *subset* of moves (checking moves only). | ~0.2–3 µs |
 | **E** | One exchange loop on one square: least valuable attacker, x-rays refreshed, at most about 32 steps. | ~50–500 ns |
+| **F** | Make-move plus a rescan of the attack maps and the pawn structure. | ~1–5 µs |
 
 Class D applies to exactly two features (`mate_in_1`, `stalemate_in_1`). They
 sit in their own sub-group so that a search that cannot afford them can turn
 them off without changing any other offset. `C·E` is one exchange loop per
-capture in the move list.
+capture in the move list, `B·E` one per unit of a side. Class F belongs to the
+`move` schema alone, where it is paid once per legal move.
 
 ### Encoding rules
 
@@ -557,25 +559,53 @@ width and is the natural first ablation target.
 
 ---
 
-## 3. Per-move annotations (`move` schema, width 24)
+## 3. Per-move annotations (`move` schema, width 40)
 
-One vector per legal move, for the policy head and for move ordering. Built
-from the position's shared scratch; marginal cost per move is class A.
+One vector per legal move, for the policy head and for move ordering. *Us* is
+the side making the move and *them* its opponent, so a move vector is read the
+same way whichever side is to move. **Before** and **after** mean the position
+before and after the move. The **destination** is the glossary's: for castling
+the king's landing square.
 
-| Feature | Width | Encoding |
-|---|---|---|
-| `is_capture` | 1 | bit |
-| `victim_type` | 5 | one-hot P,N,B,R,Q; zeros for a quiet move |
-| `mover_type` | 6 | one-hot P,N,B,R,Q,K |
-| `promotion_piece` | 4 | one-hot Q,R,B,N; zeros when not a promotion |
-| `gives_check` | 1 | bit |
-| `gives_safe_check` | 1 | bit |
-| `is_safe` | 1 | bit: safe destination (see glossary) |
-| `captures_hanging` | 1 | bit |
-| `escapes_attack` | 1 | bit: the origin square is attacked by them and the destination is safe |
-| `to_attacked_by_pawn` | 1 | bit |
-| `is_castling` | 1 | bit |
-| `is_en_passant` | 1 | bit |
+The first twelve features are read from the position's shared scratch. The
+rest read the position after the move, which is made anyway to answer
+`gives_check`; the pawn structure and the attack maps are then rescanned.
+
+| Feature | Width | Encoding | Cost | Definition |
+|---|---|---|---|---|
+| `is_capture` | 1 | bit | A | The move removes a unit of theirs. |
+| `victim_type` | 5 | one-hot | A | P,N,B,R,Q; the pawn for an en-passant capture, zeros for a quiet move. |
+| `mover_type` | 6 | one-hot | A | P,N,B,R,Q,K; for castling the king. |
+| `promotion_piece` | 4 | one-hot | A | Q,R,B,N; zeros when the move is not a promotion. |
+| `gives_check` | 1 | bit | A | Their king is attacked after the move. |
+| `gives_safe_check` | 1 | bit | A | `gives_check` and `is_safe`. |
+| `is_safe` | 1 | bit | A | The destination is a safe destination. |
+| `captures_hanging` | 1 | bit | A | The victim was hanging before the move. |
+| `escapes_attack` | 1 | bit | A | `moves_attacked_unit` and `is_safe`. |
+| `to_attacked_by_pawn` | 1 | bit | A | A pawn of theirs attacks the destination after the move. |
+| `is_castling` | 1 | bit | A | The move is a castling. |
+| `is_en_passant` | 1 | bit | A | The move is an en-passant capture. |
+| `see` | 1 | diff/9 | E | The SEE of the move. Negative for a move that loses material, 0 for castling. |
+| `threat_created_max` | 1 | count/9 | B·E | The largest *SEE of a unit* over their units after the move: the most capturing next would win us. 0 when nothing there wins. |
+| `moves_attacked_unit` | 1 | bit | A | The origin is attacked by them before the move. |
+| `blocks_check` | 1 | bit | A | Exactly one unit gives check and the destination lies strictly between it and our king. |
+| `advances_passer` | 1 | bit | A | The moved unit is a pawn that was passed before the move. |
+| `creates_passer` | 1 | bit | F | We have more passed pawns after the move than before. |
+| `creates_weakness` | 3 | bits | F | Three bits: we have more isolated / doubled / backward pawns after the move than before. |
+| `opens_file_at_enemy_king` | 1 | bit | F | One of their king files carried a pawn of ours before the move and carries none after, so it is open or semi-open for us. |
+| `ring_attack_delta` | 2 | diff/4 | F | Change in our ring attackers of their king ring, then in theirs of ours. |
+| `own_hanging_delta` | 1 | diff/4 | F | Change in the number of our hanging units. |
+| `their_hanging_delta` | 1 | diff/4 | F | Change in the number of theirs. |
+| `leaves_unit_hanging` | 1 | bit | F | Some square carries a hanging unit of ours of value 3 or more after the move and carried none before. |
+| `gives_discovered_attack` | 1 | bit | B | A slider of ours the move leaves standing attacks a unit of theirs of value 3 or more that it did not attack before. |
+
+Where the catalogue left a reading open, this is the one taken:
+
+| Feature | Reading |
+|---|---|
+| `threat_created_max` | The largest *SEE of a unit* over their units, not the largest SEE over a move list we would have to generate; the two agree except where a costlier attacker beats the cheapest one. |
+| `creates_passer`, `creates_weakness` | Counted, not matched square by square: a passer that merely advances leaves the count alone, and a capture that undoubles ours sets no bit. |
+| `leaves_unit_hanging` | Read square by square, so the moved unit landing on an attacked square counts, and a unit that already hung and stayed put does not. |
 
 ---
 

@@ -462,6 +462,22 @@ pub struct MoveFacts {
     pub to_attacked_by_pawn: bool,
     pub is_castling: bool,
     pub is_en_passant: bool,
+    pub see: i32,
+    pub threat_created_max: i32,
+    pub moves_attacked_unit: bool,
+    pub blocks_check: bool,
+    pub advances_passer: bool,
+    pub creates_passer: bool,
+    pub creates_isolated: bool,
+    pub creates_doubled: bool,
+    pub creates_backward: bool,
+    pub opens_file_at_enemy_king: bool,
+    pub our_ring_attackers_delta: i32,
+    pub their_ring_attackers_delta: i32,
+    pub own_hanging_delta: i32,
+    pub their_hanging_delta: i32,
+    pub leaves_unit_hanging: bool,
+    pub gives_discovered_attack: bool,
 }
 
 impl Facts {
@@ -585,7 +601,7 @@ impl Facts {
 }
 
 impl MoveFacts {
-    pub const WIDTH: usize = 24;
+    pub const WIDTH: usize = 40;
     /// Panics if `out` is shorter than `WIDTH`.
     pub fn encode_into(&self, out: &mut [f32]);
 }
@@ -737,15 +753,15 @@ print(f.summary())
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
 esca.SCHEMA_ID  # "16a7…", 32 hex chars
 esca.WIDTH  # 1930
-esca.MOVE_WIDTH  # 24
+esca.MOVE_WIDTH  # 40
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
 
 # (n, w) float32
 x = esca.encode(fens, variant=esca.CHESS960, groups=["state", "pawns"])
 esca.encode_into(fens, out, groups=["state", "pawns"])  # caller's array
-moves, mx = esca.encode_moves(fen)  # list[Move], (m, 24)
-moves, mx, cuts = esca.encode_moves(fens)  # per FEN, (total, 24), (n + 1,) int64
+moves, mx = esca.encode_moves(fen)  # list[Move], (m, 40)
+moves, mx, cuts = esca.encode_moves(fens)  # per FEN, (total, 40), (n + 1,) int64
 
 # Lichess dump
 for batch in esca.lichess.batches(path, batch_size=8192, min_depth=20):
@@ -808,7 +824,7 @@ esca.lichess.batches(path, *, batch_size=8192, min_depth=0,
 | Returned arrays are C-contiguous `float32`, allocated in Rust and handed over without a copy. | |
 | Batch calls release the GIL, parallelise rows, and reuse their buffers internally. | |
 | A malformed FEN raises `ValueError` naming the row index. | |
-| `encode_moves` takes one FEN or a sequence of them. A sequence stacks every position's move rows into one `(total, 24)` array and returns the `(n + 1,)` int64 offsets that cut it, so FEN `i` owns `rows[offsets[i]:offsets[i + 1]]`: no padding, and one array per call rather than one per position. | |
+| `encode_moves` takes one FEN or a sequence of them. A sequence stacks every position's move rows into one `(total, 40)` array and returns the `(n + 1,)` int64 offsets that cut it, so FEN `i` owns `rows[offsets[i]:offsets[i + 1]]`: no padding, and one array per call rather than one per position. | |
 | `Position`, `Move`, `Facts` and their groups are immutable and picklable; `Position` and `Move` are hashable. | |
 | A malformed game raises `ValueError` naming the line and column; the stream goes on with the next game. | |
 | A batch row takes the deepest evaluation that reaches `min_depth`, and its best line; a record with none, with a placement no game can reach, or with an unreadable line is skipped. | |

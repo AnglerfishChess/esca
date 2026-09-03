@@ -1303,6 +1303,57 @@ pub struct PyMoveFacts {
     /// The move is an en-passant capture.
     #[pyo3(get)]
     is_en_passant: bool,
+    /// The static exchange evaluation of the move, signed.
+    #[pyo3(get)]
+    see: i32,
+    /// The largest static exchange evaluation of one of their units after the
+    /// move; 0 when the move threatens nothing.
+    #[pyo3(get)]
+    threat_created_max: i32,
+    /// The origin is attacked by them.
+    #[pyo3(get)]
+    moves_attacked_unit: bool,
+    /// The destination interposes on the ray of the one unit giving check.
+    #[pyo3(get)]
+    blocks_check: bool,
+    /// The moved unit is a passed pawn.
+    #[pyo3(get)]
+    advances_passer: bool,
+    /// The mover has more passers after the move than before.
+    #[pyo3(get)]
+    creates_passer: bool,
+    /// The mover has more isolated pawns after the move than before.
+    #[pyo3(get)]
+    creates_isolated: bool,
+    /// The mover has more doubled pawns after the move than before.
+    #[pyo3(get)]
+    creates_doubled: bool,
+    /// The mover has more backward pawns after the move than before.
+    #[pyo3(get)]
+    creates_backward: bool,
+    /// One of their king files carried a pawn of ours and carries none after.
+    #[pyo3(get)]
+    opens_file_at_enemy_king: bool,
+    /// Change in the number of our units attacking their king ring.
+    #[pyo3(get)]
+    our_ring_attackers_delta: i32,
+    /// Change in the number of their units attacking our king ring.
+    #[pyo3(get)]
+    their_ring_attackers_delta: i32,
+    /// Change in the number of our hanging units.
+    #[pyo3(get)]
+    own_hanging_delta: i32,
+    /// Change in the number of their hanging units.
+    #[pyo3(get)]
+    their_hanging_delta: i32,
+    /// A square carries a hanging unit of ours worth 3 or more after the move
+    /// and carried none before.
+    #[pyo3(get)]
+    leaves_unit_hanging: bool,
+    /// A slider of ours the move leaves standing gains an attack on a unit of
+    /// theirs worth 3 or more.
+    #[pyo3(get)]
+    gives_discovered_attack: bool,
 }
 
 impl PyMoveFacts {
@@ -1319,6 +1370,22 @@ impl PyMoveFacts {
             to_attacked_by_pawn: facts.to_attacked_by_pawn,
             is_castling: facts.is_castling,
             is_en_passant: facts.is_en_passant,
+            see: facts.see,
+            threat_created_max: facts.threat_created_max,
+            moves_attacked_unit: facts.moves_attacked_unit,
+            blocks_check: facts.blocks_check,
+            advances_passer: facts.advances_passer,
+            creates_passer: facts.creates_passer,
+            creates_isolated: facts.creates_isolated,
+            creates_doubled: facts.creates_doubled,
+            creates_backward: facts.creates_backward,
+            opens_file_at_enemy_king: facts.opens_file_at_enemy_king,
+            our_ring_attackers_delta: facts.our_ring_attackers_delta,
+            their_ring_attackers_delta: facts.their_ring_attackers_delta,
+            own_hanging_delta: facts.own_hanging_delta,
+            their_hanging_delta: facts.their_hanging_delta,
+            leaves_unit_hanging: facts.leaves_unit_hanging,
+            gives_discovered_attack: facts.gives_discovered_attack,
         }
     }
 }

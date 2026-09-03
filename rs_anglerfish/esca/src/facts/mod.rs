@@ -643,6 +643,41 @@ pub struct MoveFacts {
     pub is_castling: bool,
     /// The move is an en-passant capture.
     pub is_en_passant: bool,
+    /// The static exchange evaluation of the move, signed.
+    pub see: i32,
+    /// The largest static exchange evaluation of one of their units after the
+    /// move; 0 when the move threatens nothing.
+    pub threat_created_max: i32,
+    /// The origin is attacked by them.
+    pub moves_attacked_unit: bool,
+    /// The destination interposes on the ray of the one unit giving check.
+    pub blocks_check: bool,
+    /// The moved unit is a passed pawn.
+    pub advances_passer: bool,
+    /// The mover has more passers after the move than before.
+    pub creates_passer: bool,
+    /// The mover has more isolated pawns after the move than before.
+    pub creates_isolated: bool,
+    /// The mover has more doubled pawns after the move than before.
+    pub creates_doubled: bool,
+    /// The mover has more backward pawns after the move than before.
+    pub creates_backward: bool,
+    /// One of their king files carried a pawn of ours and carries none after.
+    pub opens_file_at_enemy_king: bool,
+    /// Change in the number of our units attacking their king ring.
+    pub our_ring_attackers_delta: i32,
+    /// Change in the number of their units attacking our king ring.
+    pub their_ring_attackers_delta: i32,
+    /// Change in the number of our hanging units.
+    pub own_hanging_delta: i32,
+    /// Change in the number of their hanging units.
+    pub their_hanging_delta: i32,
+    /// A square carries a hanging unit of ours worth 3 or more after the move
+    /// and carried none before.
+    pub leaves_unit_hanging: bool,
+    /// A slider of ours the move leaves standing gains an attack on a unit of
+    /// theirs worth 3 or more.
+    pub gives_discovered_attack: bool,
 }
 
 impl Default for MoveFacts {
@@ -659,6 +694,22 @@ impl Default for MoveFacts {
             to_attacked_by_pawn: false,
             is_castling: false,
             is_en_passant: false,
+            see: 0,
+            threat_created_max: 0,
+            moves_attacked_unit: false,
+            blocks_check: false,
+            advances_passer: false,
+            creates_passer: false,
+            creates_isolated: false,
+            creates_doubled: false,
+            creates_backward: false,
+            opens_file_at_enemy_king: false,
+            our_ring_attackers_delta: 0,
+            their_ring_attackers_delta: 0,
+            own_hanging_delta: 0,
+            their_hanging_delta: 0,
+            leaves_unit_hanging: false,
+            gives_discovered_attack: false,
         }
     }
 }
@@ -857,6 +908,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         &scan,
         Side::Us,
         &attacks,
+        &pawns,
         legal,
         replies,
         Some(&mut moves),
@@ -872,6 +924,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
                 &scan,
                 Side::Them,
                 &attacks,
+                &pawns,
                 their_moves,
                 replies,
                 None,

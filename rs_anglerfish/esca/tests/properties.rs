@@ -174,7 +174,10 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
         prop_assert!(legal.contains(&annotated.mv), "{}", fen);
         let mut row = vec![0.0f32; MoveFacts::WIDTH];
         annotated.facts.encode_into(&mut row);
-        prop_assert!(row.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
+        prop_assert!(
+            row.iter()
+                .all(|v| v.is_finite() && (-1.0..=1.0).contains(v))
+        );
     }
     Ok(())
 }

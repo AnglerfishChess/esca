@@ -277,7 +277,7 @@ fn a_move_encodes_to_its_declared_width() {
     let mut row = vec![0.0f32; esca::MoveFacts::WIDTH];
     for annotated in facts.moves.iter() {
         annotated.facts.encode_into(&mut row);
-        assert!(row.iter().all(|v| (0.0..=1.0).contains(v)));
+        assert!(row.iter().all(|v| (-1.0..=1.0).contains(v)));
         assert_eq!(row[0], f32::from(annotated.facts.victim.is_some()));
         // Exactly one mover role, and at most one victim and promotion role.
         assert_eq!(row[6..12].iter().sum::<f32>(), 1.0);

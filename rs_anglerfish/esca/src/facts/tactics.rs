@@ -7,8 +7,10 @@ use crate::position::Position;
 use crate::types::{Colour, File, Role, Square, SquareSet};
 use crate::variant::Variant;
 
-use super::scan::{Scan, attackers, attacks_of, line, material_value, order_value, target_value};
-use super::{AnnotatedMove, AttackFacts, MoveFacts, Side, TacticsFacts};
+use super::scan::{
+    Scan, attackers, attacks_of, between, line, material_value, order_value, target_value,
+};
+use super::{AnnotatedMove, AttackFacts, MoveFacts, PawnFacts, Side, TacticsFacts, king, pawns};
 
 /// The square the moved unit ends on: for castling the king's destination,
 /// which is c1 or g1 in the mover's frame.
@@ -54,6 +56,154 @@ fn role_units(position: &Position, colour: Colour) -> [SquareSet; 6] {
     Role::ALL.map(|role| ours & position.by_role(role))
 }
 
+/// The units of `side` that an enemy unit attacks and no friendly unit
+/// defends. A king is never among them.
+fn hanging_of(scan: &Scan, side: Side) -> SquareSet {
+    let i = side.index();
+    ((scan.units[i] - scan.role_units[i][Role::King.index()]) & scan.by[(!side).index()])
+        - scan.by[i]
+}
+
+/// The units of `side` worth 3 or more: its knights, bishops, rooks and
+/// queens.
+fn heavy_units(scan: &Scan, side: Side) -> SquareSet {
+    let i = side.index();
+    [Role::Knight, Role::Bishop, Role::Rook, Role::Queen]
+        .into_iter()
+        .fold(SquareSet::EMPTY, |set, role| {
+            set | scan.role_units[i][role.index()]
+        })
+}
+
+/// How many enemy knights, bishops, rooks and queens attack `side`'s king
+/// ring.
+fn ring_attackers(scan: &Scan, side: Side) -> i32 {
+    let king = scan.kings[side.index()];
+    let ring = attacks_of(Role::King, king, scan.colour(side), scan.occupied);
+    let them = (!side).index();
+    [Role::Knight, Role::Bishop, Role::Rook, Role::Queen]
+        .into_iter()
+        .flat_map(|role| scan.role_units[them][role.index()])
+        .filter(|square| !(scan.attacks_from[square.index()] & ring).is_empty())
+        .count() as i32
+}
+
+/// Whether a slider of `mover` that `mv` leaves standing gains an attack on an
+/// enemy unit worth 3 or more.
+fn discovered_attack(
+    after: &Position,
+    scan: &Scan,
+    mover: Side,
+    mover_colour: Colour,
+    mv: Move,
+    enemy_units: SquareSet,
+) -> bool {
+    let occupied = after.occupied();
+    let stationary = moved_to(mv) | mv.from().to_set() | mv.to().to_set();
+    [Role::Bishop, Role::Rook, Role::Queen]
+        .into_iter()
+        .any(|role| {
+            (scan.role_units[mover.index()][role.index()] - stationary)
+                .into_iter()
+                .any(|from| {
+                    let gained = attacks_of(role, from, mover_colour, occupied)
+                        - scan.attacks_from[from.index()];
+                    (gained & enemy_units).into_iter().any(|target| {
+                        let role = after
+                            .piece_at(target)
+                            .expect("a target stands on its own square")
+                            .role;
+                        material_value(role) >= 3
+                    })
+                })
+        })
+}
+
+/// What the position before a move says about it: the reading every move of
+/// one call to [`tactics`] shares.
+struct Before<'a> {
+    scan: &'a Scan,
+    attacks: &'a AttackFacts,
+    pawns: &'a PawnFacts,
+    mover: Side,
+    mover_colour: Colour,
+}
+
+/// What one move does to the position, read from the position after it.
+struct After {
+    threat_created_max: i32,
+    creates_passer: bool,
+    creates_isolated: bool,
+    creates_doubled: bool,
+    creates_backward: bool,
+    opens_file_at_enemy_king: bool,
+    our_ring_attackers_delta: i32,
+    their_ring_attackers_delta: i32,
+    own_hanging_delta: i32,
+    their_hanging_delta: i32,
+    leaves_unit_hanging: bool,
+}
+
+impl Before<'_> {
+    /// The facts of `mv`, whose mover is `mover_role`, that only the position
+    /// after it settles.
+    fn after(&self, after: &Position, mv: Move, mover_role: Role) -> After {
+        let mover = self.mover;
+        let enemy = !mover;
+        let scan = Scan::new(after);
+        let us = if scan.us == self.mover_colour {
+            Side::Us
+        } else {
+            Side::Them
+        };
+        let them = !us;
+        // Only a pawn move or a capture can move a pawn of either side, so
+        // every other move leaves the whole structure where it stood.
+        let structure =
+            (mover_role == Role::Pawn || mv.is_capture()).then(|| pawns::pawn_facts(&scan));
+
+        let counts = |set: SquareSet| set.len() as i32;
+        let hanging = [hanging_of(&scan, us), hanging_of(&scan, them)];
+        let heavy_before = self.attacks.hanging[mover.index()] & heavy_units(self.scan, mover);
+        let more = |after: fn(&PawnFacts, usize) -> SquareSet| match &structure {
+            Some(structure) => {
+                counts(after(structure, us.index())) > counts(after(self.pawns, mover.index()))
+            }
+            None => false,
+        };
+
+        After {
+            // A unit no unit of ours attacks has an exchange value of 0.
+            threat_created_max: (scan.by[us.index()]
+                & (scan.units[them.index()] - scan.role_units[them.index()][Role::King.index()]))
+            .into_iter()
+            .map(|square| after.see(square))
+            .max()
+            .unwrap_or(0)
+            .max(0),
+            creates_passer: more(|facts, side| facts.passed[side]),
+            creates_isolated: more(|facts, side| facts.isolated[side]),
+            creates_doubled: more(|facts, side| facts.doubled[side]),
+            creates_backward: more(|facts, side| facts.backward[side]),
+            opens_file_at_enemy_king: structure.is_some_and(|structure| {
+                king::shield_files(self.scan.kings[enemy.index()].file())
+                    .into_iter()
+                    .any(|file| {
+                        self.pawns.count_by_file[mover.index()][file.index()] > 0
+                            && structure.count_by_file[us.index()][file.index()] == 0
+                    })
+            }),
+            our_ring_attackers_delta: ring_attackers(&scan, them)
+                - ring_attackers(self.scan, enemy),
+            their_ring_attackers_delta: ring_attackers(&scan, us)
+                - ring_attackers(self.scan, mover),
+            own_hanging_delta: counts(hanging[0]) - counts(self.attacks.hanging[mover.index()]),
+            their_hanging_delta: counts(hanging[1]) - counts(self.attacks.hanging[enemy.index()]),
+            leaves_unit_hanging: !((hanging[0] & heavy_units(&scan, us)) - heavy_before).is_empty(),
+        }
+    }
+}
+
 /// The whole `tactics` block for the side to move in `position`.
 ///
 /// `scan` and `attacks` describe the same placement, which a null move leaves
@@ -65,6 +215,7 @@ pub(super) fn tactics(
     scan: &Scan,
     mover: Side,
     attacks: &AttackFacts,
+    pawns: &PawnFacts,
     legal: &MoveList,
     replies: &mut MoveList,
     mut annotated: Option<&mut MoveList<AnnotatedMove>>,
@@ -72,6 +223,14 @@ pub(super) fn tactics(
     let enemy = !mover;
     let mover_colour = scan.colour(mover);
     let enemy_colour = !mover_colour;
+    let annotate = annotated.is_some();
+    let before = Before {
+        scan,
+        attacks,
+        pawns,
+        mover,
+        mover_colour,
+    };
 
     let mut facts = TacticsFacts {
         available: true,
@@ -118,23 +277,59 @@ pub(super) fn tactics(
         let captures_hanging =
             mv.is_capture() && attacks.hanging[enemy.index()].contains(victim_square(mv));
 
-        if let Some(list) = annotated.as_deref_mut() {
-            list.push(AnnotatedMove {
-                mv,
-                facts: MoveFacts {
-                    victim,
-                    mover: mover_role,
-                    promotion,
-                    gives_check,
-                    gives_safe_check: gives_check && is_safe,
-                    is_safe,
-                    captures_hanging,
-                    escapes_attack: scan.by[enemy.index()].contains(mv.from()) && is_safe,
-                    to_attacked_by_pawn: attacked_by_pawn,
-                    is_castling: mv.is_castling(),
-                    is_en_passant: mv.is_en_passant(),
-                },
-            });
+        let discovers = if annotate || !facts.discovered_attack_available {
+            discovered_attack(&after, scan, mover, mover_colour, mv, enemy_units)
+        } else {
+            false
+        };
+        facts.discovered_attack_available |= discovers;
+
+        if annotate {
+            let moves_attacked_unit = scan.by[enemy.index()].contains(mv.from());
+            let checkers = position.checkers();
+            let blocks_check = checkers.len() == 1
+                && between(
+                    checkers.first().expect("one checker is a checker"),
+                    scan.kings[mover.index()],
+                )
+                .contains(to);
+            let delta = before.after(&after, mv, mover_role);
+            annotated
+                .as_deref_mut()
+                .expect("annotate is whether the list is there")
+                .push(AnnotatedMove {
+                    mv,
+                    facts: MoveFacts {
+                        victim,
+                        mover: mover_role,
+                        promotion,
+                        gives_check,
+                        gives_safe_check: gives_check && is_safe,
+                        is_safe,
+                        captures_hanging,
+                        escapes_attack: moves_attacked_unit && is_safe,
+                        to_attacked_by_pawn: attacked_by_pawn,
+                        is_castling: mv.is_castling(),
+                        is_en_passant: mv.is_en_passant(),
+                        see: position.see_capture(mv),
+                        threat_created_max: delta.threat_created_max,
+                        moves_attacked_unit,
+                        blocks_check,
+                        advances_passer: mover_role == Role::Pawn
+                            && pawns.passed[mover.index()].contains(mv.from()),
+                        creates_passer: delta.creates_passer,
+                        creates_isolated: delta.creates_isolated,
+                        creates_doubled: delta.creates_doubled,
+                        creates_backward: delta.creates_backward,
+                        opens_file_at_enemy_king: delta.opens_file_at_enemy_king,
+                        our_ring_attackers_delta: delta.our_ring_attackers_delta,
+                        their_ring_attackers_delta: delta.their_ring_attackers_delta,
+                        own_hanging_delta: delta.own_hanging_delta,
+                        their_hanging_delta: delta.their_hanging_delta,
+                        leaves_unit_hanging: delta.leaves_unit_hanging,
+                        gives_discovered_attack: discovers,
+                    },
+                });
         }
 
         if gives_check {
@@ -247,27 +442,6 @@ pub(super) fn tactics(
             if pins {
                 facts.pin_creation_count += 1;
             }
-        }
-
-        if !facts.discovered_attack_available {
-            let stationary = moved_to(mv) | mv.from().to_set() | mv.to().to_set();
-            facts.discovered_attack_available = [Role::Bishop, Role::Rook, Role::Queen]
-                .into_iter()
-                .any(|role| {
-                    (scan.role_units[mover.index()][role.index()] - stationary)
-                        .into_iter()
-                        .any(|from| {
-                            let gained = attacks_of(role, from, mover_colour, occupied)
-                                - scan.attacks_from[from.index()];
-                            (gained & enemy_units).into_iter().any(|target| {
-                                let role = after
-                                    .piece_at(target)
-                                    .expect("a target stands on its own square")
-                                    .role;
-                                material_value(role) >= 3
-                            })
-                        })
-                });
         }
     }
 

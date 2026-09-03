@@ -670,7 +670,7 @@ impl Facts {
 
 impl MoveFacts {
     /// How many values one move occupies.
-    pub const WIDTH: usize = 24;
+    pub const WIDTH: usize = 40;
 
     /// Writes the move's values into `out`.
     ///
@@ -694,6 +694,22 @@ impl MoveFacts {
         w.bit(self.to_attacked_by_pawn);
         w.bit(self.is_castling);
         w.bit(self.is_en_passant);
+        w.diff(self.see as f32, 9.0);
+        w.count(self.threat_created_max as f32, 9.0);
+        w.bit(self.moves_attacked_unit);
+        w.bit(self.blocks_check);
+        w.bit(self.advances_passer);
+        w.bit(self.creates_passer);
+        w.bit(self.creates_isolated);
+        w.bit(self.creates_doubled);
+        w.bit(self.creates_backward);
+        w.bit(self.opens_file_at_enemy_king);
+        w.diff(self.our_ring_attackers_delta as f32, 4.0);
+        w.diff(self.their_ring_attackers_delta as f32, 4.0);
+        w.diff(self.own_hanging_delta as f32, 4.0);
+        w.diff(self.their_hanging_delta as f32, 4.0);
+        w.bit(self.leaves_unit_hanging);
+        w.bit(self.gives_discovered_attack);
         debug_assert_eq!(w.at, MoveFacts::WIDTH);
     }
 }

@@ -55,6 +55,65 @@ const NINE_SIXTY: &str = "rk2r3/pppqbppp/2n2n2/8/8/2N2N2/PPPQBPPP/RK2R3 w AEae -
 /// The same array with Black to move.
 const NINE_SIXTY_BLACK: &str = "rk2r3/pppqbppp/2n2n2/8/8/2N2N2/PPPQBPPP/RK2R3 b AEae - 0 1";
 
+/// A rook with three ways to threaten something: a free rook, a defended
+/// queen, and an undefended knight.
+const THREAT: &str = "4k3/8/8/3q4/7r/2n5/8/R3K3 w - - 0 1";
+
+/// The same three threats a rank flip and a colour swap later.
+const THREAT_BLACK: &str = "r3k3/8/2N5/7R/3Q4/8/8/4K3 b - - 0 1";
+
+/// A rook check down the d-file: a knight and a bishop can interpose, another
+/// rook can take the checker, and the king can step aside.
+const CHECKED: &str = "R2rk3/8/8/8/8/8/1N4B1/3K4 w - - 0 1";
+
+/// The same check a rank flip and a colour swap later.
+const CHECKED_BLACK: &str = "3k4/1n4b1/8/8/8/8/8/r2RK3 b - - 0 1";
+
+/// A passed pawn on c6 that can push or take, beside a b-pawn a b-pawn holds up.
+const PASSERS: &str = "4k3/3n4/2P5/8/1p3p2/8/1P6/4K3 w - - 0 1";
+
+/// The same pair a rank flip and a colour swap later.
+const PASSERS_BLACK: &str = "4k3/1p6/8/1P3P2/8/2p5/3N4/4K3 b - - 0 1";
+
+/// A b-pawn the c-pawn holds up: pushing past it or taking it makes a passer.
+const CREATES: &str = "4k3/8/2p5/1P6/8/8/8/4K3 w - - 0 1";
+
+/// The same pawn a rank flip and a colour swap later.
+const CREATES_BLACK: &str = "4k3/8/8/8/1p6/2P5/8/4K3 b - - 0 1";
+
+/// Two pawns that stay healthy unless the b-pawn takes onto the c-file.
+const WEAK: &str = "4k3/8/8/8/8/2p5/1PP5/4K3 w - - 0 1";
+
+/// The same pair a rank flip and a colour swap later.
+const WEAK_BLACK: &str = "4k3/1pp5/2P5/8/8/8/8/4K3 b - - 0 1";
+
+/// The d-pawn covers c3, so the b-pawn running ahead leaves c2 backward.
+const WEAK2: &str = "4k3/8/8/8/3p4/8/1PP5/4K3 w - - 0 1";
+
+/// The same pair a rank flip and a colour swap later.
+const WEAK2_BLACK: &str = "4k3/1pp5/8/3P4/8/8/8/4K3 b - - 0 1";
+
+/// A g-pawn beside the enemy king: either capture empties the g-file for us.
+const OPENK: &str = "6k1/8/5p1p/6P1/8/8/8/6K1 w - - 0 1";
+
+/// The same pawn a rank flip and a colour swap later.
+const OPENK_BLACK: &str = "6k1/8/8/8/6p1/5P1P/8/6K1 b - - 0 1";
+
+/// A rook that can reach their king's ring, facing one that holds ours.
+const RING: &str = "6k1/5ppp/8/8/8/8/r4PPP/1R4K1 w - - 0 1";
+
+/// The same pair of rooks a rank flip and a colour swap later.
+const RING_BLACK: &str = "1r4k1/R4ppp/8/8/8/8/5PPP/6K1 b - - 0 1";
+
+/// A knight standing between a rook and the enemy queen.
+const DISC: &str = "3q3k/8/8/8/8/8/3N4/3RK3 w - - 0 1";
+
+/// The same knight a rank flip and a colour swap later.
+const DISC_BLACK: &str = "3rk3/3n4/8/8/8/8/8/3Q3K b - - 0 1";
+
+/// The same battery uncovering a pawn instead of a queen.
+const DISC_PAWN: &str = "7k/3p4/8/8/8/8/3N4/3RK3 w - - 0 1";
+
 #[rstest]
 #[case::takes_pawn(WHEEL, "e4c3", Some(Role::Pawn))]
 #[case::takes_knight(WHEEL, "e4d6", Some(Role::Knight))]
@@ -287,6 +346,262 @@ fn a_pawn_capture_onto_the_en_passant_square_is_marked_en_passant(
 }
 
 #[rstest]
+#[case::takes_a_free_knight(WHEEL, "e4d6", 3)]
+#[case::takes_a_queen_a_bishop_holds(WHEEL, "e4g5", 6)]
+#[case::takes_a_rook_a_queen_holds(WHEEL, "e4c5", 2)]
+#[case::takes_a_pawn_a_bishop_holds(WHEEL, "e4c3", -2)]
+#[case::quiet_move_onto_a_free_square(WHEEL, "e4f2", 0)]
+#[case::quiet_move_onto_a_covered_square(WHEEL_BLACK, "e5g6", -3)]
+#[case::black_takes_a_free_knight(WHEEL_BLACK, "e5d3", 3)]
+#[case::black_takes_a_queen_a_bishop_holds(WHEEL_BLACK, "e5g4", 6)]
+#[case::black_takes_a_rook_a_queen_holds(WHEEL_BLACK, "e5c4", 2)]
+#[case::black_takes_a_pawn_a_bishop_holds(WHEEL_BLACK, "e5c6", -2)]
+#[case::promotion_capture_nothing_answers(PROMOTION, "e7d8q", 13)]
+#[case::promotion_a_rook_answers(PROMOTION, "e7e8q", -1)]
+#[case::black_promotion_capture(PROMOTION_BLACK, "e2d1q", 13)]
+#[case::rook_walks_onto_a_knight(EXCHANGE, "d1d5", -5)]
+#[case::castling_wins_nothing(EVERY_ROLE, "e1h1", 0)]
+fn see_is_what_the_move_wins_once_both_sides_stop_taking(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] see: i32,
+) {
+    assert_eq!(move_facts(fen, uci).see, see);
+}
+
+#[rstest]
+#[case::rook_eyes_a_free_rook(THREAT, "a1a4", 5)]
+#[case::rook_eyes_a_defended_queen(THREAT, "a1d1", 4)]
+#[case::rook_eyes_a_free_knight(THREAT, "a1c1", 3)]
+#[case::check_threatens_nothing(THREAT, "a1a8", 0)]
+#[case::king_step_threatens_nothing(THREAT, "e1f2", 0)]
+#[case::knight_uncovers_a_queen(DISC, "d2b3", 9)]
+#[case::black_rook_eyes_a_free_rook(THREAT_BLACK, "a8a5", 5)]
+#[case::black_rook_eyes_a_defended_queen(THREAT_BLACK, "a8d8", 4)]
+#[case::black_rook_eyes_a_free_knight(THREAT_BLACK, "a8c8", 3)]
+#[case::black_check_threatens_nothing(THREAT_BLACK, "a8a1", 0)]
+#[case::black_knight_uncovers_a_queen(DISC_BLACK, "d7b6", 9)]
+fn a_threat_is_the_most_the_next_capture_would_win(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] threat: i32,
+) {
+    assert_eq!(move_facts(fen, uci).threat_created_max, threat);
+}
+
+#[rstest]
+#[case::rook_a_rook_attacks(EXCHANGE, "d1d4", true)]
+#[case::knight_a_knight_attacks(WHEEL, "e4f2", true)]
+#[case::pawn_nothing_attacks(EXCHANGE, "c3c4", false)]
+#[case::bishop_nothing_attacks(EXCHANGE, "g1b6", false)]
+#[case::castling_out_of_a_quiet_corner(EVERY_ROLE, "e1h1", false)]
+#[case::black_rook_a_rook_attacks(EXCHANGE_BLACK, "d8d5", true)]
+#[case::black_knight_a_knight_attacks(WHEEL_BLACK, "e5g6", true)]
+#[case::black_pawn_nothing_attacks(EXCHANGE_BLACK, "c6c5", false)]
+#[case::black_bishop_nothing_attacks(EXCHANGE_BLACK, "g8b3", false)]
+fn a_move_notes_when_the_square_it_leaves_is_under_attack(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] moves_attacked_unit: bool,
+) {
+    assert_eq!(
+        move_facts(fen, uci).moves_attacked_unit,
+        moves_attacked_unit
+    );
+}
+
+#[rstest]
+#[case::knight_interposes(CHECKED, "b2d3", true)]
+#[case::bishop_interposes(CHECKED, "g2d5", true)]
+#[case::rook_takes_the_checker(CHECKED, "a8d8", false)]
+#[case::king_steps_aside(CHECKED, "d1c1", false)]
+#[case::king_steps_forward(CHECKED, "d1e2", false)]
+#[case::no_check_to_block(EXCHANGE, "d1d4", false)]
+#[case::black_knight_interposes(CHECKED_BLACK, "b7d6", true)]
+#[case::black_bishop_interposes(CHECKED_BLACK, "g7d4", true)]
+#[case::black_rook_takes_the_checker(CHECKED_BLACK, "a1d1", false)]
+#[case::black_king_steps_aside(CHECKED_BLACK, "d8c8", false)]
+#[case::black_king_steps_forward(CHECKED_BLACK, "d8e7", false)]
+fn a_move_blocks_check_when_it_lands_between_the_checker_and_the_king(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] blocks_check: bool,
+) {
+    assert_eq!(move_facts(fen, uci).blocks_check, blocks_check);
+}
+
+#[rstest]
+#[case::passer_pushes(PASSERS, "c6c7", true)]
+#[case::passer_takes(PASSERS, "c6d7", true)]
+#[case::held_up_pawn_pushes(PASSERS, "b2b3", false)]
+#[case::king_steps(PASSERS, "e1e2", false)]
+#[case::rook_moves(EXCHANGE, "d1d4", false)]
+#[case::black_passer_pushes(PASSERS_BLACK, "c3c2", true)]
+#[case::black_passer_takes(PASSERS_BLACK, "c3d2", true)]
+#[case::black_held_up_pawn_pushes(PASSERS_BLACK, "b7b6", false)]
+#[case::black_king_steps(PASSERS_BLACK, "e8e7", false)]
+fn a_pawn_advances_a_passer_when_the_pawn_it_moves_was_passed(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] advances_passer: bool,
+) {
+    assert_eq!(move_facts(fen, uci).advances_passer, advances_passer);
+}
+
+#[rstest]
+#[case::takes_the_holder(CREATES, "b5c6", true)]
+#[case::pushes_past_the_holder(CREATES, "b5b6", true)]
+#[case::pushes_beside_a_holder(WEAK2, "c2c4", true)]
+#[case::king_steps(CREATES, "e1e2", false)]
+#[case::passer_only_advances(PASSERS, "c6c7", false)]
+#[case::black_takes_the_holder(CREATES_BLACK, "b4c3", true)]
+#[case::black_pushes_past_the_holder(CREATES_BLACK, "b4b3", true)]
+#[case::black_pushes_beside_a_holder(WEAK2_BLACK, "c7c5", true)]
+#[case::black_king_steps(CREATES_BLACK, "e8e7", false)]
+#[case::black_passer_only_advances(PASSERS_BLACK, "c3c2", false)]
+fn a_move_creates_a_passer_when_it_leaves_the_side_with_more_of_them(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] creates_passer: bool,
+) {
+    assert_eq!(move_facts(fen, uci).creates_passer, creates_passer);
+}
+
+#[rstest]
+#[case::takes_onto_its_neighbours_file(WEAK, "b2c3", (true, true, false))]
+#[case::pushes(WEAK, "b2b3", (false, false, false))]
+#[case::double_pushes(WEAK, "b2b4", (false, false, false))]
+#[case::runs_ahead_of_its_neighbour(WEAK2, "b2b4", (false, false, true))]
+#[case::steps_ahead_of_its_neighbour(WEAK2, "b2b3", (false, false, true))]
+#[case::neighbour_keeps_up(WEAK2, "c2c3", (false, false, false))]
+#[case::king_steps(WEAK2, "e1d1", (false, false, false))]
+#[case::black_takes_onto_its_neighbours_file(WEAK_BLACK, "b7c6", (true, true, false))]
+#[case::black_pushes(WEAK_BLACK, "b7b6", (false, false, false))]
+#[case::black_double_pushes(WEAK_BLACK, "b7b5", (false, false, false))]
+#[case::black_runs_ahead_of_its_neighbour(WEAK2_BLACK, "b7b5", (false, false, true))]
+#[case::black_steps_ahead_of_its_neighbour(WEAK2_BLACK, "b7b6", (false, false, true))]
+#[case::black_neighbour_keeps_up(WEAK2_BLACK, "c7c6", (false, false, false))]
+fn a_move_creates_a_weakness_when_it_leaves_the_side_with_more_weak_pawns(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] weaknesses: (bool, bool, bool),
+) {
+    let facts = move_facts(fen, uci);
+    assert_eq!(
+        (
+            facts.creates_isolated,
+            facts.creates_doubled,
+            facts.creates_backward
+        ),
+        weaknesses
+    );
+}
+
+#[rstest]
+#[case::takes_to_the_left(OPENK, "g5f6", true)]
+#[case::takes_to_the_right(OPENK, "g5h6", true)]
+#[case::stays_on_the_file(OPENK, "g5g6", false)]
+#[case::king_steps(OPENK, "g1f1", false)]
+#[case::pawn_leaves_a_file_away_from_their_king(EN_PASSANT, "e5d6", true)]
+#[case::black_takes_to_the_left(OPENK_BLACK, "g4f3", true)]
+#[case::black_takes_to_the_right(OPENK_BLACK, "g4h3", true)]
+#[case::black_stays_on_the_file(OPENK_BLACK, "g4g3", false)]
+#[case::black_king_steps(OPENK_BLACK, "g8f8", false)]
+fn a_move_opens_a_file_at_their_king_when_our_last_pawn_leaves_it(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] opens: bool,
+) {
+    assert_eq!(move_facts(fen, uci).opens_file_at_enemy_king, opens);
+}
+
+#[rstest]
+#[case::rook_reaches_their_seventh(RING, "b1b7", (1, 0))]
+#[case::rook_reaches_their_back_rank(RING, "b1b8", (1, 0))]
+#[case::rook_steps_aside(RING, "b1a1", (0, 0))]
+#[case::king_walks_out_of_a_rooks_reach(RING, "g1h1", (0, -1))]
+#[case::pawn_push_changes_neither(RING, "f2f3", (0, 0))]
+#[case::knight_takes_a_ring_attacker(EXCHANGE, "g1b6", (1, 0))]
+#[case::black_rook_reaches_their_second(RING_BLACK, "b8b2", (1, 0))]
+#[case::black_rook_reaches_their_back_rank(RING_BLACK, "b8b1", (1, 0))]
+#[case::black_rook_steps_aside(RING_BLACK, "b8a8", (0, 0))]
+#[case::black_king_walks_out_of_a_rooks_reach(RING_BLACK, "g8h8", (0, -1))]
+#[case::black_pawn_push_changes_neither(RING_BLACK, "f7f6", (0, 0))]
+fn a_move_states_what_it_does_to_both_king_rings(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] deltas: (i32, i32),
+) {
+    let facts = move_facts(fen, uci);
+    assert_eq!(
+        (
+            facts.our_ring_attackers_delta,
+            facts.their_ring_attackers_delta
+        ),
+        deltas
+    );
+}
+
+#[rstest]
+#[case::rook_to_a_defended_square(EXCHANGE, "d1d4", (0, -1))]
+#[case::rook_to_a_bare_square(EXCHANGE, "d1d6", (1, 0))]
+#[case::pawn_to_a_bare_square(EXCHANGE, "c3c4", (1, 0))]
+#[case::bishop_takes_the_hanging_knight(EXCHANGE, "g1b6", (0, -1))]
+#[case::knight_takes_the_knight_that_held_it(WHEEL, "e4d6", (-1, -1))]
+#[case::knight_walks_into_a_bishop(WHEEL, "e4c3", (0, -1))]
+#[case::black_rook_to_a_defended_square(EXCHANGE_BLACK, "d8d5", (0, -1))]
+#[case::black_rook_to_a_bare_square(EXCHANGE_BLACK, "d8d3", (1, 0))]
+#[case::black_pawn_to_a_bare_square(EXCHANGE_BLACK, "c6c5", (1, 0))]
+#[case::black_bishop_takes_the_hanging_knight(EXCHANGE_BLACK, "g8b3", (0, -1))]
+#[case::black_knight_takes_the_knight_that_held_it(WHEEL_BLACK, "e5d3", (-1, -1))]
+fn a_move_states_how_many_units_of_each_side_it_leaves_hanging(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] deltas: (i32, i32),
+) {
+    let facts = move_facts(fen, uci);
+    assert_eq!((facts.own_hanging_delta, facts.their_hanging_delta), deltas);
+}
+
+#[rstest]
+#[case::rook_walks_onto_a_bare_square(EXCHANGE, "d1d6", true)]
+#[case::rook_walks_onto_a_knights_square(EXCHANGE, "d1d5", true)]
+#[case::knight_walks_into_a_bishop(WHEEL, "e4c3", true)]
+#[case::only_a_pawn_is_left_hanging(EXCHANGE, "c3c4", false)]
+#[case::rook_stays_defended(EXCHANGE, "d1d4", false)]
+#[case::knight_takes_its_attacker(WHEEL, "e4d6", false)]
+#[case::black_rook_walks_onto_a_bare_square(EXCHANGE_BLACK, "d8d3", true)]
+#[case::black_rook_walks_onto_a_knights_square(EXCHANGE_BLACK, "d8d4", true)]
+#[case::black_knight_walks_into_a_bishop(WHEEL_BLACK, "e5c6", true)]
+#[case::black_only_a_pawn_is_left_hanging(EXCHANGE_BLACK, "c6c5", false)]
+#[case::black_rook_stays_defended(EXCHANGE_BLACK, "d8d5", false)]
+fn a_move_leaves_a_unit_hanging_when_a_square_carries_a_new_hanging_piece(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] leaves: bool,
+) {
+    assert_eq!(move_facts(fen, uci).leaves_unit_hanging, leaves);
+}
+
+#[rstest]
+#[case::knight_steps_off_the_file(DISC, "d2b3", true)]
+#[case::knight_steps_off_the_other_way(DISC, "d2f3", true)]
+#[case::the_rook_itself_moves(DISC, "d1c1", false)]
+#[case::king_steps_aside(DISC, "e1e2", false)]
+#[case::what_it_uncovers_is_only_a_pawn(DISC_PAWN, "d2b3", false)]
+#[case::black_knight_steps_off_the_file(DISC_BLACK, "d7b6", true)]
+#[case::black_knight_steps_off_the_other_way(DISC_BLACK, "d7f6", true)]
+#[case::black_rook_itself_moves(DISC_BLACK, "d8c8", false)]
+#[case::black_king_steps_aside(DISC_BLACK, "e8e7", false)]
+fn a_move_gives_a_discovered_attack_when_a_slider_it_leaves_standing_gains_one(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] discovers: bool,
+) {
+    assert_eq!(move_facts(fen, uci).gives_discovered_attack, discovers);
+}
+
+#[rstest]
 #[case::promotion_capture_with_check(
     PROMOTION,
     "e7d8q",
@@ -296,6 +611,8 @@ fn a_pawn_capture_onto_the_en_passant_square_is_marked_en_passant(
         1.0, 0.0, 0.0, 0.0, 0.0, 0.0, // mover: pawn
         1.0, 0.0, 0.0, 0.0, // promotion: queen
         1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+        // see 13, threat 3, advances a passer, one more ring attacker
+        1.0, 3.0 / 9.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
     ]
 )]
 #[case::castling(
@@ -307,6 +624,8 @@ fn a_pawn_capture_onto_the_en_passant_square_is_marked_en_passant(
         0.0, 0.0, 0.0, 0.0, 0.0, 1.0, // mover: king
         0.0, 0.0, 0.0, 0.0, // promotion: none
         0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+        // a symmetric position castling changes nothing about
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
     ]
 )]
 #[case::en_passant(
@@ -318,6 +637,8 @@ fn a_pawn_capture_onto_the_en_passant_square_is_marked_en_passant(
         1.0, 0.0, 0.0, 0.0, 0.0, 0.0, // mover: pawn
         0.0, 0.0, 0.0, 0.0, // promotion: none
         0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+        // see 1, a passer that leaves their king's e-file, one pawn fewer hanging
+        1.0 / 9.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -0.25, 0.0, 0.0,
     ]
 )]
 #[case::capture_that_hangs(
@@ -329,6 +650,22 @@ fn a_pawn_capture_onto_the_en_passant_square_is_marked_en_passant(
         0.0, 1.0, 0.0, 0.0, 0.0, 0.0, // mover: knight
         0.0, 0.0, 0.0, 0.0, // promotion: none
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        // see 6, off an attacked square, and the knight is left hanging
+        6.0 / 9.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.25, 1.0, 0.0,
+    ]
+)]
+#[case::quiet_move_that_hangs_a_rook(
+    THREAT,
+    "a1a4",
+    [
+        0.0, // quiet
+        0.0, 0.0, 0.0, 0.0, 0.0, // victim: none
+        0.0, 0.0, 0.0, 1.0, 0.0, 0.0, // mover: rook
+        0.0, 0.0, 0.0, 0.0, // promotion: none
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        // see −5, threatening a rook, and hanging one of each side's
+        -5.0 / 9.0, 5.0 / 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 1.0,
+        0.0,
     ]
 )]
 #[case::black_capture(
@@ -340,12 +677,15 @@ fn a_pawn_capture_onto_the_en_passant_square_is_marked_en_passant(
         0.0, 0.0, 1.0, 0.0, 0.0, 0.0, // mover: bishop
         0.0, 0.0, 0.0, 0.0, // promotion: none
         0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+        // see 3, threatening a rook, one more ring attacker, one fewer hanging
+        3.0 / 9.0, 5.0 / 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, -0.25, 0.0,
+        0.0,
     ]
 )]
-fn a_move_is_twenty_four_values_in_the_order_the_catalogue_lists(
+fn a_move_is_forty_values_in_the_order_the_catalogue_lists(
     #[case] fen: &str,
     #[case] uci: &str,
-    #[case] row: [f32; 24],
+    #[case] row: [f32; 40],
 ) {
     let mut out = [0.0f32; MoveFacts::WIDTH];
     move_facts(fen, uci).encode_into(&mut out);
@@ -381,4 +721,47 @@ fn the_move_facts_of_a_chess960_position_follow_its_own_castling_geometry() {
     assert_eq!(pawn.mover, Role::Pawn);
     assert!(pawn.is_safe);
     assert!(!pawn.escapes_attack);
+}
+
+/// Castling is read from the squares the move really uses: the king's landing
+/// square and the rook's, wherever the array puts them. Castling long lands
+/// the rook on d1, behind the queen, and the pair then wins a piece on d7;
+/// stepping the king to c1 instead only moves its ring under the enemy queen.
+#[rstest]
+#[case::short(NINE_SIXTY, "b1e1", 0, 0)]
+#[case::long(NINE_SIXTY, "b1a1", 3, 1)]
+#[case::king_step(NINE_SIXTY, "b1c1", 0, 1)]
+#[case::pawn_push(NINE_SIXTY, "a2a3", 0, 0)]
+#[case::black_short(NINE_SIXTY_BLACK, "b8e8", 0, 0)]
+#[case::black_long(NINE_SIXTY_BLACK, "b8a8", 3, 1)]
+#[case::black_king_step(NINE_SIXTY_BLACK, "b8c8", 0, 1)]
+#[case::black_pawn_push(NINE_SIXTY_BLACK, "a7a6", 0, 0)]
+fn a_chess960_move_reads_its_own_castling_geometry(
+    #[case] fen: &str,
+    #[case] uci: &str,
+    #[case] threat: i32,
+    #[case] their_ring_delta: i32,
+) {
+    let facts = move_facts_under(&CHESS960, fen, uci);
+    assert_eq!(facts.threat_created_max, threat);
+    assert_eq!(facts.their_ring_attackers_delta, their_ring_delta);
+    assert_eq!(facts.our_ring_attackers_delta, 0);
+    assert!(!facts.blocks_check);
+    assert!(!facts.moves_attacked_unit);
+    assert!(!facts.leaves_unit_hanging);
+    assert!(!facts.gives_discovered_attack);
+    assert_eq!(facts.see, 0);
+}
+
+/// The queen that walks into three defenders hangs on the square it lands on.
+#[rstest]
+#[case::white(NINE_SIXTY, "d2d7")]
+#[case::black(NINE_SIXTY_BLACK, "d7d2")]
+fn a_chess960_capture_states_what_it_leaves_behind(#[case] fen: &str, #[case] uci: &str) {
+    let facts = move_facts_under(&CHESS960, fen, uci);
+    assert!(facts.moves_attacked_unit);
+    assert_eq!(facts.own_hanging_delta, 1);
+    assert!(facts.leaves_unit_hanging);
+    assert_eq!(facts.our_ring_attackers_delta, 1);
+    assert_eq!(facts.threat_created_max, 0);
 }
