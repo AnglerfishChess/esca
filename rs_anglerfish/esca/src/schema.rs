@@ -422,7 +422,16 @@ static ATTACKS: [FeatureSpec; 12] = feature_specs! {
     "defended_count", 2, "count/16", ANY;
 };
 
-static EXCHANGE: [FeatureSpec; 0] = feature_specs! {};
+static EXCHANGE: [FeatureSpec; 8] = feature_specs! {
+    "us.see_best_capture", 1, "diff/9", ANY;
+    "us.see_positive_capture_count", 1, "count/8", ANY;
+    "us.see_equal_capture_count", 1, "count/8", ANY;
+    "us.see_positive_total", 1, "count/20", ANY;
+    "them.see_best_capture", 1, "diff/9", ANY;
+    "them.see_positive_capture_count", 1, "count/8", ANY;
+    "them.see_equal_capture_count", 1, "count/8", ANY;
+    "them.see_positive_total", 1, "count/20", ANY;
+};
 
 static THREATS: [FeatureSpec; 0] = feature_specs! {};
 
@@ -572,7 +581,7 @@ static V1_GROUPS: [GroupSpec; 14] = [
     GroupSpec {
         name: "exchange",
         version: 1,
-        width: 0,
+        width: 8,
         features: &EXCHANGE,
     },
     GroupSpec {
@@ -583,7 +592,7 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "tactics",
-        version: 1,
+        version: 2,
         width: 120,
         features: &TACTICS,
     },
@@ -630,7 +639,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1838);
+        assert_eq!(Schema::v1().width(), 1846);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

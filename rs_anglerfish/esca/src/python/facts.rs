@@ -746,6 +746,53 @@ impl PyAttackFacts {
     }
 }
 
+/// One side's captures, judged by the exchange they start.
+#[pyclass(frozen, module = "esca", name = "ExchangeFacts")]
+pub struct PyExchangeFacts {
+    parent: Py<PyFacts>,
+    side: isize,
+    /// The largest SEE over the side's captures; 0 when it has none.
+    #[pyo3(get)]
+    see_best_capture: i32,
+    /// Captures whose SEE is above 0.
+    #[pyo3(get)]
+    see_positive_capture_count: u16,
+    /// Captures whose SEE is 0.
+    #[pyo3(get)]
+    see_equal_capture_count: u16,
+    /// Sum of the SEEs above 0.
+    #[pyo3(get)]
+    see_positive_total: i32,
+}
+
+impl PyExchangeFacts {
+    fn of(facts: &facts::ExchangeFacts, parent: Py<PyFacts>, side: isize) -> PyExchangeFacts {
+        PyExchangeFacts {
+            parent,
+            side,
+            see_best_capture: facts.see_best_capture,
+            see_positive_capture_count: facts.see_positive_capture_count,
+            see_equal_capture_count: facts.see_equal_capture_count,
+            see_positive_total: facts.see_positive_total,
+        }
+    }
+}
+
+#[pymethods]
+impl PyExchangeFacts {
+    fn __repr__(&self) -> String {
+        format!("<ExchangeFacts see_best_capture={}>", self.see_best_capture)
+    }
+
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> SideGroupReduce<'py> {
+        let py = slf.py();
+        Ok((
+            group_reconstructor(py)?,
+            (slf.get().parent.clone_ref(py), "exchange", slf.get().side),
+        ))
+    }
+}
+
 /// One side's one-ply tactical options.
 #[pyclass(frozen, module = "esca", name = "TacticsFacts")]
 pub struct PyTacticsFacts {
@@ -1187,6 +1234,16 @@ impl PyFacts {
     #[getter]
     fn attacks(slf: &Bound<'_, Self>) -> PyAttackFacts {
         PyAttackFacts::of(&slf.get().inner.attacks, slf.clone().unbind())
+    }
+
+    /// Captures by exchange, ours then theirs.
+    #[getter]
+    fn exchange(slf: &Bound<'_, Self>) -> (PyExchangeFacts, PyExchangeFacts) {
+        let facts = &slf.get().inner.exchange;
+        (
+            PyExchangeFacts::of(&facts[0], slf.clone().unbind(), 0),
+            PyExchangeFacts::of(&facts[1], slf.clone().unbind(), 1),
+        )
     }
 
     /// One-ply tactics, ours then theirs.

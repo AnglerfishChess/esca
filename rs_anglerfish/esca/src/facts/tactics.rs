@@ -183,23 +183,18 @@ pub(super) fn tactics(
 
         if let Some(role) = victim {
             facts.capture_count += 1;
-            let gain = material_value(role) - material_value(mover_role);
-            let defended = scan.by[enemy.index()].contains(victim_square(mv));
-            if gain > 0 || !defended {
-                facts.winning_capture_available = true;
-            }
-            facts.winning_capture_max_gain = facts.winning_capture_max_gain.max(gain.max(0));
+            let see = position.see_capture(mv);
+            facts.winning_capture_available |= see > 0;
+            facts.winning_capture_max_gain = facts.winning_capture_max_gain.max(see.max(0));
             if captures_hanging {
                 facts.captures_hanging = true;
                 facts.hanging_victim_max_value =
                     facts.hanging_victim_max_value.max(material_value(role));
             }
-            if defended {
-                match gain.cmp(&0) {
-                    Ordering::Equal => facts.equal_capture_count += 1,
-                    Ordering::Less => facts.losing_capture_count += 1,
-                    Ordering::Greater => {}
-                }
+            match see.cmp(&0) {
+                Ordering::Equal => facts.equal_capture_count += 1,
+                Ordering::Less => facts.losing_capture_count += 1,
+                Ordering::Greater => {}
             }
         }
 

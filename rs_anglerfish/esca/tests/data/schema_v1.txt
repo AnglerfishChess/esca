@@ -106,9 +106,17 @@ attacks:2:25
   pinned_value:2:count/20
   skewer_candidates:2:count/4
   defended_count:2:count/16
-exchange:1:0
+exchange:1:8
+  us.see_best_capture:1:diff/9
+  us.see_positive_capture_count:1:count/8
+  us.see_equal_capture_count:1:count/8
+  us.see_positive_total:1:count/20
+  them.see_best_capture:1:diff/9
+  them.see_positive_capture_count:1:count/8
+  them.see_equal_capture_count:1:count/8
+  them.see_positive_total:1:count/20
 threats:1:0
-tactics:1:120
+tactics:2:120
   us.check_available:1:bit
   us.check_count:1:count/8
   us.check_by_piece:5:bits

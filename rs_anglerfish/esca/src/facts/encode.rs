@@ -9,7 +9,7 @@ use crate::types::{Colour, FileSet, Role, Square, SquareSet};
 use crate::variant::Variant;
 
 use super::pawns::files_of;
-use super::{Facts, MoveFacts, Scratch, Side, TacticsFacts};
+use super::{ExchangeFacts, Facts, MoveFacts, Scratch, Side, TacticsFacts};
 
 /// A cursor over the values of one group.
 struct Writer<'a> {
@@ -411,6 +411,13 @@ fn attacks(facts: &Facts, w: &mut Writer) {
     }
 }
 
+fn exchange_block(e: &ExchangeFacts, w: &mut Writer) {
+    w.diff(e.see_best_capture as f32, 9.0);
+    w.count(e.see_positive_capture_count as f32, 8.0);
+    w.count(e.see_equal_capture_count as f32, 8.0);
+    w.count(e.see_positive_total as f32, 20.0);
+}
+
 fn tactics_block(t: &TacticsFacts, w: &mut Writer) {
     w.bit(t.check_available());
     w.count(t.check_count as f32, 8.0);
@@ -494,7 +501,11 @@ impl Facts {
                 match group.name {
                     // Groups with no features yet: their width is zero, so
                     // nothing is written and no offset moves.
-                    "exchange" | "threats" | "endgame" => {}
+                    "threats" | "endgame" => {}
+                    "exchange" => {
+                        exchange_block(&self.exchange[0], &mut writer);
+                        exchange_block(&self.exchange[1], &mut writer);
+                    }
                     "placement" => placement(self, &mut writer),
                     "state" => state(self, &mut writer),
                     "history" => history(self, &mut writer),

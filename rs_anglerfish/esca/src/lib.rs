@@ -49,9 +49,9 @@ mod variant;
 
 pub use error::{FenError, IllegalMove, MoveParseError, PositionError};
 pub use facts::{
-    AnnotatedMove, AttackFacts, Facts, HistoryFacts, KingFacts, MaterialFacts, MobilityFacts,
-    MoveFacts, PawnFacts, PieceFacts, PlacementFacts, PlaneFacts, RowError, Scratch, Side,
-    StateFacts, TacticsFacts, encode_fens, encode_positions,
+    AnnotatedMove, AttackFacts, ExchangeFacts, Facts, HistoryFacts, KingFacts, MaterialFacts,
+    MobilityFacts, MoveFacts, PawnFacts, PieceFacts, PlacementFacts, PlaneFacts, RowError, Scratch,
+    Side, StateFacts, TacticsFacts, encode_fens, encode_positions,
 };
 pub use game::Game;
 pub use moves::{MAX_MOVES, Move, MoveKind, MoveList};

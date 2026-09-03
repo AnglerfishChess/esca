@@ -56,6 +56,18 @@ const DISCOVERY: &str = "r3k3/7p/8/6n1/4N3/8/3N4/2B1R2K w - - 0 1";
 /// The same board with Black to move.
 const DISCOVERY_THEIRS: &str = "r3k3/7p/8/6n1/4N3/8/3N4/2B1R2K b - - 0 1";
 
+/// Knight for knight, each defended by a pawn on neither side: an even trade.
+const TRADE: &str = "4k3/8/2p5/3n4/8/2N5/8/4K3 w - - 0 1";
+
+/// The same board with Black to move, whose knight has nothing behind it.
+const TRADE_THEIRS: &str = "4k3/8/2p5/3n4/8/2N5/8/4K3 b - - 0 1";
+
+/// The only capture is a rook taking a pawn a pawn defends.
+const LOSING_TAKE: &str = "4k3/8/2p5/3p4/8/8/3R4/4K3 w - - 0 1";
+
+/// The same board with Black to move, who has no capture at all.
+const LOSING_TAKE_THEIRS: &str = "4k3/8/2p5/3p4/8/8/3R4/4K3 b - - 0 1";
+
 /// Chess960: castling long lands the king on c1 and the rook on d1, in check.
 const NINE_SIXTY: &str = "3k3r/8/8/8/8/8/8/RK6 w A - 0 1";
 
@@ -369,10 +381,13 @@ fn each_capturing_move_counts_for_itself_so_four_promotions_count_four(
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::pins(PINS, [false, false])]
+#[case::forks(FORKS, [false, false])]
 #[case::checks(CHECKS, [true, true])]
 #[case::mate(MATE, [true, false])]
 #[case::mate_theirs(MATE_THEIRS, [false, true])]
-fn a_capture_wins_when_the_victim_outvalues_the_capturer_or_stands_undefended(
+#[case::promotion_captures(PROMOTION_CAPTURES, [true, true])]
+#[case::discovery(DISCOVERY, [true, false])]
+fn a_capture_wins_when_the_exchange_it_starts_wins_material(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
@@ -389,11 +404,14 @@ fn a_capture_wins_when_the_victim_outvalues_the_capturer_or_stands_undefended(
 
 #[rstest]
 #[case::start(START, [0, 0])]
-#[case::checks(CHECKS, [0, 0])]
-#[case::mate(MATE, [4, 0])]
-#[case::promotion_captures(PROMOTION_CAPTURES, [4, 4])]
+#[case::pins(PINS, [0, 0])]
+#[case::checks(CHECKS, [5, 3])]
+#[case::mate(MATE, [5, 0])]
+#[case::mate_theirs(MATE_THEIRS, [0, 5])]
+#[case::promotion_captures(PROMOTION_CAPTURES, [13, 13])]
 #[case::in_check(IN_CHECK, [5, 0])]
-fn the_gain_of_a_capture_is_the_victim_less_the_capturer_and_never_below_zero(
+#[case::discovery(DISCOVERY, [3, 0])]
+fn the_max_gain_is_the_best_see_over_the_captures_and_never_below_zero(
     #[case] fen: &str,
     #[case] gain: [i32; 2],
 ) {
@@ -445,7 +463,10 @@ fn the_hanging_victims_are_ranked_by_value_and_the_largest_is_kept(
 #[case::checks(CHECKS, [0, 1])]
 #[case::checks_theirs(CHECKS_THEIRS, [1, 0])]
 #[case::discovery(DISCOVERY, [0, 1])]
-fn a_capture_of_a_defended_unit_of_equal_value_is_an_equal_one(
+#[case::discovery_theirs(DISCOVERY_THEIRS, [1, 0])]
+#[case::trade(TRADE, [1, 0])]
+#[case::trade_theirs(TRADE_THEIRS, [0, 1])]
+fn an_equal_capture_is_one_whose_exchange_comes_out_level(
     #[case] fen: &str,
     #[case] captures: [u16; 2],
 ) {
@@ -458,10 +479,13 @@ fn a_capture_of_a_defended_unit_of_equal_value_is_an_equal_one(
 #[case::start(START, [0, 0])]
 #[case::checks(CHECKS, [0, 0])]
 #[case::mate(MATE, [0, 1])]
+#[case::mate_theirs(MATE_THEIRS, [1, 0])]
 #[case::forks(FORKS, [0, 1])]
 #[case::pins(PINS, [1, 0])]
 #[case::pins_theirs(PINS_THEIRS, [0, 1])]
-fn a_capture_of_a_defended_unit_of_lower_value_is_a_losing_one(
+#[case::losing_take(LOSING_TAKE, [1, 0])]
+#[case::losing_take_theirs(LOSING_TAKE_THEIRS, [0, 1])]
+fn a_losing_capture_is_one_whose_exchange_costs_material(
     #[case] fen: &str,
     #[case] captures: [u16; 2],
 ) {

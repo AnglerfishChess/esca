@@ -58,6 +58,18 @@ DISCOVERY = "r3k3/7p/8/6n1/4N3/8/3N4/2B1R2K w - - 0 1"
 #: The same board with Black to move.
 DISCOVERY_THEIRS = "r3k3/7p/8/6n1/4N3/8/3N4/2B1R2K b - - 0 1"
 
+#: Knight for knight, each defended by a pawn on neither side: an even trade.
+TRADE = "4k3/8/2p5/3n4/8/2N5/8/4K3 w - - 0 1"
+
+#: The same board with Black to move, whose knight has nothing behind it.
+TRADE_THEIRS = "4k3/8/2p5/3n4/8/2N5/8/4K3 b - - 0 1"
+
+#: The only capture is a rook taking a pawn a pawn defends.
+LOSING_TAKE = "4k3/8/2p5/3p4/8/8/3R4/4K3 w - - 0 1"
+
+#: The same board with Black to move, who has no capture at all.
+LOSING_TAKE_THEIRS = "4k3/8/2p5/3p4/8/8/3R4/4K3 b - - 0 1"
+
 #: Chess960: castling long lands the king on c1 and the rook on d1, in check.
 NINE_SIXTY = "3k3r/8/8/8/8/8/8/RK6 w A - 0 1"
 
@@ -394,13 +406,16 @@ def test_each_capturing_move_counts_for_itself_so_four_promotions_count_four(
     [
         (START, [False, False]),
         (PINS, [False, False]),
+        (FORKS, [False, False]),
         (CHECKS, [True, True]),
         (MATE, [True, False]),
         (MATE_THEIRS, [False, True]),
+        (PROMOTION_CAPTURES, [True, True]),
+        (DISCOVERY, [True, False]),
     ],
-    ids=["start", "pins", "checks", "mate", "mate_theirs"],
+    ids=["start", "pins", "forks", "checks", "mate", "mate_theirs", "promotion_captures", "discovery"],
 )
-def test_a_capture_wins_when_the_victim_outvalues_the_capturer_or_stands_undefended(
+def test_a_capture_wins_when_the_exchange_it_starts_wins_material(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
@@ -412,14 +427,17 @@ def test_a_capture_wins_when_the_victim_outvalues_the_capturer_or_stands_undefen
     ("fen", "gain"),
     [
         (START, [0, 0]),
-        (CHECKS, [0, 0]),
-        (MATE, [4, 0]),
-        (PROMOTION_CAPTURES, [4, 4]),
+        (PINS, [0, 0]),
+        (CHECKS, [5, 3]),
+        (MATE, [5, 0]),
+        (MATE_THEIRS, [0, 5]),
+        (PROMOTION_CAPTURES, [13, 13]),
         (IN_CHECK, [5, 0]),
+        (DISCOVERY, [3, 0]),
     ],
-    ids=["start", "checks", "mate", "promotion_captures", "in_check"],
+    ids=["start", "pins", "checks", "mate", "mate_theirs", "promotion_captures", "in_check", "discovery"],
 )
-def test_the_gain_of_a_capture_is_the_victim_less_the_capturer_and_never_below_zero(
+def test_the_max_gain_is_the_best_see_over_the_captures_and_never_below_zero(
     fen: str, gain: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
@@ -474,10 +492,22 @@ def test_the_hanging_victims_are_ranked_by_value_and_the_largest_is_kept(
         (CHECKS, [0, 1]),
         (CHECKS_THEIRS, [1, 0]),
         (DISCOVERY, [0, 1]),
+        (DISCOVERY_THEIRS, [1, 0]),
+        (TRADE, [1, 0]),
+        (TRADE_THEIRS, [0, 1]),
     ],
-    ids=["start", "promotion_captures", "checks", "checks_theirs", "discovery"],
+    ids=[
+        "start",
+        "promotion_captures",
+        "checks",
+        "checks_theirs",
+        "discovery",
+        "discovery_theirs",
+        "trade",
+        "trade_theirs",
+    ],
 )
-def test_a_capture_of_a_defended_unit_of_equal_value_is_an_equal_one(
+def test_an_equal_capture_is_one_whose_exchange_comes_out_level(
     fen: str, captures: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
@@ -491,13 +521,26 @@ def test_a_capture_of_a_defended_unit_of_equal_value_is_an_equal_one(
         (START, [0, 0]),
         (CHECKS, [0, 0]),
         (MATE, [0, 1]),
+        (MATE_THEIRS, [1, 0]),
         (FORKS, [0, 1]),
         (PINS, [1, 0]),
         (PINS_THEIRS, [0, 1]),
+        (LOSING_TAKE, [1, 0]),
+        (LOSING_TAKE_THEIRS, [0, 1]),
     ],
-    ids=["start", "checks", "mate", "forks", "pins", "pins_theirs"],
+    ids=[
+        "start",
+        "checks",
+        "mate",
+        "mate_theirs",
+        "forks",
+        "pins",
+        "pins_theirs",
+        "losing_take",
+        "losing_take_theirs",
+    ],
 )
-def test_a_capture_of_a_defended_unit_of_lower_value_is_a_losing_one(
+def test_a_losing_capture_is_one_whose_exchange_costs_material(
     fen: str, captures: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics

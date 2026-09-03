@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1838 f32 per position | value head, policy head |
+| `position` | one vector of 1846 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -58,6 +58,19 @@ feature distinguishes actual White from actual Black.
 | **ring attacker** | An enemy knight, bishop, rook or queen attacking a king ring square. Pawns and the enemy king do not count. The same set is what tropism averages over. |
 | **king files** | The three files a king's shelter and storm are read on: the king's own file clamped to b–g, and its two neighbours, in ascending order. |
 | **virtual mobility** | The number of squares a queen placed on our own king's square would attack. A cheap proxy for how exposed the king is. |
+
+### Values and exchange
+
+| Term | Definition |
+|---|---|
+| **value sum** | Σ over a set of units of P=1, N=B=3, R=5, Q=9, K=0. |
+| **exchange on a square** | Both sides capture on one square in turn, each with its least valuable attacker of that square, until one has no attacker left or stops. Attackers are read from the occupancy of the moment, so a slider standing behind a departed attacker on the same ray joins in. Pins are ignored: a pinned defender still counts. A king captures only when the square is no longer attacked by the other side, so it is the last attacker of its side. A pawn capturing onto its relative rank 8 promotes to a queen: that capture wins 8 more, and a queen stands on the square from then on. |
+| **SEE** | Static exchange evaluation, in value units, signed, positive for material won. Of a capture: the value its side wins from the exchange that capture begins, each side stopping as soon as going on would cost it material. The move itself is played whatever it costs, so a capture's SEE may be negative. Of a quiet move: the same reckoning with nothing captured, so 0 or negative. Of castling: 0. |
+| **SEE of a unit** | The SEE of the exchange the opponent begins by capturing that unit. Never negative — the opponent may leave it alone. 0 for a square no enemy unit attacks, and for a king. |
+| **max gain** | The largest SEE over a side's captures. |
+
+An exchange is a one-square reckoning, not a search: it answers "what does
+taking here cost", never "is taking here best".
 
 ### Pawns
 
@@ -119,10 +132,12 @@ the legal move list).
 | **B** | One pass over the pieces present (≤32). | ~20–100 ns |
 | **C** | One pass over the legal move list (typically 20–40 moves), a few ops each. | ~50–300 ns |
 | **D** | Make-move plus movegen for a *subset* of moves (checking moves only). | ~0.2–3 µs |
+| **E** | One exchange loop on one square: least valuable attacker, x-rays refreshed, at most about 32 steps. | ~50–500 ns |
 
 Class D applies to exactly two features (`mate_in_1`, `stalemate_in_1`). They
 sit in their own sub-group so that a search that cannot afford them can turn
-them off without changing any other offset.
+them off without changing any other offset. `C·E` is one exchange loop per
+capture in the move list.
 
 ### Encoding rules
 
@@ -305,9 +320,23 @@ piece under an absolute pin is not immobile.
 | `skewer_candidates` | 2 | per side, / 4 | B | P |
 | `defended_count` | 2 | per side, own units that are defended, / 16 | A | V |
 
-### 2.9 `exchange` — static exchange evaluation (width 0)
+### 2.9 `exchange` — static exchange evaluation (width 8)
 
-Reserved. No features yet.
+The same 4-wide block twice: `exchange.us` then `exchange.them`, the second
+computed after a null move. The schema names the two blocks' features
+`us.<feature>` and `them.<feature>`. When we are in check the null move does
+not exist and the `them` block is zero, which `tactics.them.facts_available`
+reports.
+
+| Feature | Width | Encoding | Cost | Head |
+|---|---|---|---|---|
+| `see_best_capture` | 1 | diff / 9: the largest SEE over the side's captures, 0 when it has none | C·E | B |
+| `see_positive_capture_count` | 1 | count / 8: captures whose SEE is above 0 | C·E | P |
+| `see_equal_capture_count` | 1 | count / 8: captures whose SEE is 0 | C·E | P |
+| `see_positive_total` | 1 | count / 20: Σ of the SEEs above 0, the value twin of the count above | C·E | V |
+
+Only one of a side's captures can be played, so `see_positive_total` says how
+many ways there are to win material, not how much is to be won.
 
 ### 2.10 `threats` — what is about to be lost (width 0)
 
@@ -338,12 +367,12 @@ computed after a null move. The schema names the two blocks' features
 | `safe_promotion_file` | 8 | 8-bit mask | C | B |
 | `capture_available` | 1 | bit | C | P |
 | `capture_count` | 1 | count / 16 | C | P |
-| `winning_capture_available` | 1 | bit: a capture whose victim is worth more than the capturer, or is undefended | C | B |
-| `winning_capture_max_gain` | 1 | max(victim − capturer, 0) over captures, / 9 | C | B |
+| `winning_capture_available` | 1 | bit: a capture whose SEE is above 0 | C·E | B |
+| `winning_capture_max_gain` | 1 | max SEE over the captures, at least 0, / 9 | C·E | B |
 | `captures_hanging_available` | 1 | bit: a capture of a hanging unit | C | B |
 | `hanging_victim_max_value` | 1 | largest hanging victim capturable now, / 9 | C | B |
-| `equal_capture_count` | 1 | captures of equal value, defended, / 8 | C | P |
-| `losing_capture_count` | 1 | captures of lower value, defended, / 8 | C | P |
+| `equal_capture_count` | 1 | captures whose SEE is 0, / 8 | C·E | P |
+| `losing_capture_count` | 1 | captures whose SEE is below 0, / 8 | C·E | P |
 | `fork_available` | 1 | bit | C | B |
 | `fork_count` | 1 | count / 4 | C | B |
 | `fork_max_value` | 1 | largest single forked value, / 9 | C | B |
@@ -406,14 +435,14 @@ width and is the natural first ablation target.
 | `king` | 120 | A/B |
 | `mobility` | 39 | B |
 | `attacks` | 25 | B |
-| `exchange` | 0 | — |
+| `exchange` | 8 | C·E |
 | `threats` | 0 | — |
 | `tactics` | 120 | C, plus 2 features at D |
 | `endgame` | 0 | — |
 | `history` | 12 | A |
 | `planes` | 512 | A |
-| **total** | **1838** | |
-| total without `placement` and `planes` | 558 | |
+| **total** | **1846** | |
+| total without `placement` and `planes` | 566 | |
 
 ---
 
@@ -446,7 +475,6 @@ computes them itself where it needs them.
 
 | Excluded | Why |
 |---|---|
-| Static exchange evaluation (SEE) | An exchange loop over all attackers and defenders of a square; not a fixed number of bitboard ops. `winning_capture_*` and "safe" are the 1-ply stand-ins. |
 | Forced mate in 2 or more | Needs search. |
 | Threats after the opponent's best reply | Needs 2 plies plus a choice of "best". |
 | Zugzwang, fortress, opposition, corresponding squares | Needs search or endgame theory. |
@@ -467,7 +495,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1838 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1846 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -490,7 +518,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "fe99d28c8799bcd326ea00656ca88f29"   # 128-bit, hex
+schema_id = "9b0d54a61de0795c48cf0034f45e9a5d"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

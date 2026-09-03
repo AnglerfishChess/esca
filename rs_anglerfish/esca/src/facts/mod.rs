@@ -6,6 +6,7 @@
 //! actual White from actual Black.
 
 mod encode;
+mod exchange;
 mod king;
 mod pawns;
 mod pieces;
@@ -345,6 +346,23 @@ impl AttackFacts {
     }
 }
 
+/// One side's captures, judged by the exchange they start.
+///
+/// The block for `Side::Them` is read after a null move; when the side to move
+/// is in check that move does not exist and the block is zero, which
+/// `TacticsFacts::available` reports.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct ExchangeFacts {
+    /// The largest SEE over the side's captures; 0 when it has none.
+    pub see_best_capture: i32,
+    /// Captures whose SEE is above 0.
+    pub see_positive_capture_count: u16,
+    /// Captures whose SEE is 0.
+    pub see_equal_capture_count: u16,
+    /// Sum of the SEEs above 0.
+    pub see_positive_total: i32,
+}
+
 /// One side's one-ply tactical options.
 ///
 /// The block for `Side::Them` is computed after a null move; when the side to
@@ -574,6 +592,8 @@ pub struct Facts {
     pub mobility: MobilityFacts,
     /// Attack maps and what stands under them.
     pub attacks: AttackFacts,
+    /// Captures by exchange, ours then theirs.
+    pub exchange: [ExchangeFacts; 2],
     /// One-ply tactics, ours then theirs.
     pub tactics: [TacticsFacts; 2],
     /// The square sets the `planes` group emits.
@@ -709,13 +729,14 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         replies,
         Some(&mut moves),
     );
-    let theirs = match position.null_move() {
+    let null = position.null_move();
+    let theirs = match &null {
         Some(null) => {
             their_moves.clear();
-            variant.legal_moves(&null, their_moves);
+            variant.legal_moves(null, their_moves);
             tactics::tactics(
                 variant,
-                &null,
+                null,
                 &scan,
                 Side::Them,
                 &attacks,
@@ -726,6 +747,13 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         }
         None => TacticsFacts::default(),
     };
+    let exchange = [
+        exchange::exchange_facts(position, legal),
+        match &null {
+            Some(null) => exchange::exchange_facts(null, their_moves),
+            None => ExchangeFacts::default(),
+        },
+    ];
 
     let planes = PlaneFacts {
         attacked: attacks.by,
@@ -746,6 +774,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         king,
         mobility,
         attacks,
+        exchange,
         tactics: [ours, theirs],
         planes,
         moves,

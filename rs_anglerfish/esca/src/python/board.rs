@@ -411,6 +411,17 @@ impl PyPosition {
         Ok(square_name(self.inner.king_of(colour_from(colour)?)))
     }
 
+    /// The static exchange evaluation of the unit on `square`.
+    fn see(&self, square: &str) -> PyResult<i32> {
+        Ok(self.inner.see(square_from(square)?))
+    }
+
+    /// The static exchange evaluation of `mv`, which the caller has checked is
+    /// a move of this position.
+    fn see_capture(&self, mv: &PyMove) -> i32 {
+        self.inner.see_capture(mv.inner)
+    }
+
     /// The facts of this position under `variant`.
     #[pyo3(signature = (variant = None))]
     fn facts(&self, variant: Option<PyVariant>) -> PyFacts {
