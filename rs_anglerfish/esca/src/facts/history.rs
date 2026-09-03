@@ -76,7 +76,6 @@ pub(crate) fn from_history(positions: &[Position], moves: &[Move]) -> HistoryFac
         if mv.is_capture() {
             facts.last_move_victim = before.piece_at(victim_square(mv)).map(|piece| piece.role);
         }
-        facts.last_move_was_check = now.in_check();
     }
     facts
 }

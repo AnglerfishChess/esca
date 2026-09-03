@@ -9,7 +9,9 @@ use crate::types::{Colour, FileSet, Role, Square, SquareSet};
 use crate::variant::Variant;
 
 use super::pawns::files_of;
-use super::{ExchangeFacts, Facts, MoveFacts, Scratch, Side, TacticsFacts};
+use super::{
+    DrawishMaterial, ExchangeFacts, Facts, MoveFacts, Opposition, Scratch, Side, TacticsFacts,
+};
 
 /// A cursor over the values of one group.
 struct Writer<'a> {
@@ -111,7 +113,6 @@ fn history(facts: &Facts, w: &mut Writer) {
     w.diff(history.material_trend as f32, 9.0);
     w.one_hot(history.last_move_victim.map(Role::index), 5);
     w.one_hot(history.last_move_mover.map(Role::index), 6);
-    w.bit(history.last_move_was_check);
     w.bit(history.known);
 }
 
@@ -469,6 +470,40 @@ fn tactics_block(t: &TacticsFacts, w: &mut Writer) {
     w.bit(t.available);
 }
 
+fn endgame(facts: &Facts, w: &mut Writer) {
+    let e = &facts.endgame;
+    for side in Side::ALL {
+        w.count(e.king_centralisation[side.index()] as f32, 3.0);
+    }
+    for side in Side::ALL {
+        w.count(e.race_plies[side.index()] as f32, 8.0);
+    }
+    w.diff(e.race_plies_diff() as f32, 8.0);
+    // The third slot is "no opposition", so one of the three is always set.
+    w.one_hot(
+        Some(match e.opposition {
+            Some(Opposition::Direct) => 0,
+            Some(Opposition::Distant) => 1,
+            None => 2,
+        }),
+        3,
+    );
+    for side in Side::ALL {
+        w.bit(e.key_square_occupied[side.index()]);
+    }
+    for side in Side::ALL {
+        w.bit(e.wrong_colour_bishop[side.index()]);
+    }
+    w.one_hot(
+        e.drawish_material.map(|kind| match kind {
+            DrawishMaterial::TwoKnights => 0,
+            DrawishMaterial::WrongBishop => 1,
+            DrawishMaterial::OppositeBishops => 2,
+        }),
+        3,
+    );
+}
+
 fn planes(facts: &Facts, w: &mut Writer) {
     let p = &facts.planes;
     let us = facts.us;
@@ -506,9 +541,9 @@ impl Facts {
             {
                 let mut writer = Writer::new(slice);
                 match group.name {
-                    // Groups with no features yet: their width is zero, so
+                    // A group with no features yet: its width is zero, so
                     // nothing is written and no offset moves.
-                    "threats" | "endgame" => {}
+                    "threats" => {}
                     "exchange" => {
                         exchange_block(&self.exchange[0], &mut writer);
                         exchange_block(&self.exchange[1], &mut writer);
@@ -522,6 +557,7 @@ impl Facts {
                     "king" => king(self, &mut writer),
                     "mobility" => mobility(self, &mut writer),
                     "attacks" => attacks(self, &mut writer),
+                    "endgame" => endgame(self, &mut writer),
                     "tactics" => {
                         tactics_block(&self.tactics[0], &mut writer);
                         tactics_block(&self.tactics[1], &mut writer);

@@ -3,7 +3,7 @@
 use esca::{CHESS960, CLASSIC, Schema};
 
 /// The id of the v1 schema. Changing it is changing what a trained net eats.
-const SCHEMA_V1_ID: &str = "16a7becc187a4166b568bfbf27807534";
+const SCHEMA_V1_ID: &str = "e1db399a544b4fea0af0afc55f254e8b";
 
 const CANONICAL: &str = include_str!("data/schema_v1.txt");
 
@@ -37,8 +37,8 @@ fn the_manifest_matches_features_md() {
         ("exchange", 8),
         ("threats", 0),
         ("tactics", 120),
-        ("endgame", 0),
-        ("history", 28),
+        ("endgame", 15),
+        ("history", 27),
         ("planes", 512),
     ];
     let named: Vec<(&str, usize)> = schema
@@ -47,27 +47,25 @@ fn the_manifest_matches_features_md() {
         .map(|group| (group.name, group.width))
         .collect();
     assert_eq!(named, expected);
-    assert_eq!(schema.width(), 1862);
+    assert_eq!(schema.width(), 1876);
     assert_eq!(schema.semver(), "1.0.0");
 }
 
 #[test]
 fn subsets_have_their_own_widths() {
     let schema = Schema::v1();
-    assert_eq!(schema.width_of(schema.all()), 1862);
+    assert_eq!(schema.width_of(schema.all()), 1876);
     let without_planes = {
         let mut set = schema.all();
         set.remove(schema.group_index("planes").expect("planes is a group"));
         set
     };
-    assert_eq!(schema.width_of(without_planes), 1350);
+    assert_eq!(schema.width_of(without_planes), 1364);
     let pair = schema
         .group_set(&["state", "pawns"])
         .expect("both are groups");
     assert_eq!(schema.width_of(pair), 16 + 165);
-    let reserved = schema
-        .group_set(&["threats", "endgame"])
-        .expect("both are groups");
+    let reserved = schema.group_set(&["threats"]).expect("threats is a group");
     assert_eq!(schema.width_of(reserved), 0);
     assert_eq!(schema.group_set(&["nonesuch"]), None);
 }

@@ -365,24 +365,6 @@ def test_the_last_mover_is_the_role_that_made_the_last_move(fen: str, moves: Seq
 
 
 @pytest.mark.parametrize(
-    ("fen", "moves", "check"),
-    [
-        (START, [], False),
-        (START, QUIET, False),
-        (START, SCANDI8, False),
-        (SHUFFLE, CHECK, True),
-        (SHUFFLE, CHECK_AGO, False),
-        (ROOK_TAKES, ROOK_TAKES_MOVES, True),
-    ],
-    ids=["fresh", "quiet", "scandi8", "check", "check_ago", "rook_takes"],
-)
-def test_the_last_move_gave_check_exactly_when_we_stand_in_one(fen: str, moves: Sequence[str], check: bool) -> None:
-    facts = game_of(fen, moves).facts()
-    assert facts.history.last_move_was_check == check
-    assert facts.state.in_check == check, "a check outlives nothing"
-
-
-@pytest.mark.parametrize(
     ("fen", "moves"),
     [(START, SCANDI4), (SHUFFLE, CHECK), (ROOK_TAKES, ROOK_TAKES_MOVES)],
     ids=["scandi4", "check", "rook_takes"],
@@ -402,5 +384,4 @@ def test_a_position_on_its_own_carries_none_of_the_recent_play(
     assert bare.material_trend == 0
     assert bare.last_move_victim is None
     assert bare.last_move_mover is None
-    assert not bare.last_move_was_check
     assert bare.halfmove_clock == game.position.halfmove_clock

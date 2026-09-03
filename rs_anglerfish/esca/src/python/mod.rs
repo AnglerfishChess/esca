@@ -54,6 +54,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<facts::PyAttackFacts>()?;
     module.add_class::<facts::PyExchangeFacts>()?;
     module.add_class::<facts::PyTacticsFacts>()?;
+    module.add_class::<facts::PyEndgameFacts>()?;
     module.add_class::<facts::PyPlaneFacts>()?;
     module.add_class::<facts::PyMoveFacts>()?;
     module.add_class::<facts::PyAnnotatedMove>()?;

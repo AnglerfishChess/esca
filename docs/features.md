@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1862 f32 per position | value head, policy head |
+| `position` | one vector of 1876 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -113,6 +113,16 @@ taking here cost", never "is taking here best".
 | **mate in 1** | Some legal move leaves the opponent checkmated. |
 | **stalemate in 1** | Some legal move leaves the opponent stalemated. |
 
+### Endgame
+
+| Term | Definition |
+|---|---|
+| **centralisation distance** | Chebyshev distance from a square to the nearest of d4, e4, d5, e5. At most 3, so a corner is as far out as a square gets. |
+| **race plies** | For a side, the plies its most advanced passer needs to promote unopposed: 8 − its relative rank, one less when that side is to move. Nothing on the board is asked to get out of the way. |
+| **opposition** | The kings on one file, rank or diagonal, every square between them empty and their number odd. *Direct* when that number is 1, *distant* when it is 3 or 5. The side **not** to move holds it. |
+| **key square** | Of a pawn on relative rank 4 or below: the three squares two ranks ahead, on its own file and both neighbours. Of a pawn above that: the three squares one rank ahead. A rook pawn has none. |
+| **wrong-colour bishop** | A side with a bishop and a pawn, whose bishops all stand on one square colour, whose pawns are all rook pawns, and none of whose pawns promotes on that colour. Two colours are compared, so the mover's view does not enter. |
+
 ### Phase
 
 `phase_points = 4·Q + 2·R + 1·B + 1·N` summed over both sides, capped at 24.
@@ -206,7 +216,7 @@ colours swapped gives the same 768 values.
 | `ep_file` | 8 | one-hot, zeros when none | A | P |
 | `ep_capture_legal` | 1 | bit: some legal move actually captures en passant | C | P |
 
-The clock and the repetition facts are the `history` group's ([§2.13](#213-history--what-the-plies-before-say-width-12)).
+The clock and the repetition facts are the `history` group's ([§2.13](#213-history--what-the-plies-before-say-width-27)).
 
 ### 2.3 `material` — material and phase (width 26)
 
@@ -393,11 +403,36 @@ computed after a null move. The schema names the two blocks' features
 | `only_moves` | 1 | bit: at most 2 legal moves | C | V |
 | `facts_available` | 1 | bit: 0 when the block could not be computed (in check, for the them block) | A | B |
 
-### 2.12 `endgame` — endgame facts (width 0)
+### 2.12 `endgame` — endgame facts (width 15)
 
-Reserved. No features yet.
+Always emitted; what it says decides games at low `phase` and is merely true
+above it. Every pair is us then them.
 
-### 2.13 `history` — what the plies before say (width 28)
+| Feature | Width | Encoding | Cost | Head |
+|---|---|---|---|---|
+| `king_centralisation` | 2 | count/3: centralisation distance of the king | A | V |
+| `race_plies` | 2 | count/8: race plies | A | V |
+| `race_plies_diff` | 1 | diff/8: ours less theirs, so below 0 is our promotion first | A | V |
+| `opposition` | 3 | one-hot: direct / distant / none | A | V |
+| `key_square_occupied` | 2 | bit per side: the king stands on a key square of a passer of its own | B | V |
+| `wrong_colour_bishop` | 2 | bit per side | A | V |
+| `drawish_material` | 3 | one-hot: two knights against a bare king / a wrong-colour bishop with its rook pawns against a bare king / one bishop each on opposite colours with no other piece; zeros for any other material | A | V |
+
+A side with no passer has `race_plies` 8: a real race runs 0 to 6 plies, so
+the top of the scale is free to say there is none, and the difference of two
+sides without a passer is 0.
+
+The opposition is held by the side not to move, always, so the one-hot says
+which kind stands rather than who has it; its third slot is "none", and one of
+the three is always set. `drawish_material` is all zeros unless one of its
+three configurations stands, and no two of them can stand at once — each of
+the first two needs a bare king, and the third a bishop on both sides.
+`key_square_occupied` and `wrong_colour_bishop` are 0 for a side whose
+material the definition does not fit, and neither reads the material beyond
+it: a bishop is the wrong colour with a rook still on the board, where
+`drawish_material` names nothing.
+
+### 2.13 `history` — what the plies before say (width 27)
 
 The halfmove clock is the position's own; every other value is 0 with
 `history_known` = 0 unless the caller supplies a game.
@@ -414,7 +449,6 @@ The halfmove clock is the position's own; every other value is 0 with
 | `material_trend` | 1 | diff / 9: see glossary | A | V |
 | `last_move_victim` | 5 | one-hot P,N,B,R,Q; zeros for a quiet move | A | B |
 | `last_move_mover` | 6 | one-hot P,N,B,R,Q,K; zeros when no move was played | A | B |
-| `last_move_was_check` | 1 | bit: the last move gave check | A | V |
 | `history_known` | 1 | bit: the caller supplied a position history | A | V |
 
 A window shorter than the history it is read over is the history itself: a
@@ -456,11 +490,11 @@ width and is the natural first ablation target.
 | `exchange` | 8 | C·E |
 | `threats` | 0 | — |
 | `tactics` | 120 | C, plus 2 features at D |
-| `endgame` | 0 | — |
-| `history` | 28 | A |
+| `endgame` | 15 | A |
+| `history` | 27 | A |
 | `planes` | 512 | A |
-| **total** | **1862** | |
-| total without `placement` and `planes` | 582 | |
+| **total** | **1876** | |
+| total without `placement` and `planes` | 596 | |
 
 ---
 
@@ -495,7 +529,7 @@ computes them itself where it needs them.
 |---|---|
 | Forced mate in 2 or more | Needs search. |
 | Threats after the opponent's best reply | Needs 2 plies plus a choice of "best". |
-| Zugzwang, fortress, opposition, corresponding squares | Needs search or endgame theory. |
+| Zugzwang, fortress, corresponding squares | Needs search or endgame theory. The opposition is not among them: `endgame.opposition` reads it off the two king squares. |
 | Tablebase results | External data. |
 | Piece-square tables and any hand-tuned score | The net learns them from the board planes. |
 | Move number / opening classification | Absent from the training source, and phase already covers what it would proxy. |
@@ -513,16 +547,11 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1862 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1876 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
    the answer can be measured rather than guessed.
-4. **`history.last_move_was_check`.** With a history it is `state.in_check`
-   read from the other end: a check cannot survive the move that answers it.
-   It is kept so that the group reads on its own, and it is the first
-   candidate to drop if the width is ever tight.
-
 ---
 
 ## 6. Schema versioning
@@ -540,7 +569,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "16a7becc187a4166b568bfbf27807534"   # 128-bit, hex
+schema_id = "e1db399a544b4fea0af0afc55f254e8b"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

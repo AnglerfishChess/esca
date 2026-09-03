@@ -435,9 +435,17 @@ static EXCHANGE: [FeatureSpec; 8] = feature_specs! {
 
 static THREATS: [FeatureSpec; 0] = feature_specs! {};
 
-static ENDGAME: [FeatureSpec; 0] = feature_specs! {};
+static ENDGAME: [FeatureSpec; 7] = feature_specs! {
+    "king_centralisation", 2, "count/3", ANY;
+    "race_plies", 2, "count/8", ANY;
+    "race_plies_diff", 1, "diff/8", ANY;
+    "opposition", 3, "one-hot", ANY;
+    "key_square_occupied", 2, "bits", ANY;
+    "wrong_colour_bishop", 2, "bits", ANY;
+    "drawish_material", 3, "one-hot", ANY;
+};
 
-static HISTORY: [FeatureSpec; 12] = feature_specs! {
+static HISTORY: [FeatureSpec; 11] = feature_specs! {
     "halfmove_bucket", 8, "one-hot", ANY;
     "halfmove_known", 1, "bit", ANY;
     "repetition_seen", 1, "bit", ANY;
@@ -448,7 +456,6 @@ static HISTORY: [FeatureSpec; 12] = feature_specs! {
     "material_trend", 1, "diff/9", ANY;
     "last_move_victim", 5, "one-hot", ANY;
     "last_move_mover", 6, "one-hot", ANY;
-    "last_move_was_check", 1, "bit", ANY;
     "history_known", 1, "bit", ANY;
 };
 
@@ -605,14 +612,14 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "endgame",
-        version: 1,
-        width: 0,
+        version: 2,
+        width: 15,
         features: &ENDGAME,
     },
     GroupSpec {
         name: "history",
-        version: 1,
-        width: 28,
+        version: 2,
+        width: 27,
         features: &HISTORY,
     },
     GroupSpec {
@@ -646,7 +653,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1862);
+        assert_eq!(Schema::v1().width(), 1876);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

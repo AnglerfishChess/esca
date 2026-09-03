@@ -330,6 +330,7 @@ pub struct Facts {
     pub attacks: AttackFacts,
     pub exchange: [ExchangeFacts; 2],
     pub tactics: [TacticsFacts; 2],
+    pub endgame: EndgameFacts,
     pub planes: PlaneFacts,
     pub moves: MoveList<AnnotatedMove>,
 }
@@ -349,6 +350,23 @@ pub struct ExchangeFacts {
     pub see_positive_capture_count: u16,
     pub see_equal_capture_count: u16,
     pub see_positive_total: i32,
+}
+
+pub enum Opposition { Direct, Distant }
+pub enum DrawishMaterial { TwoKnights, WrongBishop, OppositeBishops }
+
+pub struct EndgameFacts {
+    pub king_centralisation: [u8; 2],
+    pub race_plies: [u8; 2],
+    pub opposition: Option<Opposition>,
+    pub key_square_occupied: [bool; 2],
+    pub wrong_colour_bishop: [bool; 2],
+    pub drawish_material: Option<DrawishMaterial>,
+}
+
+impl EndgameFacts {
+    /// Our race plies less theirs: negative when we promote first.
+    pub fn race_plies_diff(&self) -> i32;
 }
 
 pub struct PawnFacts {
@@ -462,7 +480,7 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 1862 values.
+    /// The v1 schema of `features.md`: 14 groups, 1876 values.
     pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
@@ -565,7 +583,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v1 id is `16a7becc187a4166b568bfbf27807534`; its canonical text is checked
+The v1 id is `e1db399a544b4fea0af0afc55f254e8b`; its canonical text is checked
 in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ---
@@ -686,7 +704,7 @@ print(f.summary())
 # Schema and batch encoding
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
 esca.SCHEMA_ID  # "16a7…", 32 hex chars
-esca.WIDTH  # 1862
+esca.WIDTH  # 1876
 esca.MOVE_WIDTH  # 24
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]

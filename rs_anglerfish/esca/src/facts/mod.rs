@@ -6,6 +6,7 @@
 //! actual White from actual Black.
 
 mod encode;
+mod endgame;
 mod exchange;
 mod history;
 mod king;
@@ -127,8 +128,6 @@ pub struct HistoryFacts {
     pub last_move_victim: Option<Role>,
     /// The role that made the last move; for castling, the king.
     pub last_move_mover: Option<Role>,
-    /// The last move gave check.
-    pub last_move_was_check: bool,
 }
 
 /// Material and phase.
@@ -381,6 +380,55 @@ pub struct ExchangeFacts {
     pub see_positive_total: i32,
 }
 
+/// Which opposition the kings stand in. The side not to move holds it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Opposition {
+    /// One empty square stands between the kings.
+    Direct,
+    /// Three or five.
+    Distant,
+}
+
+/// A material configuration that draws although one side is ahead. The three
+/// exclude one another.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum DrawishMaterial {
+    /// Two knights against a bare king.
+    TwoKnights,
+    /// A wrong-colour bishop with its rook pawns against a bare king.
+    WrongBishop,
+    /// One bishop each, on opposite square colours, with no other piece.
+    OppositeBishops,
+}
+
+/// Where the kings stand, how the pawn race runs, and which drawn
+/// configuration the material is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct EndgameFacts {
+    /// Chebyshev distance from each king to the nearest central square.
+    pub king_centralisation: [u8; 2],
+    /// Plies each side's most advanced passer needs to promote unopposed; 8
+    /// for a side with no passer.
+    pub race_plies: [u8; 2],
+    /// The opposition the kings stand in, if any.
+    pub opposition: Option<Opposition>,
+    /// The side's king stands on a key square of one of its own passers.
+    pub key_square_occupied: [bool; 2],
+    /// The side's bishops all stand on the colour none of its pawns promotes
+    /// on, every one of those pawns being a rook pawn.
+    pub wrong_colour_bishop: [bool; 2],
+    /// The drawn configuration the material is, if it is one of the three.
+    pub drawish_material: Option<DrawishMaterial>,
+}
+
+impl EndgameFacts {
+    /// Our race plies less theirs: negative when we promote first.
+    #[inline]
+    pub fn race_plies_diff(&self) -> i32 {
+        i32::from(self.race_plies[0]) - i32::from(self.race_plies[1])
+    }
+}
+
 /// One side's one-ply tactical options.
 ///
 /// The block for `Side::Them` is computed after a null move; when the side to
@@ -614,6 +662,8 @@ pub struct Facts {
     pub exchange: [ExchangeFacts; 2],
     /// One-ply tactics, ours then theirs.
     pub tactics: [TacticsFacts; 2],
+    /// Kings, races and drawn material.
+    pub endgame: EndgameFacts,
     /// The square sets the `planes` group emits.
     pub planes: PlaneFacts,
     /// Every legal move, annotated.
@@ -773,6 +823,8 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         },
     ];
 
+    let endgame = endgame::endgame_facts(&scan, &pawns, &pieces);
+
     let planes = PlaneFacts {
         attacked: attacks.by,
         attacked_by_pawns: attacks.by_pawns,
@@ -794,6 +846,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         attacks,
         exchange,
         tactics: [ours, theirs],
+        endgame,
         planes,
         moves,
         variant: variant.name(),

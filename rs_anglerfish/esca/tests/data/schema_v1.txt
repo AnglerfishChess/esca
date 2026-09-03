@@ -187,8 +187,15 @@ tactics:2:120
   them.legal_move_count:1:count/64
   them.only_moves:1:bit
   them.facts_available:1:bit
-endgame:1:0
-history:1:28
+endgame:2:15
+  king_centralisation:2:count/3
+  race_plies:2:count/8
+  race_plies_diff:1:diff/8
+  opposition:3:one-hot
+  key_square_occupied:2:bits
+  wrong_colour_bishop:2:bits
+  drawish_material:3:one-hot
+history:2:27
   halfmove_bucket:8:one-hot
   halfmove_known:1:bit
   repetition_seen:1:bit
@@ -199,7 +206,6 @@ history:1:28
   material_trend:1:diff/9
   last_move_victim:5:one-hot
   last_move_mover:6:one-hot
-  last_move_was_check:1:bit
   history_known:1:bit
 planes:1:512
   attacked_by_us:64:plane

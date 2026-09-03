@@ -312,23 +312,6 @@ fn the_last_mover_is_the_role_that_made_the_last_move(
     assert_eq!(game_of(fen, moves).facts().history.last_move_mover, mover);
 }
 
-#[rstest]
-#[case::fresh(START, &[], false)]
-#[case::quiet(START, &QUIET, false)]
-#[case::scandi8(START, &SCANDI8, false)]
-#[case::check(SHUFFLE, &CHECK, true)]
-#[case::check_ago(SHUFFLE, &CHECK_AGO, false)]
-#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, true)]
-fn the_last_move_gave_check_exactly_when_we_stand_in_one(
-    #[case] fen: &str,
-    #[case] moves: &[&str],
-    #[case] check: bool,
-) {
-    let facts = game_of(fen, moves).facts();
-    assert_eq!(facts.history.last_move_was_check, check);
-    assert_eq!(facts.state.in_check, check, "a check outlives nothing");
-}
-
 /// A position on its own knows its clock and nothing else about the plies
 /// before it.
 #[rstest]
@@ -349,6 +332,5 @@ fn a_position_on_its_own_carries_none_of_the_recent_play(
     assert_eq!(bare.material_trend, 0);
     assert_eq!(bare.last_move_victim, None);
     assert_eq!(bare.last_move_mover, None);
-    assert!(!bare.last_move_was_check);
     assert_eq!(bare.halfmove_clock, game.position().halfmove_clock());
 }

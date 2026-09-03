@@ -196,9 +196,6 @@ pub struct PyHistoryFacts {
     /// The role that made the last move.
     #[pyo3(get)]
     last_move_mover: Option<String>,
-    /// The last move gave check.
-    #[pyo3(get)]
-    last_move_was_check: bool,
 }
 
 impl PyHistoryFacts {
@@ -216,7 +213,6 @@ impl PyHistoryFacts {
             material_trend: facts.material_trend,
             last_move_victim: facts.last_move_victim.map(role_name),
             last_move_mover: facts.last_move_mover.map(role_name),
-            last_move_was_check: facts.last_move_was_check,
         }
     }
 }
@@ -1009,6 +1005,87 @@ impl PyTacticsFacts {
     }
 }
 
+/// Where the kings stand, how the pawn race runs, and which drawn
+/// configuration the material is.
+#[pyclass(frozen, module = "esca", name = "EndgameFacts")]
+pub struct PyEndgameFacts {
+    parent: Py<PyFacts>,
+    /// Chebyshev distance from each king to the nearest central square.
+    #[pyo3(get)]
+    king_centralisation: (u8, u8),
+    /// Plies each side's most advanced passer needs to promote unopposed; 8
+    /// for a side with no passer.
+    #[pyo3(get)]
+    race_plies: (u8, u8),
+    /// `"direct"`, `"distant"` or `None`; the side not to move holds it.
+    #[pyo3(get)]
+    opposition: Option<String>,
+    /// The side's king stands on a key square of one of its own passers.
+    #[pyo3(get)]
+    key_square_occupied: (bool, bool),
+    /// The side's bishops all stand on the colour none of its pawns promotes
+    /// on, every one of those pawns being a rook pawn.
+    #[pyo3(get)]
+    wrong_colour_bishop: (bool, bool),
+    /// `"two_knights"`, `"wrong_bishop"`, `"opposite_bishops"` or `None`.
+    #[pyo3(get)]
+    drawish_material: Option<String>,
+}
+
+impl PyEndgameFacts {
+    fn of(facts: &facts::EndgameFacts, parent: Py<PyFacts>) -> PyEndgameFacts {
+        PyEndgameFacts {
+            parent,
+            king_centralisation: pair(facts.king_centralisation),
+            race_plies: pair(facts.race_plies),
+            opposition: facts.opposition.map(opposition_name),
+            key_square_occupied: pair(facts.key_square_occupied),
+            wrong_colour_bishop: pair(facts.wrong_colour_bishop),
+            drawish_material: facts.drawish_material.map(drawish_material_name),
+        }
+    }
+}
+
+#[pymethods]
+impl PyEndgameFacts {
+    /// Our race plies less theirs: negative when we promote first.
+    #[getter]
+    fn race_plies_diff(&self) -> i32 {
+        i32::from(self.race_plies.0) - i32::from(self.race_plies.1)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<EndgameFacts race_plies={:?}>", self.race_plies)
+    }
+
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
+        let py = slf.py();
+        Ok((
+            group_reconstructor(py)?,
+            (slf.get().parent.clone_ref(py), "endgame"),
+        ))
+    }
+}
+
+/// The name the opposition kind carries in Python.
+fn opposition_name(kind: facts::Opposition) -> String {
+    match kind {
+        facts::Opposition::Direct => "direct",
+        facts::Opposition::Distant => "distant",
+    }
+    .to_string()
+}
+
+/// The name the drawn configuration carries in Python.
+fn drawish_material_name(kind: facts::DrawishMaterial) -> String {
+    match kind {
+        facts::DrawishMaterial::TwoKnights => "two_knights",
+        facts::DrawishMaterial::WrongBishop => "wrong_bishop",
+        facts::DrawishMaterial::OppositeBishops => "opposite_bishops",
+    }
+    .to_string()
+}
+
 /// The eight square sets the `planes` group emits.
 #[pyclass(frozen, module = "esca", name = "PlaneFacts")]
 pub struct PyPlaneFacts {
@@ -1282,6 +1359,12 @@ impl PyFacts {
             PyTacticsFacts::of(&facts[0], slf.clone().unbind(), 0),
             PyTacticsFacts::of(&facts[1], slf.clone().unbind(), 1),
         )
+    }
+
+    /// Kings, races and drawn material.
+    #[getter]
+    fn endgame(slf: &Bound<'_, Self>) -> PyEndgameFacts {
+        PyEndgameFacts::of(&slf.get().inner.endgame, slf.clone().unbind())
     }
 
     #[getter]

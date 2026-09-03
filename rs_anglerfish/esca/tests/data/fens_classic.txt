@@ -235,3 +235,12 @@ r1b1kbnr/ppp1qppp/2n5/1N2p1B1/8/3P1N2/PPP2PPP/R2QKB1R b KQkq -
 8/8/R7/4k3/5p1P/8/p5PK/2r5 w - -
 1r2r1k1/6pp/2nqb3/1p3pP1/pPp2P2/P1NpPB1P/3P1K2/RQ5R w - -
 8/5p1k/6pp/8/5q2/P1R3QP/2P3PK/4r3 b - -
+# Endgame configurations (`features.md` §2.12): a king on a key square of its
+# own passer, a wrong-colour bishop on either side, two knights against a bare
+# king, the direct opposition, and a pawn race with the tempo.
+8/8/4K3/8/4P3/8/8/4k3 w - - 0 1
+7k/8/8/8/8/7P/6B1/6K1 b - - 0 1
+6k1/6b1/7p/8/8/8/8/7K w - - 0 1
+8/8/8/3k4/8/8/1NN5/3K4 w - - 0 1
+8/8/8/3k4/8/3K4/8/8 w - - 0 1
+8/8/8/P7/8/8/6p1/K6k b - - 0 1
