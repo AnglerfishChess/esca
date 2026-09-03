@@ -2,8 +2,11 @@
 
 use crate::types::{File, Role, Square, SquareSet};
 
-use super::scan::{Scan, between};
+use super::scan::{Scan, attackers, attacks_of, between, material_value, order_value};
 use super::{PawnFacts, PieceFacts, Side};
+
+/// The roles a trapped unit may have: neither a pawn nor a king.
+const TRAPPABLE: [Role; 4] = [Role::Knight, Role::Bishop, Role::Rook, Role::Queen];
 
 /// The squares of a file.
 fn file_mask(file: File) -> SquareSet {
@@ -42,6 +45,11 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
             colours |= scan.view_dark();
         }
         facts.pawns_on_bishop_colour[i] = (pawns.pawns[i] & colours).len().min(255) as u8;
+        facts.fixed_pawns_on_bishop_colour[i] = (pawns.pawns[i] & colours)
+            .into_iter()
+            .filter(|pawn| scan.occupied.contains(stop_square(scan, *pawn, side)))
+            .count()
+            .min(255) as u8;
 
         for a in rooks {
             for b in rooks {
@@ -79,6 +87,12 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
         }
 
         facts.trapped_rook[i] = trapped_rook(scan, side, rooks);
+        facts.rook_on_7th_with_king_on_8th[i] = facts.rooks_on_relative_7th[i] > 0
+            && scan.relative_rank(scan.kings[(!side).index()], side) == 8;
+
+        let (trapped, value) = trapped_pieces(scan, side);
+        facts.trapped_pieces[i] = trapped;
+        facts.trapped_value[i] = value;
 
         facts.outposts[i] = outposts(scan, pawns, side);
         facts.minors_on_outpost[i] = ((knights | bishops) & facts.outposts[i]).len().min(255) as u8;
@@ -103,7 +117,69 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
         && facts.bishops_light[1] + facts.bishops_dark[1] == 1
         && facts.bishops_light[0] != facts.bishops_light[1];
 
+    let knight_pair = |side: Side| scan.role_units[side.index()][Role::Knight.index()].len() >= 2;
+    facts.bishop_pair_vs_knight_pair =
+        i8::from(facts.bishop_pair[Side::Us.index()] && knight_pair(Side::Them))
+            - i8::from(facts.bishop_pair[Side::Them.index()] && knight_pair(Side::Us));
+
     facts
+}
+
+/// The square directly ahead of the pawn on `square`, in `side`'s frame.
+fn stop_square(scan: &Scan, square: Square, side: Side) -> Square {
+    scan.relative_square(square.file(), scan.relative_rank(square, side) + 1, side)
+}
+
+/// How many of `side`'s units are trapped, and what they are worth.
+fn trapped_pieces(scan: &Scan, side: Side) -> (u8, u8) {
+    let mut count = 0u32;
+    let mut value = 0i32;
+    for role in TRAPPABLE {
+        for square in scan.role_units[side.index()][role.index()] {
+            let destinations = scan.attacks_from[square.index()] - scan.units[side.index()];
+            if destinations
+                .into_iter()
+                .any(|to| is_safe(scan, side, role, square, to))
+            {
+                continue;
+            }
+            count += 1;
+            value += material_value(role);
+        }
+    }
+    (count.min(255) as u8, value.clamp(0, 255) as u8)
+}
+
+/// Whether `to` is a safe destination for the unit of `role` standing on
+/// `from`, read in the position that move would leave.
+fn is_safe(scan: &Scan, side: Side, role: Role, from: Square, to: Square) -> bool {
+    let ours = side.index();
+    let theirs = (!side).index();
+    let our_colour = scan.colour(side);
+    let their_colour = scan.colour(!side);
+    let occupied = (scan.occupied - from.to_set()) | to.to_set();
+
+    // The move takes whatever stood on `to` and leaves `from` empty.
+    let mut their_units = scan.role_units[theirs];
+    for set in &mut their_units {
+        *set -= to.to_set();
+    }
+    let mut our_units = scan.role_units[ours];
+    our_units[role.index()] = (our_units[role.index()] - from.to_set()) | to.to_set();
+
+    let by_pawn = attacks_of(Role::Pawn, to, our_colour, occupied);
+    if !(by_pawn & their_units[Role::Pawn.index()]).is_empty() {
+        return false;
+    }
+    let enemy = attackers(to, their_colour, &their_units, occupied);
+    if enemy.is_empty() {
+        return true;
+    }
+    let cheaper = TRAPPABLE
+        .into_iter()
+        .filter(|other| order_value(*other) < order_value(role))
+        .any(|other| !(enemy & their_units[other.index()]).is_empty());
+    !cheaper && !attackers(to, our_colour, &our_units, occupied).is_empty()
 }
 
 /// Whether `rook` stands on the file of one of `passers` and behind it in the

@@ -368,7 +368,7 @@ static PAWNS: [FeatureSpec; 31] = feature_specs! {
     "backward_on_semi_open", 2, "count/4", ANY;
 };
 
-static PIECES: [FeatureSpec; 17] = feature_specs! {
+static PIECES: [FeatureSpec; 22] = feature_specs! {
     "bishop_pair", 2, "bits", ANY;
     "bishops_by_square_colour", 4, "count/2", ANY;
     "opposite_coloured_bishops", 1, "bit", ANY;
@@ -386,6 +386,11 @@ static PIECES: [FeatureSpec; 17] = feature_specs! {
     "knights_on_rim", 2, "count/2", ANY;
     "minors_undeveloped", 2, "count/4", CLASSIC_ONLY;
     "queen_developed", 2, "bits", CLASSIC_ONLY;
+    "fixed_pawns_on_bishop_colour", 2, "count/8", ANY;
+    "bishop_pair_vs_knight_pair", 1, "diff/1", ANY;
+    "rook_on_7th_with_king_on_8th", 2, "bits", ANY;
+    "trapped_pieces", 2, "count/4", ANY;
+    "trapped_value", 2, "count/20", ANY;
 };
 
 static KING: [FeatureSpec; 23] = feature_specs! {
@@ -603,8 +608,8 @@ static V1_GROUPS: [GroupSpec; 14] = [
     },
     GroupSpec {
         name: "pieces",
-        version: 2,
-        width: 35,
+        version: 3,
+        width: 44,
         features: &PIECES,
     },
     GroupSpec {
@@ -686,7 +691,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1947);
+        assert_eq!(Schema::v1().width(), 1956);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }

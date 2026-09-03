@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1947 f32 per position | value head, policy head |
+| `position` | one vector of 1956 f32 per position | value head, policy head |
 | `move` | one vector of 40 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -54,6 +54,8 @@ feature distinguishes actual White from actual Black.
 | **destination** | The square the moved unit ends on. For castling that is the king's landing square, c1 or g1 in the mover's frame, never the rook's square the move is written with. |
 | **safe destination** | A move of piece *p* to square *t* is safe if, in the position after the move, *t* is not attacked by an enemy pawn, *t* is not attacked by an enemy piece of value below value(*p*), and *t* is not both attacked by them and undefended by us. *p* is the unit standing on *t* after the move, so a promotion is valued as the piece it becomes. No exchange sequence is played out: a defender that is pinned or overloaded is still counted as a defender. This is a 1-ply approximation of "does not lose material", and it is wrong exactly where a static exchange evaluation would be needed. |
 | **safe check** | A checking move whose destination is a safe destination. |
+| **trapped unit** | A unit that is neither a pawn nor a king and has no safe destination: of the squares its attack map reaches and no unit of its own side holds, none is safe. A unit that reaches no such square at all is trapped. Destinations are read from the attack map, as `mobility.immobile_pieces` reads them, so an absolute pin does not by itself trap a unit, and every immobile unit is a trapped one. |
+| **knight pair** | Two or more knights of one side, as the *bishop pair* is bishops on both square colours. |
 | **king ring** | The up-to-8 squares adjacent to a king. A king does not defend its own ring: its own attacks are left out of "defended" there. |
 | **ring attacker** | An enemy knight, bishop, rook or queen attacking a king ring square. Pawns and the enemy king do not count. The same set is what tropism averages over. |
 | **ring defender** | A knight, bishop, rook or queen of the king's own side attacking a king ring square. Pawns and the king itself do not count, so the set mirrors the ring attackers exactly. |
@@ -298,7 +300,7 @@ The clock and the repetition facts are the `history` group's ([§2.13](#213-hist
 | `half_open_at_enemy_king` | 2 | files semi-open for the side among the enemy king files, / 3 | A | V |
 | `backward_on_semi_open` | 2 | backward pawns on a file semi-open for the enemy, / 4 | A | V |
 
-### 2.5 `pieces` — bishops, rooks, knights, queens (width 35)
+### 2.5 `pieces` — bishops, rooks, knights, queens (width 44)
 
 Every row is a pair: us then them.
 
@@ -321,6 +323,18 @@ Every row is a pair: us then them.
 | `knights_on_rim` | 2 | count on files a/h or relative ranks 1/8, / 2 | A | V |
 | `minors_undeveloped` | 2 | knights and bishops still on their classic starting squares b1, c1, f1, g1 relative, / 4 | A | V |
 | `queen_developed` | 2 | bit: a queen stands off its classic starting square d1 relative | A | V |
+| `fixed_pawns_on_bishop_colour` | 2 | own fixed pawns standing on the colour of own bishops, / 8 | B | V |
+| `bishop_pair_vs_knight_pair` | 1 | diff / 1: we hold the bishop pair and they the knight pair, less the reverse | A | V |
+| `rook_on_7th_with_king_on_8th` | 2 | bit per side: a rook on the side's relative rank 7 and the enemy king on the side's relative rank 8 | A | V |
+| `trapped_pieces` | 2 | count per side of trapped units, / 4 | C | V |
+| `trapped_value` | 2 | per side, value sum of those, / 20 | C | V |
+
+`fixed_pawns_on_bishop_colour` is `pawns_on_bishop_colour` narrowed to the
+fixed pawns, so it is never the larger of the two: a pawn on the bishop's
+colour costs the bishop nothing while it can still move. In the starting array
+`trapped_pieces` is 5 a side and `trapped_value` 25: two rooks, two bishops and
+a queen with their own pawns in front of them, which is what the definition
+says of a piece that cannot move.
 
 ### 2.6 `king` — king safety and shelter (width 137)
 
@@ -566,7 +580,7 @@ width and is the natural first ablation target.
 | `state` | 16 | A |
 | `material` | 26 | A |
 | `pawns` | 195 | A |
-| `pieces` | 35 | A/B |
+| `pieces` | 44 | A/B/C |
 | `king` | 137 | A/B |
 | `mobility` | 39 | B |
 | `attacks` | 25 | B |
@@ -576,8 +590,8 @@ width and is the natural first ablation target.
 | `endgame` | 15 | A |
 | `history` | 27 | A |
 | `planes` | 512 | A |
-| **total** | **1947** | |
-| total without `placement` and `planes` | 667 | |
+| **total** | **1956** | |
+| total without `placement` and `planes` | 676 | |
 
 ---
 
@@ -658,7 +672,7 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1947 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1956 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
@@ -680,7 +694,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "8030a54d6f6a11e0efa97d3f90117baa"   # 128-bit, hex
+schema_id = "f6a3271f03ca6497bdbb6248b93c0700"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

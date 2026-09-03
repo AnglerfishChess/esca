@@ -44,6 +44,9 @@ OPEN_CORNER = "4k3/8/8/8/8/8/1PP5/R1K5 w - - 0 1"
 #: One passer a side, each with a friendly rook behind it and an enemy rook too.
 PASSER_ROOKS = "6k1/5R2/2P2r2/8/5p2/2r5/2R5/6K1 w - - 0 1"
 
+#: The same placement with Black to move: the rook on the seventh is theirs.
+PASSER_ROOKS_BLACK = "6k1/5R2/2P2r2/8/5p2/2r5/2R5/6K1 b - - 0 1"
+
 #: Both sides double their rooks behind their own passed pawn.
 BATTERY = "6k1/8/6r1/2P3r1/8/6p1/2R5/2R3K1 w - - 0 1"
 
@@ -66,6 +69,42 @@ HOLES = "6k1/p6p/8/1N4n1/2P1P3/8/8/6K1 w - - 0 1"
 
 #: Knights on the a- and h-files and on either back rank, and one in the centre.
 RIM = "2N3k1/8/4n3/n6N/8/8/8/1n4K1 w - - 0 1"
+
+#: A white rook on the seventh with the black king off the eighth, and a black
+#: rook on its own seventh with the white king on its eighth.
+SEVENTH_KING_OFF = "3r4/R5pp/6k1/3N4/8/8/3r2PP/5K2 w - - 0 1"
+
+#: The same placement with Black to move, so the two bits change places.
+SEVENTH_KING_OFF_BLACK = "3r4/R5pp/6k1/3N4/8/8/3r2PP/5K2 b - - 0 1"
+
+#: A locked centre: two fixed pawns a side, each side's bishop on their colour.
+FIXED_CENTRE = "2b3k1/5p2/4p3/3pP3/3P4/8/5P2/2B3K1 w - - 0 1"
+
+#: The same locked pawns with only White holding a bishop.
+FIXED_ONE_BISHOP = "6k1/8/4p3/3pP3/3P4/8/8/2B3K1 w - - 0 1"
+
+#: The same again with Black to move, so the bishop's side is *them*.
+FIXED_ONE_BISHOP_BLACK = "6k1/8/4p3/3pP3/3P4/8/8/2B3K1 b - - 0 1"
+
+#: Two bare bishops against two bare knights.
+PAIR_VS_KNIGHTS = "1n2k1n1/8/8/8/8/8/8/2B1KB2 w - - 0 1"
+
+#: The same, read from the knights' side.
+PAIR_VS_KNIGHTS_BLACK = "1n2k1n1/8/8/8/8/8/8/2B1KB2 b - - 0 1"
+
+#: The mirror image: the knights are White's and the bishops Black's.
+KNIGHTS_VS_PAIR = "2b1kb2/8/8/8/8/8/8/1N2K1N1 w - - 0 1"
+
+#: A single bishop a side, so neither holds the pair whatever the knights do.
+ONE_BISHOP_EACH = "1nb1k1n1/8/8/8/8/8/8/1N2KB2 w - - 0 1"
+
+#: A bishop shut in by an enemy pawn on one square and its king on the other,
+#: a side each.
+TRAPPED_BISHOPS = "2k5/B1p5/1p6/8/8/6P1/5P1b/5K2 w - - 0 1"
+
+#: A rook with no square of its own at all, and a knight whose only two
+#: squares a pawn covers.
+TRAPPED_CORNER = "n5k1/8/1P6/P7/8/8/6PP/6KR w - - 0 1"
 
 #: A Chess960 middlegame: the rooks start on d and f, the king between them on e.
 NINE_SIXTY = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10"
@@ -409,6 +448,113 @@ def test_a_queen_is_developed_once_it_stands_off_its_classic_starting_square(
     assert facts_of(fen).pieces.queen_developed == developed
 
 
+@pytest.mark.parametrize(
+    ("fen", "pawns"),
+    [
+        (ITALIAN, (2, 3)),
+        (FIXED_CENTRE, (2, 2)),
+        (FIXED_ONE_BISHOP, (2, 0)),
+        (FIXED_ONE_BISHOP_BLACK, (0, 2)),
+        (OPPOSITE, (0, 0)),
+        (START, (0, 0)),
+    ],
+    ids=["italian", "fixed_centre", "fixed_one_bishop", "fixed_one_bishop_black", "opposite", "start"],
+)
+def test_a_fixed_pawn_on_the_bishop_colour_is_one_whose_stop_square_is_held(
+    fen: str, pawns: tuple[int, int], facts_of: FactsOf
+) -> None:
+    pieces = facts_of(fen).pieces
+    assert pieces.fixed_pawns_on_bishop_colour == pawns
+    for fixed, on_colour in zip(pieces.fixed_pawns_on_bishop_colour, pieces.pawns_on_bishop_colour, strict=True):
+        assert fixed <= on_colour, "the fixed pawns are a subset of the pawns on the colour"
+
+
+@pytest.mark.parametrize(
+    ("fen", "imbalance"),
+    [
+        (PAIR_VS_KNIGHTS, 1),
+        (PAIR_VS_KNIGHTS_BLACK, -1),
+        (KNIGHTS_VS_PAIR, -1),
+        (START, 0),
+        (ITALIAN, 0),
+        (ONE_BISHOP_EACH, 0),
+        (LINED, 0),
+    ],
+    ids=["pair_vs_knights", "pair_vs_knights_black", "knights_vs_pair", "start", "italian", "one_bishop_each", "lined"],
+)
+def test_the_bishop_pair_counts_against_a_knight_pair_and_cancels_with_the_reverse(
+    fen: str, imbalance: int, facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pieces.bishop_pair_vs_knight_pair == imbalance
+
+
+@pytest.mark.parametrize(
+    ("fen", "cut_off"),
+    [
+        (SEVENTH, (True, True)),
+        (PASSER_ROOKS, (True, False)),
+        (SEVENTH_KING_OFF_BLACK, (True, False)),
+        (SEVENTH_KING_OFF, (False, True)),
+        (PASSER_ROOKS_BLACK, (False, True)),
+        (LINED, (False, False)),
+        (START, (False, False)),
+    ],
+    ids=[
+        "seventh",
+        "passer_rooks",
+        "seventh_king_off_black",
+        "seventh_king_off",
+        "passer_rooks_black",
+        "lined",
+        "start",
+    ],
+)
+def test_a_rook_on_the_seventh_pays_when_the_enemy_king_stands_on_the_eighth(
+    fen: str, cut_off: tuple[bool, bool], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pieces.rook_on_7th_with_king_on_8th == cut_off
+
+
+@pytest.mark.parametrize(
+    ("fen", "trapped"),
+    [
+        (START, (5, 5)),
+        (ITALIAN, (2, 1)),
+        (TRAPPED_BISHOPS, (1, 1)),
+        (TRAPPED_CORNER, (1, 1)),
+        (BOXED, (1, 0)),
+        (CORNERED, (0, 1)),
+        (LINED, (0, 0)),
+        (OPEN_CORNER, (0, 0)),
+    ],
+    ids=["start", "italian", "trapped_bishops", "trapped_corner", "boxed", "cornered", "lined", "open_corner"],
+)
+def test_a_trapped_unit_has_no_safe_destination_among_the_squares_it_reaches(
+    fen: str, trapped: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pieces.trapped_pieces == trapped
+
+
+@pytest.mark.parametrize(
+    ("fen", "value"),
+    [
+        (START, (25, 25)),
+        (ITALIAN, (8, 3)),
+        (TRAPPED_BISHOPS, (3, 3)),
+        (TRAPPED_CORNER, (5, 3)),
+        (BOXED, (5, 0)),
+        (CORNERED, (0, 5)),
+        (LINED, (0, 0)),
+        (OPEN_CORNER, (0, 0)),
+    ],
+    ids=["start", "italian", "trapped_bishops", "trapped_corner", "boxed", "cornered", "lined", "open_corner"],
+)
+def test_the_trapped_value_is_the_value_sum_of_the_trapped_units(
+    fen: str, value: tuple[int, int], facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).pieces.trapped_value == value
+
+
 def test_the_piece_facts_of_a_chess960_position_read_the_placement_as_they_find_it(
     facts_of: FactsOf,
 ) -> None:
@@ -430,10 +576,11 @@ def test_the_piece_facts_of_a_chess960_position_read_the_placement_as_they_find_
 
 def test_chess960_writes_the_two_facts_that_assume_the_starting_squares_as_zeros() -> None:
     """`features.md` §4 defines `minors_undeveloped` and `queen_developed` for
-    classic chess only; the group's last four values are those two facts."""
+    classic chess only; they are the group's values 31 to 34."""
     classic = esca.encode([NINE_SIXTY_CLASSIC], groups=["pieces"])[0]
     nine_sixty = esca.encode([NINE_SIXTY_CLASSIC], variant=esca.CHESS960, groups=["pieces"])[0]
 
-    assert list(classic[31:]) == [0.25, 0.25, 1.0, 1.0]
-    assert list(nine_sixty[31:]) == [0.0, 0.0, 0.0, 0.0]
+    assert list(classic[31:35]) == [0.25, 0.25, 1.0, 1.0]
+    assert list(nine_sixty[31:35]) == [0.0, 0.0, 0.0, 0.0]
     assert list(classic[:31]) == list(nine_sixty[:31])
+    assert list(classic[35:]) == list(nine_sixty[35:])

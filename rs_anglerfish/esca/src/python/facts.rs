@@ -512,6 +512,23 @@ pub struct PyPieceFacts {
     /// A queen stands off its starting square, per side.
     #[pyo3(get)]
     queen_developed: (bool, bool),
+    /// Own fixed pawns standing on a square colour of an own bishop, per side.
+    #[pyo3(get)]
+    fixed_pawns_on_bishop_colour: (u8, u8),
+    /// We hold the bishop pair and they the knight pair, less the reverse.
+    #[pyo3(get)]
+    bishop_pair_vs_knight_pair: i8,
+    /// A rook on the side's relative rank 7 with the enemy king on the side's
+    /// relative rank 8, per side.
+    #[pyo3(get)]
+    rook_on_7th_with_king_on_8th: (bool, bool),
+    /// Units that are neither pawns nor kings and have no safe destination,
+    /// per side.
+    #[pyo3(get)]
+    trapped_pieces: (u8, u8),
+    /// The value sum of those, per side.
+    #[pyo3(get)]
+    trapped_value: (u8, u8),
 }
 
 impl PyPieceFacts {
@@ -537,6 +554,11 @@ impl PyPieceFacts {
             knights_on_rim: pair(facts.knights_on_rim),
             minors_undeveloped: pair(facts.minors_undeveloped),
             queen_developed: pair(facts.queen_developed),
+            fixed_pawns_on_bishop_colour: pair(facts.fixed_pawns_on_bishop_colour),
+            bishop_pair_vs_knight_pair: facts.bishop_pair_vs_knight_pair,
+            rook_on_7th_with_king_on_8th: pair(facts.rook_on_7th_with_king_on_8th),
+            trapped_pieces: pair(facts.trapped_pieces),
+            trapped_value: pair(facts.trapped_value),
         }
     }
 }

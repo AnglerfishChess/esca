@@ -293,6 +293,19 @@ fn pieces(facts: &Facts, w: &mut Writer) {
     for side in Side::ALL {
         w.bit(p.queen_developed[side.index()]);
     }
+    for side in Side::ALL {
+        w.count(p.fixed_pawns_on_bishop_colour[side.index()] as f32, 8.0);
+    }
+    w.diff(p.bishop_pair_vs_knight_pair as f32, 1.0);
+    for side in Side::ALL {
+        w.bit(p.rook_on_7th_with_king_on_8th[side.index()]);
+    }
+    for side in Side::ALL {
+        w.count(p.trapped_pieces[side.index()] as f32, 4.0);
+    }
+    for side in Side::ALL {
+        w.count(p.trapped_value[side.index()] as f32, 20.0);
+    }
 }
 
 fn king(facts: &Facts, w: &mut Writer) {

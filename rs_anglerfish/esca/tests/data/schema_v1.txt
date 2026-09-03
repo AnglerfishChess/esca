@@ -60,7 +60,7 @@ pawns:2:195
   passer_free_path:2:count/2
   half_open_at_enemy_king:2:count/3
   backward_on_semi_open:2:count/4
-pieces:2:35
+pieces:3:44
   bishop_pair:2:bits
   bishops_by_square_colour:4:count/2
   opposite_coloured_bishops:1:bit
@@ -78,6 +78,11 @@ pieces:2:35
   knights_on_rim:2:count/2
   minors_undeveloped:2:count/4
   queen_developed:2:bits
+  fixed_pawns_on_bishop_colour:2:count/8
+  bishop_pair_vs_knight_pair:1:diff/1
+  rook_on_7th_with_king_on_8th:2:bits
+  trapped_pieces:2:count/4
+  trapped_value:2:count/20
 king:4:137
   king_file:16:one-hot
   king_rank:16:one-hot

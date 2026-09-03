@@ -261,6 +261,18 @@ pub struct PieceFacts {
     pub minors_undeveloped: [u8; 2],
     /// A queen stands off its starting square, per side.
     pub queen_developed: [bool; 2],
+    /// Own fixed pawns standing on a square colour of an own bishop, per side.
+    pub fixed_pawns_on_bishop_colour: [u8; 2],
+    /// We hold the bishop pair and they the knight pair, less the reverse.
+    pub bishop_pair_vs_knight_pair: i8,
+    /// A rook on the side's relative rank 7 with the enemy king on the side's
+    /// relative rank 8, per side.
+    pub rook_on_7th_with_king_on_8th: [bool; 2],
+    /// Units that are neither pawns nor kings and have no safe destination,
+    /// per side.
+    pub trapped_pieces: [u8; 2],
+    /// The value sum of those, per side.
+    pub trapped_value: [u8; 2],
 }
 
 /// King safety and shelter. Index 0 is our king, index 1 theirs.
