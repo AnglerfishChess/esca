@@ -7,7 +7,7 @@
 mod common;
 
 use common::{facts_of, facts_under};
-use esca::{CHESS960, Game, Schema, classic};
+use esca::{CHESS960, Game, Role, Schema, classic};
 use rstest::rstest;
 
 /// The untouched array: a fresh clock and nothing to repeat.
@@ -178,4 +178,177 @@ fn the_history_facts_of_a_chess960_position_are_the_clock_it_carries() {
     assert!(!history.known);
     assert!(!history.repetition_seen);
     assert!(!history.repetition_available);
+}
+
+/// A rook and a knight develop: nothing is taken and no check is given.
+const QUIET: [&str; 4] = ["e2e4", "e7e5", "g1f3", "b8c6"];
+
+/// The Scandinavian up to the pawn capture: White is a pawn ahead.
+const SCANDI3: [&str; 3] = ["e2e4", "d7d5", "e4d5"];
+
+/// One ply further, the queen recaptures and the material is level again.
+const SCANDI4: [&str; 4] = ["e2e4", "d7d5", "e4d5", "d8d5"];
+
+/// The gambit line, eight plies in: White keeps the pawn and both develop.
+const SCANDI8: [&str; 8] = [
+    "e2e4", "d7d5", "e4d5", "g8f6", "b1c3", "b8c6", "g1f3", "c8f5",
+];
+
+/// Four plies further still, so the capture has left the eight-ply window.
+const SCANDI12: [&str; 12] = [
+    "e2e4", "d7d5", "e4d5", "g8f6", "b1c3", "b8c6", "g1f3", "c8f5", "f1b5", "e7e6", "e1h1", "f8e7",
+];
+
+/// A knight takes the pawn back: the last move is a knight's and a capture.
+const KNIGHT_TAKES: [&str; 6] = ["e2e4", "d7d5", "e4d5", "g8f6", "d2d4", "f6d5"];
+
+/// The rook swings to b8 and checks the king that has just stepped to b1.
+const CHECK: [&str; 2] = ["a1b1", "h8b8"];
+
+/// The same check, two plies back.
+const CHECK_AGO: [&str; 4] = ["a1b1", "h8b8", "b1a1", "b8h8"];
+
+/// A rook takes a rook and checks the king beside it.
+const ROOK_TAKES: &str = "3rk3/8/8/8/8/8/3R4/4K3 w - - 0 1";
+
+/// The one move of the rook game.
+const ROOK_TAKES_MOVES: [&str; 1] = ["d2d8"];
+
+#[rstest]
+#[case::fresh(START, &[], 0)]
+#[case::quiet(START, &QUIET, 0)]
+#[case::scandi3(START, &SCANDI3, 1)]
+#[case::scandi4(START, &SCANDI4, 2)]
+#[case::scandi8(START, &SCANDI8, 1)]
+#[case::scandi12(START, &SCANDI12, 0)]
+#[case::knight_takes(START, &KNIGHT_TAKES, 2)]
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, 1)]
+fn the_captures_counted_are_those_of_the_last_eight_plies(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] captures: u8,
+) {
+    assert_eq!(
+        game_of(fen, moves).facts().history.captures_in_last_8,
+        captures
+    );
+}
+
+#[rstest]
+#[case::fresh(START, &[], 0)]
+#[case::quiet(START, &QUIET, 0)]
+#[case::scandi8(START, &SCANDI8, 0)]
+#[case::check(SHUFFLE, &CHECK, 1)]
+#[case::check_ago(SHUFFLE, &CHECK_AGO, 1)]
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, 1)]
+fn the_checks_counted_are_those_of_the_last_eight_plies(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] checks: u8,
+) {
+    assert_eq!(game_of(fen, moves).facts().history.checks_in_last_8, checks);
+}
+
+#[rstest]
+#[case::fresh(START, &[], 0)]
+#[case::quiet(START, &QUIET, 4)]
+#[case::scandi3(START, &SCANDI3, 0)]
+#[case::scandi8(START, &SCANDI8, 5)]
+#[case::scandi12(START, &SCANDI12, 9)]
+#[case::check(SHUFFLE, &CHECK, 0)]
+#[case::check_ago(SHUFFLE, &CHECK_AGO, 2)]
+fn the_quiet_plies_are_those_since_the_last_capture_or_check(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] plies: u32,
+) {
+    assert_eq!(game_of(fen, moves).facts().history.quiet_plies, plies);
+}
+
+#[rstest]
+#[case::fresh(START, &[], 0)]
+#[case::quiet(START, &QUIET, 0)]
+#[case::scandi3(START, &SCANDI3, -1)]
+#[case::scandi4(START, &SCANDI4, 0)]
+#[case::scandi8(START, &SCANDI8, 1)]
+#[case::scandi12(START, &SCANDI12, 0)]
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, -5)]
+fn the_material_trend_is_what_the_last_eight_plies_have_won_or_lost(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] trend: i32,
+) {
+    assert_eq!(game_of(fen, moves).facts().history.material_trend, trend);
+}
+
+#[rstest]
+#[case::fresh(START, &[], None)]
+#[case::quiet(START, &QUIET, None)]
+#[case::scandi3(START, &SCANDI3, Some(Role::Pawn))]
+#[case::scandi4(START, &SCANDI4, Some(Role::Pawn))]
+#[case::knight_takes(START, &KNIGHT_TAKES, Some(Role::Pawn))]
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, Some(Role::Rook))]
+fn the_last_victim_is_the_role_the_last_move_took(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] victim: Option<Role>,
+) {
+    assert_eq!(game_of(fen, moves).facts().history.last_move_victim, victim);
+}
+
+#[rstest]
+#[case::fresh(START, &[], None)]
+#[case::quiet(START, &QUIET, Some(Role::Knight))]
+#[case::scandi3(START, &SCANDI3, Some(Role::Pawn))]
+#[case::scandi4(START, &SCANDI4, Some(Role::Queen))]
+#[case::scandi8(START, &SCANDI8, Some(Role::Bishop))]
+#[case::knight_takes(START, &KNIGHT_TAKES, Some(Role::Knight))]
+#[case::check(SHUFFLE, &CHECK, Some(Role::Rook))]
+fn the_last_mover_is_the_role_that_made_the_last_move(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] mover: Option<Role>,
+) {
+    assert_eq!(game_of(fen, moves).facts().history.last_move_mover, mover);
+}
+
+#[rstest]
+#[case::fresh(START, &[], false)]
+#[case::quiet(START, &QUIET, false)]
+#[case::scandi8(START, &SCANDI8, false)]
+#[case::check(SHUFFLE, &CHECK, true)]
+#[case::check_ago(SHUFFLE, &CHECK_AGO, false)]
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, true)]
+fn the_last_move_gave_check_exactly_when_we_stand_in_one(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+    #[case] check: bool,
+) {
+    let facts = game_of(fen, moves).facts();
+    assert_eq!(facts.history.last_move_was_check, check);
+    assert_eq!(facts.state.in_check, check, "a check outlives nothing");
+}
+
+/// A position on its own knows its clock and nothing else about the plies
+/// before it.
+#[rstest]
+#[case::scandi4(START, &SCANDI4)]
+#[case::check(SHUFFLE, &CHECK)]
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES)]
+fn a_position_on_its_own_carries_none_of_the_recent_play(
+    #[case] fen: &str,
+    #[case] moves: &[&str],
+) {
+    let game = game_of(fen, moves);
+    let bare = facts_of(&game.position().fen()).history;
+
+    assert!(!bare.known);
+    assert_eq!(bare.captures_in_last_8, 0);
+    assert_eq!(bare.checks_in_last_8, 0);
+    assert_eq!(bare.quiet_plies, 0);
+    assert_eq!(bare.material_trend, 0);
+    assert_eq!(bare.last_move_victim, None);
+    assert_eq!(bare.last_move_mover, None);
+    assert!(!bare.last_move_was_check);
+    assert_eq!(bare.halfmove_clock, game.position().halfmove_clock());
 }

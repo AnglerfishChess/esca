@@ -215,3 +215,192 @@ def test_the_history_facts_of_a_chess960_position_are_the_clock_it_carries(facts
     assert not history.known
     assert not history.repetition_seen
     assert not history.repetition_available
+
+
+#: A rook and a knight develop: nothing is taken and no check is given.
+QUIET = ["e2e4", "e7e5", "g1f3", "b8c6"]
+
+#: The Scandinavian up to the pawn capture: White is a pawn ahead.
+SCANDI3 = ["e2e4", "d7d5", "e4d5"]
+
+#: One ply further, the queen recaptures and the material is level again.
+SCANDI4 = ["e2e4", "d7d5", "e4d5", "d8d5"]
+
+#: The gambit line, eight plies in: White keeps the pawn and both develop.
+SCANDI8 = ["e2e4", "d7d5", "e4d5", "g8f6", "b1c3", "b8c6", "g1f3", "c8f5"]
+
+#: Four plies further still, so the capture has left the eight-ply window.
+SCANDI12 = [
+    "e2e4",
+    "d7d5",
+    "e4d5",
+    "g8f6",
+    "b1c3",
+    "b8c6",
+    "g1f3",
+    "c8f5",
+    "f1b5",
+    "e7e6",
+    "e1h1",
+    "f8e7",
+]
+
+#: A knight takes the pawn back: the last move is a knight's and a capture.
+KNIGHT_TAKES = ["e2e4", "d7d5", "e4d5", "g8f6", "d2d4", "f6d5"]
+
+#: The rook swings to b8 and checks the king that has just stepped to b1.
+CHECK = ["a1b1", "h8b8"]
+
+#: The same check, two plies back.
+CHECK_AGO = ["a1b1", "h8b8", "b1a1", "b8h8"]
+
+#: A rook takes a rook and checks the king beside it.
+ROOK_TAKES = "3rk3/8/8/8/8/8/3R4/4K3 w - - 0 1"
+
+#: The one move of the rook game.
+ROOK_TAKES_MOVES = ["d2d8"]
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "captures"),
+    [
+        (START, [], 0),
+        (START, QUIET, 0),
+        (START, SCANDI3, 1),
+        (START, SCANDI4, 2),
+        (START, SCANDI8, 1),
+        (START, SCANDI12, 0),
+        (START, KNIGHT_TAKES, 2),
+        (ROOK_TAKES, ROOK_TAKES_MOVES, 1),
+    ],
+    ids=["fresh", "quiet", "scandi3", "scandi4", "scandi8", "scandi12", "knight_takes", "rook_takes"],
+)
+def test_the_captures_counted_are_those_of_the_last_eight_plies(fen: str, moves: Sequence[str], captures: int) -> None:
+    assert game_of(fen, moves).facts().history.captures_in_last_8 == captures
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "checks"),
+    [
+        (START, [], 0),
+        (START, QUIET, 0),
+        (START, SCANDI8, 0),
+        (SHUFFLE, CHECK, 1),
+        (SHUFFLE, CHECK_AGO, 1),
+        (ROOK_TAKES, ROOK_TAKES_MOVES, 1),
+    ],
+    ids=["fresh", "quiet", "scandi8", "check", "check_ago", "rook_takes"],
+)
+def test_the_checks_counted_are_those_of_the_last_eight_plies(fen: str, moves: Sequence[str], checks: int) -> None:
+    assert game_of(fen, moves).facts().history.checks_in_last_8 == checks
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "plies"),
+    [
+        (START, [], 0),
+        (START, QUIET, 4),
+        (START, SCANDI3, 0),
+        (START, SCANDI8, 5),
+        (START, SCANDI12, 9),
+        (SHUFFLE, CHECK, 0),
+        (SHUFFLE, CHECK_AGO, 2),
+    ],
+    ids=["fresh", "quiet", "scandi3", "scandi8", "scandi12", "check", "check_ago"],
+)
+def test_the_quiet_plies_are_those_since_the_last_capture_or_check(fen: str, moves: Sequence[str], plies: int) -> None:
+    assert game_of(fen, moves).facts().history.quiet_plies == plies
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "trend"),
+    [
+        (START, [], 0),
+        (START, QUIET, 0),
+        (START, SCANDI3, -1),
+        (START, SCANDI4, 0),
+        (START, SCANDI8, 1),
+        (START, SCANDI12, 0),
+        (ROOK_TAKES, ROOK_TAKES_MOVES, -5),
+    ],
+    ids=["fresh", "quiet", "scandi3", "scandi4", "scandi8", "scandi12", "rook_takes"],
+)
+def test_the_material_trend_is_what_the_last_eight_plies_have_won_or_lost(
+    fen: str, moves: Sequence[str], trend: int
+) -> None:
+    assert game_of(fen, moves).facts().history.material_trend == trend
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "victim"),
+    [
+        (START, [], None),
+        (START, QUIET, None),
+        (START, SCANDI3, "p"),
+        (START, SCANDI4, "p"),
+        (START, KNIGHT_TAKES, "p"),
+        (ROOK_TAKES, ROOK_TAKES_MOVES, "r"),
+    ],
+    ids=["fresh", "quiet", "scandi3", "scandi4", "knight_takes", "rook_takes"],
+)
+def test_the_last_victim_is_the_role_the_last_move_took(fen: str, moves: Sequence[str], victim: str | None) -> None:
+    assert game_of(fen, moves).facts().history.last_move_victim == victim
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "mover"),
+    [
+        (START, [], None),
+        (START, QUIET, "n"),
+        (START, SCANDI3, "p"),
+        (START, SCANDI4, "q"),
+        (START, SCANDI8, "b"),
+        (START, KNIGHT_TAKES, "n"),
+        (SHUFFLE, CHECK, "r"),
+    ],
+    ids=["fresh", "quiet", "scandi3", "scandi4", "scandi8", "knight_takes", "check"],
+)
+def test_the_last_mover_is_the_role_that_made_the_last_move(fen: str, moves: Sequence[str], mover: str | None) -> None:
+    assert game_of(fen, moves).facts().history.last_move_mover == mover
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves", "check"),
+    [
+        (START, [], False),
+        (START, QUIET, False),
+        (START, SCANDI8, False),
+        (SHUFFLE, CHECK, True),
+        (SHUFFLE, CHECK_AGO, False),
+        (ROOK_TAKES, ROOK_TAKES_MOVES, True),
+    ],
+    ids=["fresh", "quiet", "scandi8", "check", "check_ago", "rook_takes"],
+)
+def test_the_last_move_gave_check_exactly_when_we_stand_in_one(fen: str, moves: Sequence[str], check: bool) -> None:
+    facts = game_of(fen, moves).facts()
+    assert facts.history.last_move_was_check == check
+    assert facts.state.in_check == check, "a check outlives nothing"
+
+
+@pytest.mark.parametrize(
+    ("fen", "moves"),
+    [(START, SCANDI4), (SHUFFLE, CHECK), (ROOK_TAKES, ROOK_TAKES_MOVES)],
+    ids=["scandi4", "check", "rook_takes"],
+)
+def test_a_position_on_its_own_carries_none_of_the_recent_play(
+    fen: str, moves: Sequence[str], facts_of: FactsOf
+) -> None:
+    """A position on its own knows its clock and nothing else about the plies
+    before it."""
+    game = game_of(fen, moves)
+    bare = facts_of(game.position.fen).history
+
+    assert not bare.known
+    assert bare.captures_in_last_8 == 0
+    assert bare.checks_in_last_8 == 0
+    assert bare.quiet_plies == 0
+    assert bare.material_trend == 0
+    assert bare.last_move_victim is None
+    assert bare.last_move_mover is None
+    assert not bare.last_move_was_check
+    assert bare.halfmove_clock == game.position.halfmove_clock

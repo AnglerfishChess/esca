@@ -7,6 +7,7 @@
 
 mod encode;
 mod exchange;
+mod history;
 mod king;
 mod pawns;
 mod pieces;
@@ -22,6 +23,7 @@ use crate::types::{Colour, File, FileSet, Role, Square, SquareSet};
 use crate::variant::Variant;
 
 pub use encode::{RowError, encode_fens, encode_positions};
+pub(crate) use history::from_history;
 pub(crate) use scan::Scan;
 use scan::{
     CENTRE, EXTENDED_CENTRE, attackers, attacks_of, between, distance, line, material_value,
@@ -111,6 +113,22 @@ pub struct HistoryFacts {
     pub repetition_seen: bool,
     /// Some legal move reaches a position of the supplied history.
     pub repetition_available: bool,
+    /// Captures among the last eight plies of the supplied history.
+    pub captures_in_last_8: u8,
+    /// Plies among the last eight that gave check.
+    pub checks_in_last_8: u8,
+    /// Plies since the last one that captured or gave check; the whole history
+    /// when it holds none.
+    pub quiet_plies: u32,
+    /// The material balance now, less the balance eight plies ago, from the
+    /// side to move.
+    pub material_trend: i32,
+    /// The role the last move captured, the pawn for an en-passant capture.
+    pub last_move_victim: Option<Role>,
+    /// The role that made the last move; for castling, the king.
+    pub last_move_mover: Option<Role>,
+    /// The last move gave check.
+    pub last_move_was_check: bool,
 }
 
 /// Material and phase.

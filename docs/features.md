@@ -10,7 +10,7 @@ Two schemas are defined:
 
 | Schema | Shape | Consumer |
 |---|---|---|
-| `position` | one vector of 1846 f32 per position | value head, policy head |
+| `position` | one vector of 1862 f32 per position | value head, policy head |
 | `move` | one vector of 24 f32 per legal move | policy head |
 
 The raw board is the `placement` group, first in the schema order, so that a
@@ -68,6 +68,13 @@ feature distinguishes actual White from actual Black.
 | **SEE** | Static exchange evaluation, in value units, signed, positive for material won. Of a capture: the value its side wins from the exchange that capture begins, each side stopping as soon as going on would cost it material. The move itself is played whatever it costs, so a capture's SEE may be negative. Of a quiet move: the same reckoning with nothing captured, so 0 or negative. Of castling: 0. |
 | **SEE of a unit** | The SEE of the exchange the opponent begins by capturing that unit. Never negative — the opponent may leave it alone. 0 for a square no enemy unit attacks, and for a king. |
 | **max gain** | The largest SEE over a side's captures. |
+
+### History
+
+| Term | Definition |
+|---|---|
+| **quiet plies** | Plies since the last ply of the supplied history that captured or gave check; the whole history when it holds none. Distinct from the halfmove clock, which counts captures and pawn moves. |
+| **material trend** | The material balance now, less the balance eight plies ago, both as a value sum of the side to move's units less the other side's. Fewer than eight plies means the start of the supplied history. |
 
 An exchange is a one-square reckoning, not a search: it answers "what does
 taking here cost", never "is taking here best".
@@ -390,7 +397,7 @@ computed after a null move. The schema names the two blocks' features
 
 Reserved. No features yet.
 
-### 2.13 `history` — what the plies before say (width 12)
+### 2.13 `history` — what the plies before say (width 28)
 
 The halfmove clock is the position's own; every other value is 0 with
 `history_known` = 0 unless the caller supplies a game.
@@ -401,7 +408,18 @@ The halfmove clock is the position's own; every other value is 0 with
 | `halfmove_known` | 1 | bit: the position carried a halfmove clock | A | V |
 | `repetition_seen` | 1 | bit: this position occurred before in the supplied history | A | V |
 | `repetition_available_us` | 1 | bit: some legal move reaches a position in the history | C | V |
+| `captures_in_last_8` | 1 | count / 8: captures among the last eight plies | A | V |
+| `checks_in_last_8` | 1 | count / 8: plies among the last eight that gave check | A | V |
+| `quiet_plies` | 1 | count / 16: see glossary | A | V |
+| `material_trend` | 1 | diff / 9: see glossary | A | V |
+| `last_move_victim` | 5 | one-hot P,N,B,R,Q; zeros for a quiet move | A | B |
+| `last_move_mover` | 6 | one-hot P,N,B,R,Q,K; zeros when no move was played | A | B |
+| `last_move_was_check` | 1 | bit: the last move gave check | A | V |
 | `history_known` | 1 | bit: the caller supplied a position history | A | V |
+
+A window shorter than the history it is read over is the history itself: a
+game three plies long counts captures over three plies and reads its trend
+from its own start.
 
 The Lichess evaluation dump carries 4-field FENs (no halfmove clock, no move
 number), so the whole group is constant across it — see
@@ -439,10 +457,10 @@ width and is the natural first ablation target.
 | `threats` | 0 | — |
 | `tactics` | 120 | C, plus 2 features at D |
 | `endgame` | 0 | — |
-| `history` | 12 | A |
+| `history` | 28 | A |
 | `planes` | 512 | A |
-| **total** | **1846** | |
-| total without `placement` and `planes` | 566 | |
+| **total** | **1862** | |
+| total without `placement` and `planes` | 582 | |
 
 ---
 
@@ -483,7 +501,7 @@ computes them itself where it needs them.
 | Move number / opening classification | Absent from the training source, and phase already covers what it would proxy. |
 | Absolute colour | The mover's-view flip removes it; nothing in chess depends on it. |
 | Chess960 castling geometry | Four features assume the classic starting squares and are defined for classic chess only: `pieces.minors_undeveloped`, `pieces.queen_developed`, `king.king_on_home_square`, `king.king_castled_zone`. Under another variant they are written as zeros, so widths and offsets do not move. Every other feature is 960-safe. |
-| Game history beyond a supplied repetition set | The library does not track games; the caller passes what it knows. |
+| Game history beyond the plies a `Game` holds | The library does not track games; the caller passes what it knows, and `history` reports what the plies it was given say. |
 
 ---
 
@@ -495,11 +513,15 @@ computes them itself where it needs them.
    omit the group from the trained schema — it is a group of its own so that
    this costs one name — or find a second source that carries clocks (game
    PGNs).
-2. **`planes` width.** 512 of 1846 values. Ablation (§7) decides whether it
+2. **`planes` width.** 512 of 1862 values. Ablation (§7) decides whether it
    earns its place or shrinks to 4 planes.
 3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
    pass, possibly not for every search node; the sub-group toggle exists so
    the answer can be measured rather than guessed.
+4. **`history.last_move_was_check`.** With a history it is `state.in_check`
+   read from the other end: a check cannot survive the move that answers it.
+   It is kept so that the group reads on its own, and it is the first
+   candidate to drop if the width is ever tight.
 
 ---
 
@@ -518,7 +540,7 @@ groups = [
   { name = "material",  version = 1, width =  26, offset = 784 },
   ...
 ]
-schema_id = "9b0d54a61de0795c48cf0034f45e9a5d"   # 128-bit, hex
+schema_id = "16a7becc187a4166b568bfbf27807534"   # 128-bit, hex
 ```
 
 `schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering

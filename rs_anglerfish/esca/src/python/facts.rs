@@ -178,6 +178,27 @@ pub struct PyHistoryFacts {
     /// Some legal move reaches a position of the history.
     #[pyo3(get)]
     repetition_available: bool,
+    /// Captures among the last eight plies of the history.
+    #[pyo3(get)]
+    captures_in_last_8: u8,
+    /// Plies among the last eight that gave check.
+    #[pyo3(get)]
+    checks_in_last_8: u8,
+    /// Plies since the last one that captured or gave check.
+    #[pyo3(get)]
+    quiet_plies: u32,
+    /// The material balance now, less the balance eight plies ago.
+    #[pyo3(get)]
+    material_trend: i32,
+    /// The role the last move captured.
+    #[pyo3(get)]
+    last_move_victim: Option<String>,
+    /// The role that made the last move.
+    #[pyo3(get)]
+    last_move_mover: Option<String>,
+    /// The last move gave check.
+    #[pyo3(get)]
+    last_move_was_check: bool,
 }
 
 impl PyHistoryFacts {
@@ -189,6 +210,13 @@ impl PyHistoryFacts {
             halfmove_known: facts.halfmove_known,
             repetition_seen: facts.repetition_seen,
             repetition_available: facts.repetition_available,
+            captures_in_last_8: facts.captures_in_last_8,
+            checks_in_last_8: facts.checks_in_last_8,
+            quiet_plies: facts.quiet_plies,
+            material_trend: facts.material_trend,
+            last_move_victim: facts.last_move_victim.map(role_name),
+            last_move_mover: facts.last_move_mover.map(role_name),
+            last_move_was_check: facts.last_move_was_check,
         }
     }
 }

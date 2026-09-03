@@ -141,6 +141,11 @@ impl Position {
     /// within one process run — not across runs, and not stored.
     pub fn key(&self) -> Key;
 
+    /// Static exchange evaluation, in value units, as `features.md` §1
+    /// defines it: of the unit on `sq`, and of a move of this position.
+    pub fn see(&self, sq: Square) -> i32;
+    pub fn see_capture(&self, mv: Move) -> i32;
+
     /// Facts of this position under `variant`.
     pub fn facts(&self, variant: &dyn Variant) -> Facts;
     /// Same, reusing buffers; no allocation.
@@ -314,6 +319,7 @@ impl Side {
 }
 
 pub struct Facts {
+    pub placement: PlacementFacts,
     pub state: StateFacts,
     pub history: HistoryFacts,
     pub material: MaterialFacts,
@@ -322,9 +328,27 @@ pub struct Facts {
     pub king: KingFacts,
     pub mobility: MobilityFacts,
     pub attacks: AttackFacts,
+    pub exchange: [ExchangeFacts; 2],
     pub tactics: [TacticsFacts; 2],
     pub planes: PlaneFacts,
     pub moves: MoveList<AnnotatedMove>,
+}
+
+pub struct PlacementFacts {
+    /// Each side's units, by role P, N, B, R, Q, K.
+    pub by_role: [[SquareSet; 6]; 2],
+}
+
+impl PlacementFacts {
+    pub fn of(&self, side: Side, role: Role) -> SquareSet;
+}
+
+/// The `us` block, then the `them` block, the second after a null move.
+pub struct ExchangeFacts {
+    pub see_best_capture: i32,
+    pub see_positive_capture_count: u16,
+    pub see_equal_capture_count: u16,
+    pub see_positive_total: i32,
 }
 
 pub struct PawnFacts {
@@ -438,7 +462,7 @@ pub struct GroupSet(u16);
 pub struct SchemaId([u8; 16]);
 
 impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 1846 values.
+    /// The v1 schema of `features.md`: 14 groups, 1862 values.
     pub fn v1() -> &'static Schema;
     pub fn id(&self) -> SchemaId;
     pub fn semver(&self) -> &str;
@@ -541,7 +565,7 @@ pub struct RowError { pub row: usize, pub source: FenError }
 Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
-The v1 id is `9b0d54a61de0795c48cf0034f45e9a5d`; its canonical text is checked
+The v1 id is `16a7becc187a4166b568bfbf27807534`; its canonical text is checked
 in as `rs_anglerfish/esca/tests/data/schema_v1.txt`.
 
 ---
@@ -651,6 +675,8 @@ p.piece_at("e1")  # "K"
 f = p.facts(esca.CLASSIC)
 f = g.facts()  # variant taken from the game
 
+p.see("e5"), p.see_capture(mv)  # static exchange evaluation, in value units
+
 f.side("b")  # esca.US or esca.THEM, whichever Black plays
 f.pawns.passed[esca.US]  # SquareSet
 list(f.attacks.hanging[esca.THEM])  # ["e5", …]
@@ -659,8 +685,8 @@ print(f.summary())
 
 # Schema and batch encoding
 esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
-esca.SCHEMA_ID  # "9b0d…", 32 hex chars
-esca.WIDTH  # 1846
+esca.SCHEMA_ID  # "16a7…", 32 hex chars
+esca.WIDTH  # 1862
 esca.MOVE_WIDTH  # 24
 esca.schema()  # [{"name", "version", "width", "offset"}, …]
 esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]

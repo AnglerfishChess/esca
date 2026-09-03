@@ -105,6 +105,13 @@ fn history(facts: &Facts, w: &mut Writer) {
     w.bit(history.halfmove_known);
     w.bit(history.repetition_seen);
     w.bit(history.repetition_available);
+    w.count(history.captures_in_last_8 as f32, 8.0);
+    w.count(history.checks_in_last_8 as f32, 8.0);
+    w.count(history.quiet_plies as f32, 16.0);
+    w.diff(history.material_trend as f32, 9.0);
+    w.one_hot(history.last_move_victim.map(Role::index), 5);
+    w.one_hot(history.last_move_mover.map(Role::index), 6);
+    w.bit(history.last_move_was_check);
     w.bit(history.known);
 }
 

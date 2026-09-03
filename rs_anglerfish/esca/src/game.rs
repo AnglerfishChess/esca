@@ -186,7 +186,7 @@ impl Game {
     /// The facts of the current position, reusing `scratch`.
     pub fn facts_in(&self, scratch: &mut Scratch) -> Facts {
         let mut facts = self.position().facts_in(self.variant(), scratch);
-        facts.history.known = true;
+        facts.history = crate::facts::from_history(&self.positions, &self.moves);
         facts.history.repetition_seen = self.repetitions() >= 2;
         facts.history.repetition_available = self.reaches_history(self.position());
         facts

@@ -437,11 +437,18 @@ static THREATS: [FeatureSpec; 0] = feature_specs! {};
 
 static ENDGAME: [FeatureSpec; 0] = feature_specs! {};
 
-static HISTORY: [FeatureSpec; 5] = feature_specs! {
+static HISTORY: [FeatureSpec; 12] = feature_specs! {
     "halfmove_bucket", 8, "one-hot", ANY;
     "halfmove_known", 1, "bit", ANY;
     "repetition_seen", 1, "bit", ANY;
     "repetition_available_us", 1, "bit", ANY;
+    "captures_in_last_8", 1, "count/8", ANY;
+    "checks_in_last_8", 1, "count/8", ANY;
+    "quiet_plies", 1, "count/16", ANY;
+    "material_trend", 1, "diff/9", ANY;
+    "last_move_victim", 5, "one-hot", ANY;
+    "last_move_mover", 6, "one-hot", ANY;
+    "last_move_was_check", 1, "bit", ANY;
     "history_known", 1, "bit", ANY;
 };
 
@@ -605,7 +612,7 @@ static V1_GROUPS: [GroupSpec; 14] = [
     GroupSpec {
         name: "history",
         version: 1,
-        width: 12,
+        width: 28,
         features: &HISTORY,
     },
     GroupSpec {
@@ -639,7 +646,7 @@ mod tests {
 
     #[test]
     fn the_schema_is_as_wide_as_features_md_says() {
-        assert_eq!(Schema::v1().width(), 1846);
+        assert_eq!(Schema::v1().width(), 1862);
         assert!(Schema::v1().feature_count() <= MAX_FEATURES);
     }
 }
