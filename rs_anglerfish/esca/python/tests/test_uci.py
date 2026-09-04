@@ -1,14 +1,15 @@
-"""Talking to an engine, over the scripted doubles in `tests/fixtures/`.
+"""Talking to an engine with blocking calls, over the scripted doubles in
+`tests/fixtures/`.
 
 The cases mirror `tests/uci_engine.rs`: a normal game, a slow engine, one
 writing garbage, one dying mid-search, one that never answers, and the two
-Chess960 handshakes.
+Chess960 handshakes. The same conversation over asyncio is
+`test_uci_async.py`.
 """
 
 from __future__ import annotations
 
 import ast
-import asyncio
 import shutil
 import sys
 from collections.abc import Iterator, Sequence
@@ -21,8 +22,10 @@ from esca import uci
 #: The scripted engine double, shared with the Rust tests.
 FAKE = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "fake_engine.py"
 
-#: Long enough for a subprocess to answer, short enough to fail a test fast.
-TIMEOUT = 5.0
+#: How long a double is given to answer: a bound on the machine, not on the
+#: engine, since starting an interpreter on a loaded runner takes as long as it
+#: takes. A case that is about a wait running out names its own short budget.
+TIMEOUT = 60.0
 
 #: A Chess960 endgame: the white king on b1 with its own rook beside it on c1.
 BESIDE_ROOK = "4k3/8/8/8/8/8/8/1KR5 w C - 0 1"
@@ -316,51 +319,6 @@ def test_a_read_that_finds_nothing_answers_with_nothing(engine: uci.Engine) -> N
     assert engine.next_line(0.05) is None
 
 
-# -- The asyncio surface ----------------------------------------------------
-
-
-def test_an_async_engine_plays_a_move() -> None:
-    async def play() -> tuple[str | None, list[str], str | None]:
-        async with uci.AsyncEngine(sys.executable, [str(FAKE)]) as engine:
-            await engine.handshake()
-            await engine.new_game()
-            game = esca.Game()
-            await engine.set_position(game)
-            search = await engine.go(uci.Limits(depth=2))
-            depths = [str(report.depth) async for report in search]
-            answer = await search.answer()
-            return engine.name, depths, answer.best.uci if answer.best else None
-
-    name, depths, best = asyncio.run(play())
-    assert name == "Fake Engine 1.0"
-    assert depths == ["1", "2", "None"]
-    assert best == "e2e4"
-
-
-def test_an_async_engine_analyses_several_positions_in_turn() -> None:
-    async def analyse() -> list[int | None]:
-        async with uci.AsyncEngine(sys.executable, [str(FAKE)]) as engine:
-            await engine.handshake()
-            return [(await engine.analyse(esca.Game(), uci.Limits(depth=2)))[0].cp for _ in range(3)]
-
-    assert asyncio.run(analyse()) == [25, 25, 25]
-
-
-def test_an_async_engine_reports_a_death_as_the_blocking_one_does() -> None:
-    async def die() -> None:
-        engine = uci.AsyncEngine(sys.executable, [str(FAKE), "--die-on-go"])
-        try:
-            await engine.handshake()
-            await engine.set_position(esca.Game())
-            search = await engine.go(uci.Limits(depth=2))
-            await search.answer()
-        finally:
-            engine.kill()
-
-    with pytest.raises(uci.EngineDied):
-        asyncio.run(die())
-
-
 # -- The module and its stub ------------------------------------------------
 
 
@@ -386,7 +344,7 @@ def test_every_exported_name_exists() -> None:
 
 
 def test_the_module_and_its_stub_agree() -> None:
-    assert uci.__all__ == stub_all("uci.py")
+    assert uci.__all__ == stub_all("uci/__init__.py")
 
 
 # -- Real engines -----------------------------------------------------------

@@ -13,9 +13,10 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::game::Game;
-use crate::uci::{self, Info, Limits, OptionKind, OptionSpec, OptionValue, Progress};
+use crate::uci::{self, Info, Limits, Message, OptionKind, OptionSpec, OptionValue, Progress};
 
 use super::board::{PyGame, PyMove};
+use super::convert::castling_output_from;
 
 create_exception!(
     esca.uci,
@@ -289,6 +290,17 @@ impl PyOption {
         }
     }
 
+    /// The text a `setoption` carries to set this option to `value`, refusing
+    /// a value the declared domain does not accept; `None` for a button.
+    #[pyo3(signature = (value = None))]
+    fn value_text(&self, value: Option<&Bound<'_, PyAny>>) -> PyResult<Option<String>> {
+        let read = read_value(&self.inner.kind, &self.inner.name, value)?;
+        self.inner.accepts(&read).map_err(|reason| {
+            PyValueError::new_err(format!("option {:?}: {reason}", self.inner.name))
+        })?;
+        Ok(read.to_text())
+    }
+
     fn __repr__(&self) -> String {
         format!("<Option {} type {}>", self.inner.name, self.r#type())
     }
@@ -560,6 +572,316 @@ impl PyAnswer {
             best: answer.best.map(PyMove::new),
             ponder: answer.ponder.map(PyMove::new),
         }
+    }
+}
+
+// -- The protocol as values -------------------------------------------------
+
+/// One line a client sends to an engine.
+#[pyclass(
+    frozen,
+    skip_from_py_object,
+    module = "esca.uci.protocol",
+    name = "Command"
+)]
+#[derive(Clone)]
+pub struct PyCommand {
+    inner: uci::Command,
+}
+
+#[pymethods]
+impl PyCommand {
+    /// Ask the engine to identify itself and list its options.
+    #[staticmethod]
+    fn uci() -> PyCommand {
+        PyCommand {
+            inner: uci::Command::Uci,
+        }
+    }
+
+    /// Turn the engine's `info string` diagnostics on or off.
+    #[staticmethod]
+    fn debug(on: bool) -> PyCommand {
+        PyCommand {
+            inner: uci::Command::Debug(on),
+        }
+    }
+
+    /// Ask for a `readyok`.
+    #[staticmethod]
+    fn isready() -> PyCommand {
+        PyCommand {
+            inner: uci::Command::IsReady,
+        }
+    }
+
+    /// Set one option; the text is the value as the engine will read it, and
+    /// `None` is what a button carries.
+    #[staticmethod]
+    #[pyo3(signature = (name, value = None))]
+    fn setoption(name: String, value: Option<String>) -> PyCommand {
+        PyCommand {
+            inner: uci::Command::SetOption { name, value },
+        }
+    }
+
+    /// Announce that the next position belongs to a new game.
+    #[staticmethod]
+    fn ucinewgame() -> PyCommand {
+        PyCommand {
+            inner: uci::Command::NewGame,
+        }
+    }
+
+    /// Set the position to `game`, its moves written as `castling` asks, or as
+    /// the game's own variant spells them.
+    #[staticmethod]
+    #[pyo3(signature = (game, castling = None))]
+    fn position(game: &PyGame, castling: Option<&str>) -> PyResult<PyCommand> {
+        let played = game.played();
+        let style = match castling {
+            Some(name) => castling_output_from(name)?,
+            None => played.castling_output(),
+        };
+        Ok(PyCommand {
+            inner: uci::Command::Position(uci::Setup::of_game(played, style)),
+        })
+    }
+
+    /// Start searching under `limits`; none asks for a search until stopped.
+    #[staticmethod]
+    #[pyo3(signature = (limits = None))]
+    fn go(limits: Option<PyLimits>) -> PyCommand {
+        PyCommand {
+            inner: uci::Command::Go(limits.map(|limits| limits.inner).unwrap_or_default()),
+        }
+    }
+
+    /// Ask the search to finish now.
+    #[staticmethod]
+    fn stop() -> PyCommand {
+        PyCommand {
+            inner: uci::Command::Stop,
+        }
+    }
+
+    /// Tell the engine the move it is pondering on was played.
+    #[staticmethod]
+    fn ponderhit() -> PyCommand {
+        PyCommand {
+            inner: uci::Command::PonderHit,
+        }
+    }
+
+    /// Ask the engine to exit.
+    #[staticmethod]
+    fn quit() -> PyCommand {
+        PyCommand {
+            inner: uci::Command::Quit,
+        }
+    }
+
+    /// The line to write, without its newline.
+    fn to_line(&self) -> String {
+        self.inner.to_line()
+    }
+
+    /// The keyword the command is named by.
+    #[getter]
+    fn keyword(&self) -> &'static str {
+        self.inner.keyword()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Command {}>", self.inner.to_line())
+    }
+}
+
+/// One line an engine sent, read into what it says.
+#[pyclass(
+    frozen,
+    skip_from_py_object,
+    module = "esca.uci.protocol",
+    name = "Message"
+)]
+#[derive(Clone)]
+pub struct PyMessage {
+    inner: Message,
+    line: String,
+    option: Option<PyOption>,
+    info: Option<PyInfo>,
+    answer: Option<PyAnswer>,
+}
+
+impl PyMessage {
+    /// One line, with its moves read as moves of `game`.
+    fn of(message: Message, line: &str, game: &Game) -> PyMessage {
+        PyMessage {
+            option: match &message {
+                Message::Option(spec) => Some(PyOption {
+                    inner: spec.clone(),
+                }),
+                _ => None,
+            },
+            info: match &message {
+                Message::Info(info) => Some(PyInfo::of(info, game)),
+                _ => None,
+            },
+            answer: match &message {
+                Message::BestMove(best) => Some(PyAnswer {
+                    best: best.best_move(game).map(PyMove::new),
+                    ponder: best.ponder_move(game).map(PyMove::new),
+                }),
+                _ => None,
+            },
+            line: line.to_owned(),
+            inner: message,
+        }
+    }
+}
+
+#[pymethods]
+impl PyMessage {
+    /// What the line says: `id`, `uciok`, `readyok`, `option`, `info`,
+    /// `bestmove`, `registration`, `copyprotection`, or `raw` for a line the
+    /// grammar has no reading for.
+    #[getter]
+    fn kind(&self) -> &'static str {
+        match self.inner {
+            Message::Id { .. } => "id",
+            Message::UciOk => "uciok",
+            Message::ReadyOk => "readyok",
+            Message::Option(_) => "option",
+            Message::Info(_) => "info",
+            Message::BestMove(_) => "bestmove",
+            Message::Registration(_) => "registration",
+            Message::CopyProtection(_) => "copyprotection",
+            Message::Raw(_) => "raw",
+        }
+    }
+
+    /// The line as it arrived.
+    #[getter]
+    fn line(&self) -> String {
+        self.line.clone()
+    }
+
+    /// What an `id` names: `name`, `author`, or the key the engine chose.
+    #[getter]
+    fn key(&self) -> Option<String> {
+        match &self.inner {
+            Message::Id { key, .. } => Some(key.clone()),
+            _ => None,
+        }
+    }
+
+    /// The rest of an `id` line.
+    #[getter]
+    fn value(&self) -> Option<String> {
+        match &self.inner {
+            Message::Id { value, .. } => Some(value.clone()),
+            _ => None,
+        }
+    }
+
+    /// How a `registration` or `copyprotection` check went: `checking`, `ok`
+    /// or `error`.
+    #[getter]
+    fn status(&self) -> Option<&'static str> {
+        let status = match self.inner {
+            Message::Registration(status) | Message::CopyProtection(status) => status,
+            _ => return None,
+        };
+        Some(match status {
+            uci::Status::Checking => "checking",
+            uci::Status::Ok => "ok",
+            uci::Status::Error => "error",
+        })
+    }
+
+    /// The option an `option` line declares.
+    #[getter]
+    fn option(&self) -> Option<PyOption> {
+        self.option.clone()
+    }
+
+    /// The report an `info` line carries.
+    #[getter]
+    fn info(&self) -> Option<PyInfo> {
+        self.info.clone()
+    }
+
+    /// The answer a `bestmove` line carries.
+    #[getter]
+    fn answer(&self) -> Option<PyAnswer> {
+        self.answer
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Message {} {:?}>", self.kind(), self.line)
+    }
+}
+
+/// Reads one line of engine output. Moves are read against `game`, or against
+/// the start of a classic game. Reading never fails: a line the grammar has no
+/// reading for is a `raw` message.
+#[pyfunction]
+#[pyo3(signature = (line, game = None))]
+fn uci_parse(line: &str, game: Option<&PyGame>) -> PyMessage {
+    let played = game
+        .map(|game| game.played().clone())
+        .unwrap_or_else(|| Game::new(crate::variant::classic()));
+    PyMessage::of(uci::parse(line), line, &played)
+}
+
+/// Which commands may go out and which messages may come in, tracked over one
+/// conversation.
+#[pyclass(module = "esca.uci.protocol", name = "Session")]
+pub struct PySession {
+    inner: uci::Session,
+}
+
+#[pymethods]
+impl PySession {
+    /// A session with nothing asked yet.
+    #[new]
+    fn py_new() -> PySession {
+        PySession {
+            inner: uci::Session::new(),
+        }
+    }
+
+    /// What the engine is doing: `started`, `identifying`, `idle`,
+    /// `searching`, `pondering` or `quitting`.
+    #[getter]
+    fn state(&self) -> &'static str {
+        self.inner.state().name()
+    }
+
+    /// How many `isready` commands are still unanswered.
+    #[getter]
+    fn pending_ready(&self) -> u32 {
+        self.inner.pending_ready()
+    }
+
+    /// Records a command as sent, raising `ProtocolError` for one this state
+    /// has no room for.
+    fn sent(&mut self, command: &PyCommand) -> PyResult<()> {
+        self.inner
+            .sent(&command.inner)
+            .map_err(|error| ProtocolError::new_err(error.to_string()))
+    }
+
+    /// Records a message as received, raising `ProtocolError` for one this
+    /// state has no room for.
+    fn received(&mut self, message: &PyMessage) -> PyResult<()> {
+        self.inner
+            .received(&message.inner)
+            .map_err(|error| ProtocolError::new_err(error.to_string()))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Session {}>", self.state())
     }
 }
 
@@ -1042,6 +1364,10 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyAnswer>()?;
     module.add_class::<PyEngine>()?;
     module.add_class::<PySearch>()?;
+    module.add_class::<PyCommand>()?;
+    module.add_class::<PyMessage>()?;
+    module.add_class::<PySession>()?;
+    module.add_function(wrap_pyfunction!(uci_parse, module)?)?;
     module.add("UciError", py.get_type::<UciError>())?;
     module.add("EngineTimeout", py.get_type::<EngineTimeout>())?;
     module.add("EngineDied", py.get_type::<EngineDied>())?;
