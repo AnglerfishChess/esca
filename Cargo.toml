@@ -5,13 +5,13 @@ description = "A chess model that answers what is true about a position: variant
 keywords = ["chess", "chess960", "fen", "san", "position"]
 categories = ["games", "game-development"]
 readme = "README.md"
-homepage = "https://github.com/AnglerfishChess/anglerfish"
+homepage = "https://github.com/AnglerfishChess/esca"
 documentation = "https://docs.rs/esca"
-edition.workspace = true
-rust-version.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
+edition = "2024"
+rust-version = "1.85.1"
+authors = ["Alexander Myodov"]
+license = "MIT"
+repository = "https://github.com/AnglerfishChess/esca"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

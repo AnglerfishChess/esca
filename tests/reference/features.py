@@ -34,7 +34,7 @@ from .board import (
     view,
 )
 
-CANONICAL = Path(__file__).resolve().parents[2] / "rs_anglerfish" / "esca" / "tests" / "data" / "schema_v1.txt"
+CANONICAL = Path(__file__).resolve().parents[1] / "data" / "schema_v1.txt"
 
 #: The features whose definitions assume the classic starting squares.
 CLASSIC_ONLY = {

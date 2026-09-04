@@ -1,21 +1,22 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
-  "projectTitle": "Anglerfish",
-  "description": "A chess engine that plays from a learned evaluation, with its Python trainer, built on esca: a chess model that answers what is true about a position (variants, positions, games, move text, and a versioned schema of position facts) as a Rust crate and a Python package",
-  "url": "https://context7.com/anglerfishchess/anglerfish",
+  "projectTitle": "esca",
+  "description": "A chess model that answers what is true about a position (variants, positions, games, move text, and a versioned schema of position facts), as a Rust crate and a Python package built from it",
+  "url": "https://context7.com/anglerfishchess/esca",
   "public_key": "pk_oqKTKO3hmjBG756m5kers",
   "folders": [
     "docs",
-    "rs_anglerfish/esca"
+    "src",
+    "python/esca"
   ],
   "excludeFolders": [
-    "rs_anglerfish/esca/benches",
-    "rs_anglerfish/esca/tests",
-    "rs_anglerfish/esca/python/tests",
+    "benches",
+    "tests",
+    "python/tests",
     ".github"
   ],
   "rules": [
-    "esca is the published part: `esca = \"0.1\"` in Cargo.toml, or `pip install esca` for the abi3-py312 wheel built from the same crate. The engine crate anglerfish-core and the pyanglerfish trainer are not published.",
+    "esca is a Rust crate and a Python package built from it: `esca = \"0.3\"` in Cargo.toml, or `pip install esca` for the abi3-py312 wheel. The engine and trainer that use it live at https://github.com/AnglerfishChess/anglerfish.",
     "A Position is placement and state only; the rules are a Variant (Classic, Chess960), and a Game is a variant plus the moves played — repetition and claimable draws need the history, so they live on Game, not Position.",
     "Facts answers what is true about a position in nine groups (state, material, pawns, pieces, king, mobility, attacks, tactics, planes) plus MoveFacts per legal move. Everything is side-relative and in the mover's view: index pairs with Side::Us/Side::Them in Rust, esca.US/esca.THEM in Python.",
     "Schema::v0 (esca.SCHEMA_V0) is the versioned contract between the extractor and the net: 1065 f32 columns, identified by a schema_id that golden fixtures pin. Encode with facts.encode(schema, schema.all()) in Rust, esca.encode(fens) or esca.encode_into(fens, out) in Python.",

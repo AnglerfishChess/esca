@@ -16,7 +16,7 @@ import esca
 import pytest
 from reference.features import SCHEMA, encode, encode_moves
 
-DATA = Path(__file__).resolve().parents[1] / "rs_anglerfish" / "esca" / "tests" / "data"
+DATA = Path(__file__).resolve().parent / "data"
 WIDTH = sum(width for _group, width, _features in SCHEMA)
 
 

@@ -1,78 +1,130 @@
-# Anglerfish
+# esca
 
 [![crates.io](https://img.shields.io/crates/v/esca)](https://crates.io/crates/esca)
+[![docs.rs](https://img.shields.io/docsrs/esca)](https://docs.rs/esca)
 [![PyPI](https://img.shields.io/pypi/v/esca)](https://pypi.org/project/esca/)
 [![Python](https://img.shields.io/pypi/pyversions/esca)](https://pypi.org/project/esca/)
-[![CI](https://github.com/AnglerfishChess/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/AnglerfishChess/anglerfish/actions/workflows/ci.yml)
-[![Publish](https://github.com/AnglerfishChess/anglerfish/actions/workflows/publish.yml/badge.svg)](https://github.com/AnglerfishChess/anglerfish/actions/workflows/publish.yml)
-[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![CI](https://github.com/AnglerfishChess/esca/actions/workflows/ci.yml/badge.svg)](https://github.com/AnglerfishChess/esca/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/AnglerfishChess/esca/blob/main/LICENSE)
 
-A chess engine that plays from a learned evaluation, and the trainer that produces it.
+A chess model that answers what is true about a position — a Rust crate and a Python package built
+from it.
 
-The engine is Rust: a UCI front end, a search, and an evaluator the net plugs into. The trainer is
-Python: it reads the Lichess evaluation dump, turns positions into feature rows, and fits the net
-the engine loads. The two meet at [`esca`](rs_anglerfish/esca) — the chess model that answers what
-is true about a position, and the versioned schema of the row a net eats. `esca` is the one part
-meant to be useful on its own: it is a crate and a Python package, published from this repository.
+*The esca is the anglerfish's lure: the small thing that lights up what is in front of it.*
 
-## Layout
+`Position` is placement and state and nothing else. Rules live in `Variant` implementations —
+`Classic` and `Chess960` — so a position can be asked the same question under different rules, and
+a new variant is a new implementation and nothing else. A `Game` pairs a variant with the moves
+played, which is what repetition and claimable draws need. `Facts` answers what is true about a
+position, both as prose a reader can check and as the flat `f32` row a net consumes.
 
+## Rust
+
+```toml
+[dependencies]
+esca = "0.1"
 ```
-pyanglerfish/       trainer, data tooling, CLI                      (Python)
-tests/              tests for the Python side
-rs_anglerfish/      Cargo workspace                                 (Rust)
-  esca/             chess model, position facts, the wheel          (published)
-  anglerfish-core/  engine: UCI, search, evaluator interface
-docs/               architecture, the esca API, the feature schema
-data-external/      the Lichess dump; gitignored, symlinked in worktrees
+
+```rust
+use esca::{Game, Schema, Side, classic};
+
+let mut game = Game::new(classic());   // Chess960 rules: `esca::chess960()`
+game.play_san("e4").unwrap();
+game.play_uci("e7e5").unwrap();
+println!("{}", game.position().fen());
+
+let facts = game.facts();              // side-relative, in the mover's view
+println!("{}", facts.tactics[Side::Us.index()].legal_move_count);
+println!("{}", facts.summary());
+
+let schema = Schema::v1();             // the row a net eats: 2039 f32
+println!("{}", facts.encode(schema, schema.all()).len());
 ```
+
+Cargo features, none on by default: `lichess` (streaming reader for the Lichess evaluation
+dump), `pgn` (reading and writing games as PGN), `polyglot` (opening books), `openings` (the
+bundled ECO catalogue) and `python` (the PyO3 module the wheel is built from).
+`Position::polyglot_key` needs no feature.
 
 ## Python
 
 ```sh
-uv sync --all-groups
-uv run pytest
-uvx ruff check .
-uvx ruff format --check .
-uvx pyrefly check
+pip install esca
 ```
 
-Train the net over the Lichess evaluation dump — see [`docs/training.md`](docs/training.md):
-```sh
-uv run python -m pyanglerfish.train --help
+```python
+import esca
+
+game = esca.Game()  # Chess960 rules: esca.Game(variant=esca.CHESS960)
+game.play_san("e4")
+game.play("e7e5")
+print(game.position.fen)
+
+facts = game.facts()  # side-relative: index with esca.US / esca.THEM
+print(facts.tactics[esca.US].legal_move_count)
+print(facts.summary())
+
+rows = esca.encode([game.position.fen])  # (1, 2039) float32, ready for a net
+print(rows.shape, esca.SCHEMA_ID)
 ```
 
-## Rust
+Wheels are abi3 for Python 3.12 and up. `esca.lichess.batches()` streams the evaluation dump as
+encoded batches with their targets.
 
-```sh
-cd rs_anglerfish
-cargo build --release
-cargo test
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-```
+## What it covers
 
-The engine reads UCI commands on stdin; add `rs_anglerfish/target/release/anglerfish` to any chess
-GUI. Set `RUST_LOG=debug` for a trace on stderr. Protocol conformance is checked with
-[uci-test-suite](https://github.com/AnglerfishChess/uci-test-suite):
-
-```sh
-uvx uci-test-suite ./target/release/anglerfish
-```
+- Classic chess and Chess960, behind one `Variant` trait.
+- FEN and EPD, reading `KQkq` and the `AHah` of X-FEN and Shredder-FEN alike, and writing `KQkq`
+  whenever the rook files allow it.
+- Legal move generation into a `MoveList` that never allocates.
+- UCI move text in either castling spelling, and SAN with the disambiguation it needs.
+- Checkmate, stalemate, insufficient material, the fifty- and seventy-five-move rules, and
+  threefold and fivefold repetition.
+- `Facts`: fourteen groups of cheap position facts — the board itself, game state, material,
+  pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics, endgame, history
+  and attack planes — plus `MoveFacts` for every legal move, all side-relative and in the
+  mover's view.
+- `Schema`, a versioned manifest with a `schema_id`, and batch encoders that write `f32` rows
+  without allocating.
+- Polyglot opening books: the format's own key on every `Position`, books read, drawn from and
+  built, and an ECO code and name for some 3,800 named positions.
 
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — the crates, and why they are split that way.
-- [`docs/esca-api.md`](docs/esca-api.md) — the esca API in both languages.
-- [`docs/esca-vocabulary.md`](docs/esca-vocabulary.md) — the terms everything is named after.
-- [`docs/features.md`](docs/features.md) — the facts, and how they encode into a row.
+- [`docs/esca-api.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-api.md) —
+  the API in both languages.
+- [`docs/esca-vocabulary.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-vocabulary.md) —
+  the terms the API and the facts are named after.
+
+## Related projects
+
+- [AnglerfishChess/anglerfish](https://github.com/AnglerfishChess/anglerfish) — the chess engine
+  that plays from a learned evaluation, and the Python trainer that produces it. Both are built on
+  esca, and the trainer eats the rows `Schema` defines.
+- [AnglerfishChess/uci-test-suite](https://github.com/AnglerfishChess/uci-test-suite) — a
+  conformance suite that checks a program is a valid UCI engine, whatever its strength. It talks to
+  the engine under test through esca's UCI client.
+- [AnglerfishChess/chess-uci-mcp](https://github.com/AnglerfishChess/chess-uci-mcp) — an MCP server
+  that drives UCI engines from an LLM, so an esca position can be handed to Stockfish for a number
+  and a line to go with the facts esca reads off it.
+- `chess-esca-mcp` — planned: an MCP server and plugin serving esca's explanations, so an LLM can
+  ask why a move is legal or a draw claimable and get the squares behind the answer. Not yet
+  published.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/AnglerfishChess/esca/blob/main/LICENSE).
 
 ## Acknowledgements
 
-Lichess, for the evaluation dump, the game database and the opening names; cozy-chess, for the
-move generator; Stockfish and Leela Chess Zero, the engines everything is tested against. The
-full list, with licences, is in [`rs_anglerfish/esca/README.md`](rs_anglerfish/esca/README.md).
+- [cozy-chess](https://github.com/analog-hors/cozy-chess) (MIT) — the move generator esca
+  stands on.
+- [Lichess](https://lichess.org) — the evaluation dump the `lichess` reader streams, the game
+  database, and [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
+  whose opening names the `openings` feature bundles (CC0 1.0 Universal Public Domain
+  Dedication).
+- The Polyglot opening-book format and its key scheme, by Fabien Letouzey; the key constants
+  are those published in [polyglot-book-rs](https://crates.io/crates/polyglot-book-rs)
+  (MIT OR Apache-2.0).
+- [Stockfish](https://stockfishchess.org) and [Leela Chess Zero](https://lczero.org), the
+  engines the UCI client is tested against.
