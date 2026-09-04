@@ -1,7 +1,7 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
   "projectTitle": "esca",
-  "description": "A chess model that answers what is true about a position (variants, positions, games, move text, and a versioned schema of position facts), as a Rust crate and a Python package built from it",
+  "description": "Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout.",
   "url": "https://context7.com/anglerfishchess/esca",
   "public_key": "pk_oqKTKO3hmjBG756m5kers",
   "folders": [
@@ -16,12 +16,13 @@
     ".github"
   ],
   "rules": [
-    "esca is a Rust crate and a Python package built from it: `esca = \"0.3\"` in Cargo.toml, or `pip install esca` for the abi3-py312 wheel. The engine and trainer that use it live at https://github.com/AnglerfishChess/anglerfish.",
-    "A Position is placement and state only; the rules are a Variant (Classic, Chess960), and a Game is a variant plus the moves played — repetition and claimable draws need the history, so they live on Game, not Position.",
-    "Facts answers what is true about a position in nine groups (state, material, pawns, pieces, king, mobility, attacks, tactics, planes) plus MoveFacts per legal move. Everything is side-relative and in the mover's view: index pairs with Side::Us/Side::Them in Rust, esca.US/esca.THEM in Python.",
-    "Schema::v1 (esca.SCHEMA) is the versioned contract between the extractor and the net: 2039 f32 columns per position and 40 per legal move, identified by a schema_id that golden fixtures pin. Encode with facts.encode(schema, schema.all()) in Rust, esca.encode(fens) or esca.encode_into(fens, out) in Python.",
-    "Cargo features are off by default: `lichess` is the streaming reader for the Lichess evaluation dump, `python` is the PyO3 module maturin builds the wheel from.",
-    "cozy-chess is an implementation detail: no cozy_chess type appears in esca's public API in either language.",
-    "MIT-licensed, and so is every dependency; GPL chess libraries are deliberately not used."
+    "esca is one Rust crate and the Python package built from it: `esca = \"0.3\"` in Cargo.toml or `pip install esca`. The two surfaces mirror each other name for name; Python names are snake_case.",
+    "Position is placement and state only; the rules are a Variant (CLASSIC, CHESS960); Game holds a Variant, a Position and the history, and answers repetition and claims. Castling is stored king-takes-rook; both UCI spellings are read.",
+    "Facts answers what is true about a position in fourteen versioned groups (placement, state, material, pawns, pieces, king, mobility, attacks, exchange, threats, tactics, endgame, history, planes), plus 40 values per legal move.",
+    "Schema::v1 (esca.SCHEMA) is the versioned contract between the extractor and the net: 2039 f32 per position, 40 per move, identified by schema_id. Encode with esca.encode(fens) / encode_into(fens, out).",
+    "explain answers rules questions with evidence, every reason its own field: Position.castling(colour, wing), en_passant_status, pins, skewers, checkers, attackers, between; Game.repetition_status, fifty_move_status, draw_status, claims_after.",
+    "Cargo features, off by default: lichess (evaluation-dump reader), pgn, uci (blocking Engine), tokio (async Engine), polyglot (opening books), openings (ECO names).",
+    "The Python wheel carries every feature: esca.lichess, esca.pgn, esca.uci (Engine, AsyncEngine, protocol), esca.polyglot, esca.openings. Position.polyglot_key() needs no feature.",
+    "cozy-chess is an implementation detail: no cozy_chess type appears in esca's public API. MIT-licensed, and every dependency is permissive."
   ]
 }
