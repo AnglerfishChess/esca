@@ -17,6 +17,7 @@ Cargo features:
 | `lichess` | no | The `lichess` module: streaming reader for the evaluation dump. |
 | `pgn` | no | The `pgn` module: reading and writing games. |
 | `uci` | no | The `uci` module: the protocol as values, and engines as subprocesses. |
+| `tokio` | no | `uci::tokio`: the same client on a tokio runtime. Implies `uci`. |
 | `serde` | no | `Serialize`/`Deserialize` for `Position`, `Move`, `Schema` and the manifest types. |
 
 ---
@@ -718,8 +719,9 @@ so every signature below is typed and checkable. Squares, roles, colours,
 outcomes and castling styles are text on this surface, and a file set is the
 string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
 `Position`, `Game`, `Schema`, `MoveSchema`, `Facts` with its groups,
-`lichess.Batch`, `pgn.Game`, and `uci.Engine` with its `Limits`, `Option`,
-`Info` and `Answer`.
+`lichess.Batch`, `pgn.Game`, `uci.Engine` and `uci.AsyncEngine` with their
+`Limits`, `Option`, `Info` and `Answer`, and `uci.protocol` with `Command`,
+`Message` and `Session`.
 
 ```python
 import esca
@@ -817,10 +819,29 @@ with uci.Engine("stockfish") as engine:
                 search.stop()
         best = search.answer()
 
-async with uci.AsyncEngine("stockfish") as engine:  # the same surface, awaited
+# The same surface, awaited: asyncio all the way down, no thread and no
+# blocking call under it.
+async with uci.AsyncEngine("stockfish") as engine:
     await engine.handshake()
+    await engine.set_option("Hash", 256)
+    answer = await engine.play(game, uci.Limits(movetime=0.5))
     async for report in await engine.go(uci.Limits(depth=20)):
         print(report.depth, report.cp)
+    engine.timeout = 30.0  # bounds every wait that takes no timeout of its own
+    engine.dropped_lines  # reports the engine wrote faster than they were read
+
+# The protocol as values, for a client of one's own
+from esca.uci import protocol
+
+protocol.Command.position(game).to_line()  # "position startpos moves e2e4"
+protocol.Command.go(uci.Limits(depth=8)).to_line()  # "go depth 8"
+message = protocol.parse("info depth 3 score cp 12 pv e2e4", game)
+message.kind, message.info, message.answer, message.option  # str, Info | None, …
+
+session = protocol.Session()
+session.sent(protocol.Command.uci())
+session.received(protocol.parse("uciok"))
+session.state  # "idle"
 ```
 
 Every function that encodes takes keyword-only `variant`, `schema` and
@@ -973,8 +994,10 @@ break never falls between them.
 ## 11. `uci` — talking to an engine (feature `uci`)
 
 Three layers: the protocol as values, which does no I/O; the engine as a
-subprocess, which blocks and bounds every wait; and the variant handling that
-keeps Chess960 honest. No async runtime, in either language.
+subprocess, which bounds every wait; and the variant handling that keeps
+Chess960 honest. There are two ways to hold an engine, over the same values and
+the same errors — blocking, and on a runtime: `uci::Engine` and
+`uci::tokio::Engine` in Rust, `uci.Engine` and `uci.AsyncEngine` in Python.
 
 ```rust
 pub mod uci {
@@ -1047,6 +1070,33 @@ pub mod uci {
 
     pub enum Error { Io(io::Error), Timeout { .. }, Died { .. }, Protocol(ProtocolError),
                      NotIdentified, NoSuchOption(String), BadValue { .. } }
+
+    /// The same client on a tokio runtime (feature `tokio`): the same values,
+    /// the same `Error`, every method awaited.
+    pub mod tokio {
+        pub struct Engine { /* … */ }
+        impl Engine {
+            pub async fn spawn(program: impl AsRef<OsStr>,
+                               args: impl IntoIterator<Item = impl AsRef<OsStr>>)
+                -> Result<Engine, Error>;
+            pub async fn handshake(&mut self) -> Result<&Identity, Error>;
+            pub async fn set_option(&mut self, name: &str, value: OptionValue) -> Result<(), Error>;
+            pub async fn set_position(&mut self, game: &Game) -> Result<(), Error>;
+            pub async fn go(&mut self, limits: &Limits, budget: Duration)
+                -> Result<Search<'_>, Error>;
+            pub async fn play(&mut self, game: &Game, limits: &Limits, budget: Duration)
+                -> Result<Answer, Error>;
+            pub async fn quit(&mut self) -> Result<Option<i32>, Error>;
+            pub fn dropped_lines(&self) -> u64;
+            /* new_game, is_ready, start_search, next_progress, stop, ponderhit,
+               send_line, next_line, kill: the blocking ones, awaited */
+        }
+
+        /// A search in flight; its reports come one `next_info` at a time.
+        pub struct Search<'a> { /* … */ }
+    }
+
+    impl Launch { pub async fn spawn_tokio(self) -> Result<tokio::Engine, Error>; }
 }
 ```
 
@@ -1059,6 +1109,9 @@ pub mod uci {
 | Dropping a `Search` stops it and waits for the answer, so the engine is left idle. | |
 | `set_position` on a Chess960 game sets `UCI_Chess960` and writes castling king-to-rook; an engine that does not offer the option is an error, not a game played by the wrong rules. Classic games are written king-two-squares, and both spellings are read. | |
 | Every wire line is logged through `log` at debug, `>>` out and `<<` in. | |
+| The unread lines are capped at 4096. When the engine writes faster than it is read, the oldest line that carries no part of the conversation goes; `bestmove`, `readyok`, `uciok`, `id`, `option`, `copyprotection` and `registration` are never dropped. `dropped_lines()` counts what went. | |
+| `AsyncEngine` starts its process on the first call and quits with `async with`. Cancelling an awaited `play`, `analyse` or `answer` asks the engine to stop, and the engine's next call waits that search out, as on the tokio client. | |
+| On the tokio client every future is cancellation-safe: one dropped mid-wait loses no line and leaves the session where it stood. A `Search` let go of unanswered asks the engine to stop, and the engine's next call waits that search out — a drop cannot await, so the blocking client's draining `Drop` becomes a settling next call. | |
 
 ---
 

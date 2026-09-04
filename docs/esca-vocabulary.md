@@ -182,3 +182,5 @@ defined before it is used.
 | **bound** | A score the engine did not search out exactly: `lowerbound` means the true score is at least this, `upperbound` that it is at most this. |
 | **WDL** | Win, draw and loss in permille, from the side to move's point of view: an engine's estimate of the outcome, reported beside the score. |
 | **null move token** | The move text an engine writes when it has none: `(none)` or `0000`. |
+| **cancellation-safe** | Of a client's wait: giving up on it — dropping the future, cancelling the task — loses no line the engine wrote and leaves the conversation where it stood, so the next call still works. |
+| **line buffer** | The lines an engine has written that the client has not read yet. It is capped: an engine writing faster than it is read loses its oldest reports, never a line the conversation turns on. |
