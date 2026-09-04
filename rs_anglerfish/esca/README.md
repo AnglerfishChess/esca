@@ -100,6 +100,16 @@ encoded batches with their targets.
 
 MIT — see [LICENSE](https://github.com/AnglerfishChess/anglerfish/blob/main/LICENSE).
 
-The `openings` feature bundles the opening names of
-[lichess-org/chess-openings](https://github.com/lichess-org/chess-openings), released under the
-CC0 1.0 Universal Public Domain Dedication.
+## Acknowledgements
+
+- [cozy-chess](https://github.com/analog-hors/cozy-chess) (MIT) — the move generator esca
+  stands on.
+- [Lichess](https://lichess.org) — the evaluation dump the trainer learns from, the game
+  database, and [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
+  whose opening names the `openings` feature bundles (CC0 1.0 Universal Public Domain
+  Dedication).
+- The Polyglot opening-book format and its key scheme, by Fabien Letouzey; the key constants
+  are those published in [polyglot-book-rs](https://crates.io/crates/polyglot-book-rs)
+  (MIT OR Apache-2.0).
+- [Stockfish](https://stockfishchess.org) and [Leela Chess Zero](https://lczero.org), the
+  engines the UCI client is tested against.
