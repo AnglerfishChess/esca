@@ -27,6 +27,8 @@ pgn = []
 python = ["dep:numpy", "dep:pyo3", "dep:rayon"]
 # The UCI client: the protocol as values, and engines as subprocesses.
 uci = ["dep:log"]
+# The same client on a tokio runtime: `uci::tokio::Engine`.
+tokio = ["uci", "dep:tokio"]
 
 [dependencies]
 blake3 = "1"
@@ -37,6 +39,15 @@ pyo3 = { version = "0.29", optional = true, features = ["abi3-py312"] }
 rayon = { version = "1", optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
+# `macros` is what `#[tokio::test]` needs; the rest is the client itself.
+tokio = { version = "1", optional = true, features = [
+    "io-util",
+    "macros",
+    "process",
+    "rt",
+    "sync",
+    "time",
+] }
 zstd = { version = "0.13", optional = true }
 
 [dev-dependencies]

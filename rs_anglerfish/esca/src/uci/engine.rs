@@ -8,7 +8,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command as Process, Stdio};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -18,6 +18,7 @@ use crate::game::Game;
 use crate::moves::Move;
 use crate::variant::{CastlingOutput, classic};
 
+use super::lines::Queue;
 use super::protocol::{
     self, CHESS960_OPTION, Command, Info, Limits, Message, OptionSpec, OptionValue, ProtocolError,
     Register, Setup, State, Status,
@@ -26,12 +27,12 @@ use super::protocol::{
 /// How long a wait that is not given its own limit may take.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// How long one blocking read of the engine's output may take, so that a
-/// process that dies without closing its pipes is still noticed.
-const POLL: Duration = Duration::from_millis(200);
+/// How long one read of the engine's output may take, so that a process that
+/// dies without closing its pipes is still noticed.
+pub(super) const POLL: Duration = Duration::from_millis(200);
 
 /// The instant `budget` from now, saturating rather than overflowing.
-fn deadline(budget: Duration) -> Instant {
+pub(super) fn deadline(budget: Duration) -> Instant {
     let now = Instant::now();
     now.checked_add(budget)
         .unwrap_or_else(|| now + Duration::from_secs(60 * 60 * 24 * 365))
@@ -126,10 +127,10 @@ pub enum Progress {
 
 /// How an engine process is started.
 pub struct Launch {
-    program: OsString,
-    args: Vec<OsString>,
-    directory: Option<PathBuf>,
-    timeout: Duration,
+    pub(super) program: OsString,
+    pub(super) args: Vec<OsString>,
+    pub(super) directory: Option<PathBuf>,
+    pub(super) timeout: Duration,
 }
 
 impl Launch {
@@ -185,10 +186,12 @@ impl Launch {
         let stdout = child.stdout.take().expect("a piped stdout");
         let stderr = child.stderr.take().expect("a piped stderr");
 
-        let (sender, lines) = channel();
+        let lines = Arc::new((Mutex::new(Queue::new()), Condvar::new()));
+        let filled = Arc::clone(&lines);
         thread::Builder::new()
             .name("esca-uci-stdout".to_owned())
             .spawn(move || {
+                let (queue, ready) = &*filled;
                 let mut reader = BufReader::new(stdout);
                 let mut raw = Vec::new();
                 while let Ok(read) = reader.read_until(b'\n', &mut raw) {
@@ -200,10 +203,11 @@ impl Launch {
                         .to_owned();
                     raw.clear();
                     debug!("<< {text}");
-                    if sender.send(text).is_err() {
-                        break;
-                    }
+                    held(queue).push(text);
+                    ready.notify_all();
                 }
+                held(queue).close();
+                ready.notify_all();
             })?;
         thread::Builder::new()
             .name("esca-uci-stderr".to_owned())
@@ -230,11 +234,22 @@ impl Launch {
     }
 }
 
+/// The queue a reader thread fills and the client reads, and the signal that
+/// it is no longer empty.
+type Lines = Arc<(Mutex<Queue>, Condvar)>;
+
+/// The queue, locked; a thread that panicked holding it left it usable.
+fn held(queue: &Mutex<Queue>) -> MutexGuard<'_, Queue> {
+    queue
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// A UCI engine process.
 pub struct Engine {
     child: Child,
     stdin: Option<ChildStdin>,
-    lines: Receiver<String>,
+    lines: Lines,
     session: protocol::Session,
     timeout: Duration,
     identity: Identity,
@@ -318,14 +333,35 @@ impl Engine {
 
     /// The next line the engine wrote, or `None` if it wrote none in time.
     pub fn next_line(&mut self, timeout: Duration) -> Result<Option<String>, Error> {
-        match self.lines.recv_timeout(timeout) {
-            Ok(line) => Ok(Some(line)),
-            Err(RecvTimeoutError::Timeout) => {
-                self.check_alive()?;
-                Ok(None)
+        let lines = Arc::clone(&self.lines);
+        let (queue, ready) = &*lines;
+        let until = deadline(timeout);
+        let mut waiting = held(queue);
+        loop {
+            if let Some(line) = waiting.pop() {
+                return Ok(Some(line));
             }
-            Err(RecvTimeoutError::Disconnected) => Err(self.die()),
+            if waiting.is_done() {
+                drop(waiting);
+                return Err(self.die());
+            }
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                drop(waiting);
+                self.check_alive()?;
+                return Ok(None);
+            }
+            waiting = ready
+                .wait_timeout(waiting, left)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
         }
+    }
+
+    /// How many lines the engine wrote that the client never read, because it
+    /// wrote them faster than they were read.
+    pub fn dropped_lines(&self) -> u64 {
+        held(&self.lines.0).dropped()
     }
 
     // -- The protocol -------------------------------------------------------

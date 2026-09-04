@@ -12,6 +12,7 @@ unhappy path:
 ``--no-move``       answer ``bestmove (none)``
 ``--die-on-go``     exit while searching
 ``--slow``          take 0.5 s to answer
+``--flood``         write more reports than a client keeps, before answering
 ``--garbage``       write malformed and out-of-turn lines before the answer
 ``--twice``         write the answer twice
 ``--zombie``        ignore ``quit``
@@ -41,6 +42,10 @@ GARBAGE = [
     "bestmove",
     "readyok",
 ]
+
+#: How many reports ``--flood`` writes: more than either client's line buffer
+#: holds, so that a client reading later has to drop some of them.
+FLOOD = 6000
 
 #: The reports of a search, in the order a real engine would write them.
 REPORTS = [
@@ -101,6 +106,9 @@ def answer(flags: set[str]) -> None:
     """Report a search and its result."""
     if "--slow" in flags:
         time.sleep(0.5)
+    if "--flood" in flags:
+        for number in range(FLOOD):
+            emit(f"info depth 1 nodes {number} score cp 20 pv e2e4")
     if "--garbage" in flags:
         for line in GARBAGE:
             emit(line)

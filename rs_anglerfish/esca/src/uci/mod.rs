@@ -1,7 +1,10 @@
 //! Talking to a UCI engine.
 //!
-//! [`protocol`] is the protocol as values and does no I/O; [`Engine`] runs an
-//! engine as a subprocess and speaks it, blocking, with every wait bounded.
+//! [`protocol`] is the protocol as values and does no I/O. There are two ways
+//! to hold an engine, over the same values and the same [`Error`]: [`Engine`]
+//! runs it as a subprocess and speaks it, blocking, and [`tokio::Engine`] does
+//! the same on a tokio runtime, behind the `tokio` feature. Both bound every
+//! wait, and both kill the process when they are dropped.
 //!
 //! ```no_run
 //! use std::time::Duration;
@@ -23,8 +26,11 @@
 //! ```
 
 pub mod protocol;
+#[cfg(feature = "tokio")]
+pub mod tokio;
 
 mod engine;
+mod lines;
 
 pub use engine::{Answer, DEFAULT_TIMEOUT, Engine, Error, Identity, Launch, Progress, Search};
 pub use protocol::{

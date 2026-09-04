@@ -7,49 +7,21 @@
 
 #![cfg(feature = "uci")]
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 use std::time::Duration;
 
-use esca::uci::{Engine, Error, Launch, Limits, OptionKind, OptionValue, State};
+use esca::uci::{Engine, Error, Launch, Limits, OptionKind, OptionValue, Progress, State};
 use esca::{Game, chess960, classic};
 
-/// Long enough for a subprocess to answer, short enough to fail a test fast.
-const TIMEOUT: Duration = Duration::from_secs(5);
+mod double;
 
-/// A Chess960 endgame: the white king on b1 with its own rook beside it on c1.
-const BESIDE_ROOK: &str = "4k3/8/8/8/8/8/8/1KR5 w C - 0 1";
-
-/// The interpreter that runs the engine doubles.
-fn python() -> &'static str {
-    static NAMES: [&str; 3] = ["python3", "python", "py"];
-    for name in NAMES {
-        let answered = Command::new(name)
-            .arg("--version")
-            .output()
-            .is_ok_and(|output| output.status.success());
-        if answered {
-            return name;
-        }
-    }
-    panic!("no Python interpreter on PATH: tried {NAMES:?}");
-}
-
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(name)
-}
+use double::{
+    BESIDE_ROOK, TIMEOUT, fixture, launch, launch_logging, log_of, log_path, python, real_engines,
+};
 
 /// A started double, misbehaving as `flags` ask.
 fn fake(flags: &[&str]) -> Engine {
-    let mut launch = Launch::new(python())
-        .arg(fixture("fake_engine.py"))
-        .timeout(TIMEOUT);
-    for flag in flags {
-        launch = launch.arg(flag);
-    }
-    launch.spawn().expect("the double starts")
+    launch(flags).spawn().expect("the double starts")
 }
 
 /// A started double that has identified itself.
@@ -59,13 +31,11 @@ fn identified(flags: &[&str]) -> Engine {
     engine
 }
 
-/// The commands a double wrote to its log, in order.
-fn log_of(path: &Path) -> Vec<String> {
-    std::fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .map(str::to_owned)
-        .collect()
+/// A double that logs every command it is sent to `path`.
+fn with_log(path: &Path, flags: &[&str]) -> Engine {
+    launch_logging(path, flags)
+        .spawn()
+        .expect("the double starts")
 }
 
 // -- A normal game ----------------------------------------------------------
@@ -489,6 +459,47 @@ fn a_read_that_finds_nothing_answers_with_nothing() {
     );
 }
 
+// -- The line buffer --------------------------------------------------------
+
+/// The unread lines are capped, so an engine writing faster than it is read
+/// costs a bounded amount of memory and the oldest reports, not the answer.
+#[test]
+fn a_flood_of_reports_drops_the_oldest_and_keeps_the_answer() {
+    let mut engine = identified(&["--flood"]);
+    engine
+        .set_position(&Game::new(classic()))
+        .expect("a position");
+    engine
+        .start_search(&Limits::depth(2))
+        .expect("the search starts");
+
+    // Let the double outrun the client, which reads nothing until it does.
+    let until = std::time::Instant::now() + TIMEOUT;
+    while engine.dropped_lines() == 0 && std::time::Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(engine.dropped_lines() > 0, "the double floods the client");
+
+    let answer = loop {
+        match engine.next_progress(TIMEOUT).expect("the search goes on") {
+            Progress::Done(answer) => break answer,
+            Progress::Info(_) => {}
+        }
+    };
+    assert!(answer.best.is_some(), "the answer is never dropped");
+    assert_eq!(engine.state(), State::Idle);
+}
+
+/// Nothing is dropped from a conversation the client keeps up with.
+#[test]
+fn a_client_that_keeps_up_drops_nothing() {
+    let mut engine = identified(&[]);
+    engine
+        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .expect("an answer");
+    assert_eq!(engine.dropped_lines(), 0);
+}
+
 // -- Real engines -----------------------------------------------------------
 
 /// Every real engine to be found plays one move from the start position.
@@ -556,44 +567,4 @@ fn a_real_engine_plays_chess960() {
         );
         engine.quit().expect("it exits");
     }
-}
-
-// -- Helpers ----------------------------------------------------------------
-
-/// The engines to try: the well-known ones on PATH, and this workspace's own
-/// build of `anglerfish`.
-fn real_engines() -> Vec<PathBuf> {
-    let mut found: Vec<PathBuf> = ["stockfish", "lc0", "anglerfry", "anglerfish"]
-        .iter()
-        .map(PathBuf::from)
-        .collect();
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target");
-    for profile in ["release", "debug"] {
-        let built = workspace.join(profile).join("anglerfish");
-        if built.exists() {
-            found.push(built);
-        }
-    }
-    found
-}
-
-/// A double that logs every command it is sent to `path`.
-fn with_log(path: &Path, flags: &[&str]) -> Engine {
-    let mut launch = Launch::new(python())
-        .arg(fixture("fake_engine.py"))
-        .arg(format!("--log={}", path.display()))
-        .timeout(TIMEOUT);
-    for flag in flags {
-        launch = launch.arg(flag);
-    }
-    launch.spawn().expect("the double starts")
-}
-
-/// A fresh path for one test's command log.
-fn log_path(name: &str) -> PathBuf {
-    let directory = std::env::temp_dir().join(format!("esca-uci-{}", std::process::id()));
-    std::fs::create_dir_all(&directory).expect("a writable temporary directory");
-    let path = directory.join(name);
-    let _ = std::fs::remove_file(&path);
-    path
 }
