@@ -10,8 +10,12 @@ mod explain;
 mod facts;
 #[cfg(feature = "lichess")]
 mod lichess;
+#[cfg(feature = "openings")]
+mod openings;
 #[cfg(feature = "pgn")]
 mod pgn;
+#[cfg(feature = "polyglot")]
+mod polyglot;
 #[cfg(feature = "uci")]
 mod uci;
 
@@ -104,6 +108,12 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_function(wrap_pyfunction!(pgn::pgn_read_string, module)?)?;
         module.add_function(wrap_pyfunction!(pgn::pgn_count, module)?)?;
     }
+
+    #[cfg(feature = "polyglot")]
+    polyglot::register(module)?;
+
+    #[cfg(feature = "openings")]
+    openings::register(module)?;
 
     #[cfg(feature = "uci")]
     uci::register(module)?;

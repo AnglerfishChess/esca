@@ -62,6 +62,14 @@ def test_the_explain_module_exports_what_its_stub_declares() -> None:
     assert esca.explain.__all__ == stub_all("explain.pyi")
 
 
+def test_the_polyglot_module_exports_what_its_stub_declares() -> None:
+    assert esca.polyglot.__all__ == stub_all("polyglot.pyi")
+
+
+def test_the_openings_module_exports_what_its_stub_declares() -> None:
+    assert esca.openings.__all__ == stub_all("openings.pyi")
+
+
 def test_every_exported_name_exists() -> None:
     assert [name for name in esca.__all__ if not hasattr(esca, name)] == []
 

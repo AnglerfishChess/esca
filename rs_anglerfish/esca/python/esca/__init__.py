@@ -4,7 +4,7 @@ Squares, roles, colours and file sets are text here; every side-paired fact is
 a pair, indexed by `esca.US` and `esca.THEM`.
 """
 
-from . import explain, lichess, pgn, uci
+from . import explain, lichess, openings, pgn, polyglot, uci
 from ._esca import (
     CHESS960,
     CLASSIC,
@@ -94,7 +94,9 @@ __all__ = [
     "explain",
     "features_for",
     "lichess",
+    "openings",
     "pgn",
+    "polyglot",
     "schema",
     "uci",
 ]

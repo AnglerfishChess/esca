@@ -1,4 +1,4 @@
-from . import explain, lichess, pgn, uci
+from . import explain, lichess, openings, pgn, polyglot, uci
 from ._esca import (
     CHESS960,
     CLASSIC,
@@ -88,7 +88,9 @@ __all__ = [
     "explain",
     "features_for",
     "lichess",
+    "openings",
     "pgn",
+    "polyglot",
     "schema",
     "uci",
 ]

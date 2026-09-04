@@ -18,7 +18,12 @@ Cargo features:
 | `pgn` | no | The `pgn` module: reading and writing games. |
 | `uci` | no | The `uci` module: the protocol as values, and engines as subprocesses. |
 | `tokio` | no | `uci::tokio`: the same client on a tokio runtime. Implies `uci`. |
+| `polyglot` | no | The `polyglot` module: opening books read, picked from and built. |
+| `openings` | no | The `openings` module: the bundled ECO code and name of a position. |
 | `serde` | no | `Serialize`/`Deserialize` for `Position`, `Move`, `Schema` and the manifest types. |
+
+`Position::polyglot_key` needs no feature: the key is part of the position,
+and the `polyglot` and `openings` modules are indexed by it.
 
 ---
 
@@ -141,6 +146,10 @@ impl Position {
     /// en-passant square; independent of the clocks. Valid as an identity
     /// within one process run — not across runs, and not stored.
     pub fn key(&self) -> Key;
+
+    /// The Polyglot key, as §13 defines it: fixed by that format, so it is
+    /// the same number in every run and in every program that implements it.
+    pub fn polyglot_key(&self) -> u64;
 
     /// Static exchange evaluation, in value units, as `features.md` §1
     /// defines it: of the unit on `sq`, and of a move of this position.
@@ -719,7 +728,8 @@ so every signature below is typed and checkable. Squares, roles, colours,
 outcomes and castling styles are text on this surface, and a file set is the
 string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
 `Position`, `Game`, `Schema`, `MoveSchema`, `Facts` with its groups,
-`lichess.Batch`, `pgn.Game`, `uci.Engine` and `uci.AsyncEngine` with their
+`lichess.Batch`, `pgn.Game`, `polyglot.Book` with its `Entry`, `Raw` and
+`Builder`, `openings.Opening`, `uci.Engine` and `uci.AsyncEngine` with their
 `Limits`, `Option`, `Info` and `Answer`, and `uci.protocol` with `Command`,
 `Message` and `Session`.
 
@@ -797,6 +807,32 @@ for pg in esca.pgn.read(path):  # or read_string(text); skip_errors=True drops b
     print(pg.to_string())
 esca.pgn.count(path)  # games that read without error
 esca.pgn.Game.from_game(g)  # or g.to_pgn()
+
+# Opening books. A key is an int, and a raw entry's move is UCI text.
+p.polyglot_key  # int; no feature is needed for the key itself
+
+book = esca.polyglot.Book(path)
+for raw in book:  # len(book) entries, in file order
+    raw.key, raw.bits, raw.uci, raw.weight, raw.learn
+    raw.decode(p, variant=esca.CLASSIC)  # Entry | None
+book.entries(p)  # list[Entry], in book order, illegal moves dropped
+book.best(p)  # Entry | None
+book.pick(p, seed)  # Entry | None, drawn by weight
+entry.key, entry.move, entry.bits, entry.weight, entry.learn
+esca.polyglot.Book.write(path, entries)
+
+builder = esca.polyglot.Builder(max_ply=20, min_count=2)
+builder.add_game(g)
+builder.add_pgn(path)  # or add_pgn_string(text); returns games counted
+builder.write(path)
+
+# Streams url to a temporary file beside path, renaming it on success.
+esca.polyglot.download(url, path, sha256=None)
+
+# Opening names
+esca.openings.lookup(p)  # Opening | None, with .eco and .name
+esca.openings.count()
+g.opening()  # Opening | None, the deepest name the game reached
 
 # Engines. Times are seconds, moves are Move objects, scores are cp/mate.
 from esca import uci
@@ -1365,3 +1401,147 @@ draws.automatic[0].stalemate.stuck_units  # [("a7", Stuck)]
 draws.automatic[1].material  # "kb_v_k"
 [d.kind for d in game.claims_after(mv)]  # ["threefold"]
 ```
+
+---
+
+## 13. `polyglot` — opening books (feature `polyglot`)
+
+The Polyglot book format: a file of 16-byte entries sorted by a key that the
+format fixes, so a book written by one program is read by every other.
+
+### The key
+
+`Position::polyglot_key` needs no feature. It XORs 781 published constants:
+one per piece per square, one per castling right, one per en-passant file,
+and one for White to move.
+
+| Rule | |
+|---|---|
+| A piece contributes `piece[kind][square]`, the kinds running black pawn, white pawn, black knight, … white king. | |
+| A castling right contributes one constant per wing per colour, whatever file its rook starts on, so Chess960 rights map onto the same four. | |
+| The en-passant file contributes only when a pawn of the side to move stands beside the pawn that has just advanced two squares — beside it, whether or not the capture would leave its own king in check. | |
+| White to move contributes the turn constant; Black to move contributes nothing. | |
+| The clocks and the full-move number contribute nothing. | |
+
+The format's own test vectors, from the starting position through
+`1. e4 d5 2. e5 f5 3. Ke2 Kf7`, are the cases of `tests/polyglot.rs` and
+`python/tests/test_polyglot.py`.
+
+### Entries and books
+
+```rust
+pub mod polyglot {
+    /// The bytes one entry occupies.
+    pub const ENTRY_SIZE: usize = 16;
+
+    /// One entry as the file holds it: the move is still the format's 16 bits.
+    pub struct Raw { pub key: u64, pub mv: u16, pub weight: u16, pub learn: u32 }
+
+    impl Raw {
+        /// Origin, destination and promotion, castling king-to-rook; `None`
+        /// when the bits name no move.
+        pub fn uci(&self) -> Option<String>;
+        /// The bits of a move, for a book written by hand.
+        pub fn pack(mv: Move) -> u16;
+        /// The move read against `position`; `None` when it is not legal there.
+        pub fn decode(&self, variant: &dyn Variant, position: &Position) -> Option<Entry>;
+    }
+
+    /// One entry whose move has been read against a position.
+    pub struct Entry { pub key: u64, pub mv: Move, pub weight: u16, pub learn: u32 }
+
+    impl Entry { pub fn new(key: u64, mv: Move, weight: u16, learn: u32) -> Entry; }
+    impl From<Entry> for Raw { /* … */ }
+
+    pub struct Book { /* … */ }
+
+    impl Book {
+        /// Memory-maps the file at `path`.
+        pub fn open(path: &Path) -> io::Result<Book>;
+        pub fn from_bytes(bytes: Vec<u8>) -> io::Result<Book>;
+        pub fn len(&self) -> usize;
+        pub fn is_empty(&self) -> bool;
+        pub fn get(&self, index: usize) -> Option<Raw>;
+        /// Every entry, in file order.
+        pub fn iter(&self) -> impl Iterator<Item = Raw> + '_;
+        /// The entries at `key`, in book order.
+        pub fn raw_entries(&self, key: u64) -> Vec<Raw>;
+        /// The entries at this position's key that name a legal move there.
+        pub fn entries(&self, variant: &dyn Variant, position: &Position) -> Vec<Entry>;
+        /// The heaviest of them; ties go to the earlier entry.
+        pub fn best(&self, variant: &dyn Variant, position: &Position) -> Option<Entry>;
+        /// One of them, by weight: the entry whose running total first
+        /// exceeds `seed % total`.
+        pub fn pick(&self, variant: &dyn Variant, position: &Position, seed: u64)
+            -> Option<Entry>;
+        /// Writes `entries` sorted and merged.
+        pub fn write(path: &Path, entries: &[Entry]) -> io::Result<()>;
+    }
+
+    /// Counts the moves of the games it is given and writes them as a book.
+    pub struct Builder { /* … */ }
+
+    impl Builder {
+        /// Every move of every game, once each.
+        pub fn new() -> Builder;
+        /// Moves later than `plies` are not counted. Default: no limit.
+        pub fn max_ply(self, plies: u32) -> Builder;
+        /// A move played fewer than `count` times is not written. Default: 1.
+        pub fn min_count(self, count: u32) -> Builder;
+        pub fn add_game(&mut self, game: &Game);
+        /// Every game of a PGN source; malformed ones are skipped. Returns
+        /// how many were added. Needs feature `pgn`.
+        pub fn add_pgn<R: BufRead>(&mut self, input: R) -> usize;
+        /// How many distinct position-and-move pairs have been counted.
+        pub fn len(&self) -> usize;
+        pub fn is_empty(&self) -> bool;
+        /// The book rows: sorted, merged, and filtered by `min_count`.
+        pub fn entries(&self) -> Vec<Raw>;
+        pub fn write(&self, path: &Path) -> io::Result<()>;
+    }
+}
+```
+
+| Contract | |
+|---|---|
+| A file whose length is not a multiple of `ENTRY_SIZE` is `InvalidData`; an empty file is an empty book. | |
+| Entries are big-endian and sorted by key; the entries of one key keep the order the file gives them. | |
+| The move's 16 bits are destination file and rank, origin file and rank, then the promotion role, and castling is written king-takes-rook — which is the spelling `Move` already stores, in every variant. | |
+| An entry whose bits name no move, or a move that is not legal in the position asked about, is dropped by `entries` and is `None` from `decode`. Nothing panics and nothing is guessed. | |
+| `pick` is a pure function of the entries and the seed: a caller that wants variety supplies a fresh seed. When every candidate weighs 0, it returns the first. | |
+| Writing sorts by key, then by descending weight, then by the encoded move, and merges entries that share a key and a move by adding their weights, saturating at `u16::MAX`. | |
+| `Builder` weighs a move by how many games played it, capped the same way, and writes `0` as the learn value. | |
+
+---
+
+## 14. `openings` — the ECO catalogue (feature `openings`)
+
+The [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings)
+data set, bundled under CC0-1.0 as `rs_anglerfish/esca/data/openings/`: an ECO
+code and a name for each of some 3,800 named positions, indexed by Polyglot
+key.
+
+```rust
+pub mod openings {
+    /// An ECO volume letter with its index, and the name that goes with it.
+    pub struct Opening { pub eco: &'static str, pub name: &'static str }
+
+    /// The name of `position`, if it has one.
+    pub fn lookup(position: &Position) -> Option<Opening>;
+    /// How many named positions the catalogue holds.
+    pub fn count() -> usize;
+}
+
+impl Game {
+    /// The name of the deepest named position the game has reached.
+    pub fn opening(&self) -> Option<Opening>;
+}
+```
+
+| Contract | |
+|---|---|
+| The catalogue is keyed by position, not by move order, so a line that transposes into a named position is named. | |
+| The starting position has no name; a game names an opening only from the first named position on. | |
+| `Game::opening` walks the game's own positions and keeps the last hit, so a game that leaves the book keeps the last name it reached. | |
+| The catalogue is classic chess; a Chess960 position matches only by coincidence. | |
+| It is built on first use, from the bundled text, and shared from then on. | |

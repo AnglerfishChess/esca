@@ -37,8 +37,12 @@ mod game;
 #[cfg(feature = "lichess")]
 pub mod lichess;
 mod moves;
+#[cfg(feature = "openings")]
+pub mod openings;
 #[cfg(feature = "pgn")]
 pub mod pgn;
+#[cfg(feature = "polyglot")]
+pub mod polyglot;
 mod position;
 #[cfg(feature = "python")]
 mod python;
@@ -47,6 +51,7 @@ mod types;
 #[cfg(feature = "uci")]
 pub mod uci;
 mod variant;
+mod zobrist;
 
 pub use error::{FenError, IllegalMove, MoveParseError, PositionError};
 pub use facts::{

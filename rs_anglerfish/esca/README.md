@@ -42,8 +42,9 @@ println!("{}", facts.encode(schema, schema.all()).len());
 ```
 
 Cargo features, none on by default: `lichess` (streaming reader for the Lichess evaluation
-dump), `pgn` (reading and writing games as PGN) and `python` (the PyO3 module the wheel is
-built from).
+dump), `pgn` (reading and writing games as PGN), `polyglot` (opening books), `openings` (the
+bundled ECO catalogue) and `python` (the PyO3 module the wheel is built from).
+`Position::polyglot_key` needs no feature.
 
 ## Python
 
@@ -85,6 +86,8 @@ encoded batches with their targets.
   mover's view.
 - `Schema`, a versioned manifest with a `schema_id`, and batch encoders that write `f32` rows
   without allocating.
+- Polyglot opening books: the format's own key on every `Position`, books read, drawn from and
+  built, and an ECO code and name for some 3,800 named positions.
 
 ## Documentation
 
@@ -96,3 +99,7 @@ encoded batches with their targets.
 ## License
 
 MIT — see [LICENSE](https://github.com/AnglerfishChess/anglerfish/blob/main/LICENSE).
+
+The `openings` feature bundles the opening names of
+[lichess-org/chess-openings](https://github.com/lichess-org/chess-openings), released under the
+CC0 1.0 Universal Public Domain Dedication.

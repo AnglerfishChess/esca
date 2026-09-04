@@ -184,3 +184,18 @@ defined before it is used.
 | **null move token** | The move text an engine writes when it has none: `(none)` or `0000`. |
 | **cancellation-safe** | Of a client's wait: giving up on it — dropping the future, cancelling the task — loses no line the engine wrote and leaves the conversation where it stood, so the next call still works. |
 | **line buffer** | The lines an engine has written that the client has not read yet. It is capped: an engine writing faster than it is read loses its oldest reports, never a line the conversation turns on. |
+
+---
+
+## 8. Opening books and names
+
+| Term | Definition |
+|---|---|
+| **opening** | The first phase of a game, and by extension a named sequence of moves that reaches a particular position. |
+| **Polyglot** | The de-facto opening-book format: a file of 16-byte entries sorted by a Zobrist key whose 781 constants the format itself fixes. |
+| **Polyglot key** | That key. Unlike esca's own `Key`, it is the same number in every run and in every program implementing the format, so it is what a book is indexed by. Built from placement, side to move, castling rights per wing, and the en-passant file when a pawn stands beside the pawn that has just advanced two squares. |
+| **book entry** | One row of a book: a key, a move, a weight and a learn value. Several entries may share a key, one per move known in that position. |
+| **weight** | How good, or how often played, an entry's move is. Relative within a key and meaningless across keys; a weighted pick draws in proportion to it. |
+| **learn** | Four bytes per entry the format reserves for a program's own use. esca reads and writes them and gives them no meaning. |
+| **ECO** | *Encyclopaedia of Chess Openings*: the classification whose codes are a volume letter A–E and two digits, `B90` for the Najdorf. |
+| **transposition** | Reaching a position by a move order other than the usual one. A catalogue keyed by position names a transposition; one keyed by move order does not. |

@@ -318,6 +318,18 @@ impl Position {
         Key(self.board.hash())
     }
 
+    /// The Polyglot key: the hash that format indexes a position by.
+    ///
+    /// Its constants are fixed by the format, so the key is the same number
+    /// in every run and in every program that implements it, which is what
+    /// makes it a value to store and to send. The en-passant file is part of
+    /// it only when a pawn of the side to move stands beside the pawn that
+    /// has just advanced two squares.
+    #[inline]
+    pub fn polyglot_key(&self) -> u64 {
+        crate::zobrist::key(self)
+    }
+
     /// The key repetition is counted by: the en-passant square is part of it
     /// only when a pawn could legally take that way, as the FIDE rule says.
     pub(crate) fn repetition_key(&self) -> u64 {

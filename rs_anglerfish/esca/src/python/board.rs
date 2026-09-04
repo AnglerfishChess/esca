@@ -415,6 +415,13 @@ impl PyPosition {
         Ok(square_name(self.inner.king_of(colour_from(colour)?)))
     }
 
+    /// The Polyglot key: the same number in every run and in every program
+    /// that implements the format.
+    #[getter]
+    fn polyglot_key(&self) -> u64 {
+        self.inner.polyglot_key()
+    }
+
     /// The static exchange evaluation of the unit on `square`.
     fn see(&self, square: &str) -> PyResult<i32> {
         Ok(self.inner.see(square_from(square)?))
@@ -523,7 +530,7 @@ impl PyGame {
         PyGame { inner, variant }
     }
 
-    #[cfg(any(feature = "pgn", feature = "uci"))]
+    #[cfg(any(feature = "pgn", feature = "polyglot", feature = "uci"))]
     pub(crate) fn played(&self) -> &Game {
         &self.inner
     }
@@ -710,6 +717,12 @@ impl PyGame {
     /// The facts of the current position, repetition and history included.
     fn facts(&self) -> PyFacts {
         PyFacts::of_game(&self.inner, self.variant.clone())
+    }
+
+    /// The opening of the deepest named position this game has reached.
+    #[cfg(feature = "openings")]
+    fn opening(&self) -> Option<super::openings::PyOpening> {
+        self.inner.opening().map(super::openings::PyOpening::new)
     }
 
     /// This game as PGN, with a seven-tag roster of placeholders.
