@@ -1059,3 +1059,256 @@ pub mod uci {
 | Dropping a `Search` stops it and waits for the answer, so the engine is left idle. | |
 | `set_position` on a Chess960 game sets `UCI_Chess960` and writes castling king-to-rook; an engine that does not offer the option is an error, not a game played by the wrong rules. Classic games are written king-two-squares, and both spellings are read. | |
 | Every wire line is logged through `log` at debug, `>>` out and `<<` in. | |
+
+---
+
+## 12. `explain` — the evidence behind a rules answer
+
+Where `Facts` answers *what is true*, `explain` answers *why*, and hands over
+the squares the answer was read off. Every categorical answer is an enum,
+every distinct reason is its own field carrying its own evidence, and every
+reason that applies is filled in — a caller reads the whole situation from one
+value instead of asking again for the next reason. Nothing here is part of the
+feature schema.
+
+```rust
+pub mod explain {
+    /// Which castling, named by where the king lands: `Short` on the g-file,
+    /// `Long` on the c-file. Not the wing the rook starts on, which a
+    /// shuffled back rank can put on either side of the king.
+    pub enum Wing { Short, Long }
+
+    impl Wing {
+        /// Both wings, short first.
+        pub const ALL: [Wing; 2];
+    }
+
+    /// One castling of one colour, and everything standing in its way.
+    pub struct Castling {
+        /// The position still holds this castling right.
+        pub right: bool,
+        /// The rook the right names stands on its square. False without a
+        /// right, which names no rook.
+        pub rook_present: bool,
+        /// The enemy units attacking the king where it stands.
+        pub king_in_check_by: SquareSet,
+        /// Each square the king crosses or lands on that the enemy covers,
+        /// with the units covering it, in ascending square order. The king's
+        /// own square is `king_in_check_by`, not a member here, and without
+        /// the right there is no path at all.
+        pub path_attacked: Vec<(Square, SquareSet)>,
+        /// The units standing on squares the king or the rook must pass or
+        /// land on, the castling king and rook themselves excepted.
+        pub path_blocked: SquareSet,
+        /// Nothing above prevents the castling. Whose turn it is is not part
+        /// of it, so for the side to move this is exactly legality.
+        pub allowed: bool,
+    }
+
+    /// The en-passant capture a position offers the side to move.
+    pub enum EnPassant {
+        /// The previous ply was not a double pawn step.
+        None,
+        /// A pawn skipped `target`, and `captures` holds every pawn of the
+        /// side to move standing beside it.
+        Available { target: Square, captures: Vec<EpCapture> },
+    }
+
+    impl EnPassant {
+        pub fn target(&self) -> Option<Square>;
+        pub fn captures(&self) -> &[EpCapture];
+    }
+
+    /// One pawn's en-passant capture of the target.
+    pub struct EpCapture {
+        pub from: Square,
+        pub legal: bool,
+        /// The first of `InCheck`, `Pinned`, `ExposesKing` that applies;
+        /// `None` when the capture is legal.
+        pub forbidden_by: Option<EpObstacle>,
+    }
+
+    pub enum EpObstacle {
+        /// The pawn is pinned against its own king and the target is off the
+        /// pinning ray.
+        Pinned { ray: SquareSet, pinner: Square },
+        /// Both pawns leave one rank at once and uncover the king: the pin
+        /// that binds neither pawn alone.
+        ExposesKing { attacker: Square },
+        /// The side to move is in check and this capture does not answer it.
+        InCheck { by: SquareSet },
+    }
+
+    /// A unit that may not move off the line between an enemy slider and its
+    /// own king.
+    pub struct Pin {
+        pub pinned: Square,
+        pub pinner: Square,
+        pub king: Square,
+        /// Between pinner and king, exclusive.
+        pub ray: SquareSet,
+    }
+
+    /// A unit attacked with a less valuable one of the same colour directly
+    /// behind it on the slider's line.
+    pub struct Skewer {
+        pub attacker: Square,
+        pub front: Square,
+        pub behind: Square,
+        /// Between attacker and `behind`, exclusive; holds `front`.
+        pub ray: SquareSet,
+    }
+
+    /// How often the current position has stood, and what nearly counted.
+    pub struct Repetition {
+        pub count: u32,
+        /// Every ply the current position occurred at, this one last.
+        pub plies: Vec<u32>,
+        pub near_misses: Vec<NearMiss>,
+    }
+
+    /// An earlier ply with the same placement that is not a repetition.
+    pub struct NearMiss { pub ply: u32, pub differs: Vec<Difference> }
+
+    pub enum Difference { CastlingRights, EnPassant, SideToMove }
+
+    /// The halfmove clock, and how far it is from ending the game.
+    pub struct FiftyMove {
+        pub clock: u32,
+        /// Plies until a player may claim; 0 once one may.
+        pub plies_to_claim: u32,
+        /// Plies until the draw is automatic; 0 once it is.
+        pub plies_to_automatic: u32,
+        /// The last move of this game that set the clock to 0. `None` when no
+        /// move did, which leaves the clock the start position carried.
+        pub last_reset: Option<Reset>,
+    }
+
+    pub struct Reset { pub ply: u32, pub kind: ResetKind }
+
+    /// A capturing pawn move is a `Capture`.
+    pub enum ResetKind { Capture, PawnMove }
+
+    /// Every draw condition that holds, not the first of them. Both lists are
+    /// empty when the side to move is checkmated.
+    pub struct DrawStatus {
+        pub automatic: Vec<AutomaticDraw>,
+        pub claimable: Vec<ClaimableDraw>,
+    }
+
+    pub enum AutomaticDraw {
+        Stalemate(StalemateDetail),
+        InsufficientMaterial(MaterialConfig),
+        Fivefold(Repetition),
+        SeventyFiveMoves(FiftyMove),
+    }
+
+    pub enum ClaimableDraw { Threefold(Repetition), FiftyMoves(FiftyMove) }
+
+    /// The material `Variant::outcome` calls insufficient, named. Either side
+    /// may be the one holding the minor.
+    pub enum MaterialConfig {
+        KvK,
+        KNvK,
+        KBvK,
+        /// Bishops and kings only, every bishop on one square colour.
+        KBvKBSameColour,
+    }
+
+    /// Why the side to move has no move.
+    pub struct StalemateDetail {
+        pub king: Square,
+        /// Each square beside the king that none of its own units holds, with
+        /// the enemy units covering it, the king itself out of the way.
+        pub escape_squares: Vec<(Square, SquareSet)>,
+        /// Every other unit of the side to move, and what holds it.
+        pub stuck_units: Vec<(Square, Stuck)>,
+    }
+
+    pub enum Stuck {
+        /// Pinned against its own king, whatever else is true of it.
+        Pinned { ray: SquareSet, pinner: Square },
+        /// Occupancy leaves it no move at all.
+        Blocked,
+        /// It has moves, and none of them is legal.
+        NoMoves,
+    }
+}
+
+impl Position {
+    /// What stands in the way of `colour` castling on `wing`.
+    pub fn castling(&self, colour: Colour, wing: Wing) -> Castling;
+    pub fn en_passant_status(&self) -> EnPassant;
+    /// The units giving check to the side to move.
+    pub fn checkers(&self) -> SquareSet;
+    /// The units of `colour` attacking `square`, pins ignored.
+    pub fn attackers(&self, square: Square, colour: Colour) -> SquareSet;
+    /// The squares strictly between `a` and `b`; empty when they share no
+    /// rank, file or diagonal.
+    pub fn between(&self, a: Square, b: Square) -> SquareSet;
+    /// The absolute pins on `colour`'s units: the pinned unit's own king is
+    /// what stands behind it. Relative pins are not counted.
+    pub fn pins(&self, colour: Colour) -> Vec<Pin>;
+    /// The skewers on `colour`'s units, the more valuable one in front.
+    pub fn skewers(&self, colour: Colour) -> Vec<Skewer>;
+}
+
+impl Game {
+    pub fn repetition_status(&self) -> Repetition;
+    pub fn fifty_move_status(&self) -> FiftyMove;
+    pub fn draw_status(&self) -> DrawStatus;
+    /// What could be claimed once `mv` is played. Empty when `mv` is not
+    /// legal here.
+    pub fn claims_after(&self, mv: Move) -> Vec<ClaimableDraw>;
+}
+```
+
+A ply number counts positions, not moves: the start of a game is ply 0, and
+the position after *n* moves is ply *n*.
+
+The castling path is the one the variant's rule names, so both variants are
+answered by the same fields: the king crosses every square between where it
+stands and the g- or c-file square it lands on, and the rook every square up
+to the f- or d-file square, which on a shuffled back rank can be squares the
+king never touches, or none at all.
+
+The types are `esca.explain` on the Python side, the methods stay on
+`Position` and `Game`. Python mirrors the field names, `EpCapture.origin`
+apart, `from` being a keyword there. Squares are text, square sets are `SquareSet`,
+and an enum that carries nothing is its name in `snake_case`; an enum that
+carries something is one class with a `kind` naming the case and the payload
+of every case as attributes, empty where the case does not carry it.
+
+```python
+from esca import explain  # Castling, Pin, DrawStatus and their kin
+
+c = game.position.castling("w", "short")
+c.right, c.rook_present, c.allowed  # True, True, False
+c.path_attacked  # [("f1", SquareSet(["b5"]))]
+list(c.path_blocked)  # ["g1"]
+
+ep = game.position.en_passant_status()
+ep.target  # "d6" or None
+ep.captures[0].origin, ep.captures[0].legal  # "e5", False
+ep.captures[0].forbidden_by.kind  # "exposes_king"
+ep.captures[0].forbidden_by.attacker  # "h5"
+
+game.position.checkers()  # SquareSet
+game.position.attackers("e4", "b")
+game.position.between("a1", "d4")  # SquareSet(["b2", "c3"])
+game.position.pins("w")[0].pinned  # "d2"
+game.position.skewers("b")[0].behind  # "h8"
+
+rep = game.repetition_status()
+rep.count, rep.plies  # 2, [4, 8]
+rep.near_misses[0].ply, rep.near_misses[0].differs  # 0, ["castling_rights"]
+
+fifty = game.fifty_move_status()
+fifty.clock, fifty.plies_to_claim, fifty.last_reset.kind  # 12, 88, "pawn_move"
+
+draws = game.draw_status()
+[d.kind for d in draws.automatic]  # ["stalemate", "insufficient_material"]
+draws.automatic[0].stalemate.stuck_units  # [("a7", Stuck)]
+draws.automatic[1].material  # "kb_v_k"
+[d.kind for d in game.claims_after(mv)]  # ["threefold"]
+```

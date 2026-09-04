@@ -30,6 +30,7 @@
 #![deny(missing_docs)]
 
 mod error;
+pub mod explain;
 mod facts;
 mod fen;
 mod game;

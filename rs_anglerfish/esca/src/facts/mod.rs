@@ -12,7 +12,7 @@ mod history;
 mod king;
 mod pawns;
 mod pieces;
-mod scan;
+pub(crate) mod scan;
 mod tactics;
 mod threats;
 

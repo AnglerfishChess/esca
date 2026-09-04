@@ -6,6 +6,7 @@ use cozy_chess as cc;
 
 use crate::error::FenError;
 use crate::fen;
+use crate::moves::Move;
 use crate::types::{Colour, File, Piece, Rank, Role, Square, SquareSet};
 
 /// A Zobrist key.
@@ -288,8 +289,14 @@ impl Position {
 
     /// The units giving check to the side to move.
     #[inline]
-    pub(crate) fn checkers(&self) -> SquareSet {
+    pub fn checkers(&self) -> SquareSet {
         SquareSet::from_cozy(self.board.checkers())
+    }
+
+    /// Whether `mv` is legal here by the rules the built-in variants share.
+    #[inline]
+    pub(crate) fn allows(&self, mv: Move) -> bool {
+        self.board.is_legal(mv.to_cozy())
     }
 
     /// The same placement with the other side to move and no en-passant

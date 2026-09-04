@@ -124,6 +124,11 @@ defined before it is used.
 | **GroupSet** | A subset of a schema's groups, selecting which of them an encoding emits. |
 | **FeatureSet** | A subset of a schema's features, e.g. those whose definitions hold under one variant. A feature outside the set is encoded as zeros, so widths and offsets are unaffected. |
 | **summary** | A human-readable rendering of a position or its facts, for reading and for diagnostics. Its exact text is not a stable format. |
+| **explain** (esca module) | The layer that answers a rules question with the evidence behind it: not "you may not castle" but the right, the rook, the check, the covered squares and the units covering them. Every reason that applies is answered at once. |
+| **Wing** (esca type) | Which castling: `Short`, the king landing on the g-file, or `Long`, the king landing on the c-file. Named by where the king lands, because a shuffled back rank can put either rook on either side of the centre. |
+| **near miss** (repetition) | An earlier position of the same game with the same placement that is nevertheless not a repetition, together with the state that differs: castling rights, en-passant possibility, or side to move. |
+| **escape square** | A square beside a king that no unit of its own colour stands on: where the king could step if nothing covered it. |
+| **stuck unit** | A unit of the side to move with no legal move, together with what holds it: an absolute pin, occupancy, or neither. |
 
 ---
 
