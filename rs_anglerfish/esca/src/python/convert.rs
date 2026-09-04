@@ -8,6 +8,7 @@ use std::sync::Arc;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+use crate::explain::Wing;
 use crate::facts::Side;
 use crate::moves::MoveKind;
 use crate::types::{Colour, File, FileSet, Role, Square};
@@ -62,6 +63,16 @@ pub(crate) fn side_from(index: isize) -> PyResult<Side> {
         1 => Ok(Side::Them),
         other => Err(PyValueError::new_err(format!(
             "a side is 0 (esca.US) or 1 (esca.THEM), not {other}"
+        ))),
+    }
+}
+
+pub(crate) fn wing_from(name: &str) -> PyResult<Wing> {
+    match name {
+        "short" => Ok(Wing::Short),
+        "long" => Ok(Wing::Long),
+        other => Err(PyValueError::new_err(format!(
+            "a castling wing is \"short\" or \"long\", not {other:?}"
         ))),
     }
 }

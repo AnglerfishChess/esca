@@ -6,6 +6,7 @@
 mod board;
 mod convert;
 mod encode;
+mod explain;
 mod facts;
 #[cfg(feature = "lichess")]
 mod lichess;
@@ -45,6 +46,21 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<board::PyMove>()?;
     module.add_class::<board::PyPosition>()?;
     module.add_class::<board::PyGame>()?;
+    module.add_class::<explain::PyCastling>()?;
+    module.add_class::<explain::PyEnPassant>()?;
+    module.add_class::<explain::PyEpCapture>()?;
+    module.add_class::<explain::PyEpObstacle>()?;
+    module.add_class::<explain::PyPin>()?;
+    module.add_class::<explain::PySkewer>()?;
+    module.add_class::<explain::PyRepetition>()?;
+    module.add_class::<explain::PyNearMiss>()?;
+    module.add_class::<explain::PyFiftyMove>()?;
+    module.add_class::<explain::PyReset>()?;
+    module.add_class::<explain::PyDrawStatus>()?;
+    module.add_class::<explain::PyAutomaticDraw>()?;
+    module.add_class::<explain::PyClaimableDraw>()?;
+    module.add_class::<explain::PyStalemateDetail>()?;
+    module.add_class::<explain::PyStuck>()?;
     module.add_class::<encode::PySchema>()?;
     module.add_class::<encode::PyMoveSchema>()?;
     module.add_class::<facts::PyFacts>()?;

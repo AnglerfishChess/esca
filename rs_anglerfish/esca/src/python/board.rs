@@ -14,7 +14,11 @@ use crate::variant::Variant as VariantTrait;
 use super::convert::{
     castling_output_from, castling_output_name, claim_name, colour_from, colour_name,
     move_kind_from, move_kind_name, outcome_name, role_from, role_name, square_from, square_name,
-    value_error, variant_by_name,
+    value_error, variant_by_name, wing_from,
+};
+use super::explain::{
+    PyCastling, PyClaimableDraw, PyDrawStatus, PyEnPassant, PyFiftyMove, PyPin, PyRepetition,
+    PySkewer, claims,
 };
 use super::facts::{PyAnnotatedMove, PyFacts};
 
@@ -429,6 +433,60 @@ impl PyPosition {
         PyFacts::of_position(&self.inner, variant)
     }
 
+    /// What stands in the way of `colour` castling on `wing`, which is
+    /// `short` or `long`.
+    fn castling(&self, colour: &str, wing: &str) -> PyResult<PyCastling> {
+        let castling = self.inner.castling(colour_from(colour)?, wing_from(wing)?);
+        Ok(PyCastling::of(&castling))
+    }
+
+    /// The en-passant capture this position offers the side to move.
+    fn en_passant_status(&self) -> PyEnPassant {
+        PyEnPassant::of(&self.inner.en_passant_status())
+    }
+
+    /// The units giving check to the side to move.
+    fn checkers(&self) -> PySquareSet {
+        PySquareSet::new(self.inner.checkers())
+    }
+
+    /// The units of `colour` attacking `square`, pins ignored.
+    fn attackers(&self, square: &str, colour: &str) -> PyResult<PySquareSet> {
+        let square = square_from(square)?;
+        Ok(PySquareSet::new(
+            self.inner.attackers(square, colour_from(colour)?),
+        ))
+    }
+
+    /// The squares strictly between two squares; empty when they share no
+    /// rank, file or diagonal.
+    fn between(&self, origin: &str, destination: &str) -> PyResult<PySquareSet> {
+        let origin = square_from(origin)?;
+        Ok(PySquareSet::new(
+            self.inner.between(origin, square_from(destination)?),
+        ))
+    }
+
+    /// The absolute pins on `colour`'s units.
+    fn pins(&self, colour: &str) -> PyResult<Vec<PyPin>> {
+        Ok(self
+            .inner
+            .pins(colour_from(colour)?)
+            .iter()
+            .map(PyPin::of)
+            .collect())
+    }
+
+    /// The skewers on `colour`'s units, the more valuable one in front.
+    fn skewers(&self, colour: &str) -> PyResult<Vec<PySkewer>> {
+        Ok(self
+            .inner
+            .skewers(colour_from(colour)?)
+            .iter()
+            .map(PySkewer::of)
+            .collect())
+    }
+
     /// The position with the colours swapped and the ranks flipped.
     fn mirrored(&self) -> PyPosition {
         PyPosition::new(self.inner.mirrored())
@@ -625,6 +683,28 @@ impl PyGame {
     /// How often the current position has occurred in this game.
     fn repetitions(&self) -> u32 {
         self.inner.repetitions()
+    }
+
+    /// How often the current position has stood, and which earlier plies
+    /// share its placement without counting.
+    fn repetition_status(&self) -> PyRepetition {
+        PyRepetition::of(&self.inner.repetition_status())
+    }
+
+    /// The halfmove clock, what it counts towards, and what last cleared it.
+    fn fifty_move_status(&self) -> PyFiftyMove {
+        PyFiftyMove::of(&self.inner.fifty_move_status())
+    }
+
+    /// Every draw condition that holds now.
+    fn draw_status(&self) -> PyDrawStatus {
+        PyDrawStatus::of(&self.inner.draw_status())
+    }
+
+    /// What could be claimed once `mv` is played. Empty when `mv` is not
+    /// legal here.
+    fn claims_after(&self, mv: &PyMove) -> Vec<PyClaimableDraw> {
+        claims(&self.inner.claims_after(mv.inner))
     }
 
     /// The facts of the current position, repetition and history included.
