@@ -1,7 +1,8 @@
 [package]
 name = "esca"
 version = "0.3.0"
-description = "A chess model that answers what is true about a position: variants, positions, games, and move text."
+exclude = [".github/", "docs/", "python/", "benches/", "examples/"]
+description = "Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout."
 keywords = ["chess", "chess960", "fen", "san", "position"]
 categories = ["games", "game-development"]
 readme = "README.md"

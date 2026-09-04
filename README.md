@@ -7,8 +7,9 @@
 [![CI](https://github.com/AnglerfishChess/esca/actions/workflows/ci.yml/badge.svg)](https://github.com/AnglerfishChess/esca/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/AnglerfishChess/esca/blob/main/LICENSE)
 
-A chess model that answers what is true about a position — a Rust crate and a Python package built
-from it.
+*Esca is the anglerfish's lure — the light that shows what is really on the board.*
+
+Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout.
 
 *The esca is the anglerfish's lure: the small thing that lights up what is in front of it.*
 
@@ -22,7 +23,7 @@ position, both as prose a reader can check and as the flat `f32` row a net consu
 
 ```toml
 [dependencies]
-esca = "0.1"
+esca = "0.3"
 ```
 
 ```rust

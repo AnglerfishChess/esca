@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "esca"
-description = "A chess model that answers what is true about a position: variants, positions, games, and move text."
+description = "Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
