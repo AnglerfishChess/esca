@@ -1,5 +1,12 @@
 # esca
 
+[![crates.io](https://img.shields.io/crates/v/esca)](https://crates.io/crates/esca)
+[![docs.rs](https://img.shields.io/docsrs/esca)](https://docs.rs/esca)
+[![PyPI](https://img.shields.io/pypi/v/esca)](https://pypi.org/project/esca/)
+[![Python](https://img.shields.io/pypi/pyversions/esca)](https://pypi.org/project/esca/)
+[![CI](https://github.com/AnglerfishChess/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/AnglerfishChess/anglerfish/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/AnglerfishChess/anglerfish/blob/main/LICENSE)
+
 A chess model that answers what is true about a position — a Rust crate and a Python package built
 from it.
 
