@@ -89,6 +89,8 @@ encoded batches with their targets.
   without allocating.
 - Polyglot opening books: the format's own key on every `Position`, books read, drawn from and
   built, and an ECO code and name for some 3,800 named positions.
+- Named endings with theory verdicts and technique names, and a one-line English `describe()`
+  beside every value the explanations layer answers with.
 
 ## MCP server
 

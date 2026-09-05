@@ -58,6 +58,10 @@ impl Wing {
 /// One castling of one colour, and everything standing in its way.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Castling {
+    /// Whose castling this is.
+    pub colour: Colour,
+    /// Which castling of that colour.
+    pub wing: Wing,
     /// The position still holds this castling right.
     pub right: bool,
     /// The rook the right names stands on its square. False without a right,
@@ -415,6 +419,8 @@ impl Position {
         let rook_present = rook
             .is_some_and(|square| self.piece_at(square) == Some(Piece::new(Role::Rook, colour)));
         let mut castling = Castling {
+            colour,
+            wing,
             right: file.is_some(),
             rook_present,
             king_in_check_by: self.attackers(king, !colour),
@@ -746,6 +752,437 @@ impl Game {
             king,
             escape_squares,
             stuck_units,
+        }
+    }
+}
+
+// ------------------------------------------------------------------- prose
+
+/// `White` or `Black`, as a sentence spells it.
+pub(crate) fn colour_word(colour: Colour) -> &'static str {
+    match colour {
+        Colour::White => "White",
+        Colour::Black => "Black",
+    }
+}
+
+/// `items` as English: `"a1"`, `"a1 and b2"`, `"a1, b2 and c3"`. Empty for no
+/// items.
+pub(crate) fn english_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => only.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// `count` of a thing: "1 ply", "3 plies".
+fn plural(count: u32, one: &str, many: &str) -> String {
+    if count == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{count} {many}")
+    }
+}
+
+/// The squares of `set` in ascending order, as English.
+fn square_list(set: SquareSet) -> String {
+    english_list(&set.into_iter().map(|s| s.to_string()).collect::<Vec<_>>())
+}
+
+impl Wing {
+    /// One plain sentence naming this castling.
+    pub fn describe(self) -> &'static str {
+        match self {
+            Wing::Short => {
+                "Castling short, also called king-side: the king lands on the g-file and the \
+                 rook on the f-file."
+            }
+            Wing::Long => {
+                "Castling long, also called queen-side: the king lands on the c-file and the \
+                 rook on the d-file."
+            }
+        }
+    }
+
+    /// `short` or `long`.
+    fn word(self) -> &'static str {
+        match self {
+            Wing::Short => "short",
+            Wing::Long => "long",
+        }
+    }
+}
+
+impl Castling {
+    /// One plain sentence: whether this castling is available, and every
+    /// reason it is not.
+    pub fn describe(&self) -> String {
+        let who = colour_word(self.colour);
+        let wing = self.wing.word();
+        if self.allowed {
+            return format!("{who} may castle {wing}: nothing stands in its way.");
+        }
+        let mut reasons = Vec::new();
+        if !self.right {
+            reasons.push("the right to castle that way is gone".to_string());
+        } else if !self.rook_present {
+            reasons.push("no rook stands on the square the right names".to_string());
+        }
+        if !self.king_in_check_by.is_empty() {
+            reasons.push(format!(
+                "the king is in check from {}, and a king may not castle out of check",
+                square_list(self.king_in_check_by)
+            ));
+        }
+        if !self.path_attacked.is_empty() {
+            let squares: Vec<String> = self
+                .path_attacked
+                .iter()
+                .map(|(square, _)| square.to_string())
+                .collect();
+            reasons.push(format!(
+                "the enemy covers {}, which the king must cross or land on",
+                english_list(&squares)
+            ));
+        }
+        if !self.path_blocked.is_empty() {
+            reasons.push(format!(
+                "the path is blocked on {}",
+                square_list(self.path_blocked)
+            ));
+        }
+        format!("{who} cannot castle {wing}: {}.", reasons.join("; "))
+    }
+}
+
+impl EnPassant {
+    /// One plain sentence: what the previous ply left on offer.
+    pub fn describe(&self) -> String {
+        let EnPassant::Available { target, captures } = self else {
+            return "No pawn has just advanced two squares, so no en-passant capture is on \
+                    offer."
+                .to_string();
+        };
+        let takers: Vec<String> = captures
+            .iter()
+            .filter(|capture| capture.legal)
+            .map(|capture| capture.from.to_string())
+            .collect();
+        if !takers.is_empty() {
+            return format!(
+                "A pawn has just skipped {target}, and the pawn on {} may take it en passant.",
+                english_list(&takers)
+            );
+        }
+        if captures.is_empty() {
+            return format!(
+                "A pawn has just skipped {target}, and no pawn of the side to move stands \
+                 beside it."
+            );
+        }
+        let standing: Vec<String> = captures
+            .iter()
+            .map(|capture| capture.from.to_string())
+            .collect();
+        format!(
+            "A pawn has just skipped {target}, and the pawn on {} stands beside it but may not \
+             take.",
+            english_list(&standing)
+        )
+    }
+}
+
+impl EpCapture {
+    /// One plain sentence: whether this pawn may take, and what stops it.
+    pub fn describe(&self) -> String {
+        match &self.forbidden_by {
+            None => format!("The pawn on {} may take en passant.", self.from),
+            Some(obstacle) => format!(
+                "The pawn on {} may not take en passant. {}",
+                self.from,
+                obstacle.describe()
+            ),
+        }
+    }
+}
+
+impl EpObstacle {
+    /// One plain sentence naming what keeps the capture off the board.
+    pub fn describe(&self) -> String {
+        match self {
+            EpObstacle::Pinned { pinner, .. } => format!(
+                "The pawn is pinned against its own king by the unit on {pinner}, and the \
+                 capture would step off that line."
+            ),
+            EpObstacle::ExposesKing { attacker } => format!(
+                "Both pawns leave the rank at once, which uncovers the king to the unit on \
+                 {attacker}."
+            ),
+            EpObstacle::InCheck { by } => format!(
+                "The side to move is in check from {}, and this capture does not answer it.",
+                square_list(*by)
+            ),
+        }
+    }
+}
+
+impl Pin {
+    /// One plain sentence naming the three squares of the pin.
+    pub fn describe(&self) -> String {
+        format!(
+            "The unit on {} may not move off the line between the enemy unit on {} and its own \
+             king on {}.",
+            self.pinned, self.pinner, self.king
+        )
+    }
+}
+
+impl Skewer {
+    /// One plain sentence naming the three squares of the skewer.
+    pub fn describe(&self) -> String {
+        format!(
+            "The unit on {} is attacked by the unit on {}, and moving it out of the way exposes \
+             the less valuable unit on {} behind it.",
+            self.front, self.attacker, self.behind
+        )
+    }
+}
+
+impl Repetition {
+    /// One plain sentence: how often the position has stood, and what that
+    /// is worth.
+    pub fn describe(&self) -> String {
+        let plies = english_list(&self.plies.iter().map(u32::to_string).collect::<Vec<_>>());
+        let mut text = format!(
+            "This position has stood {}",
+            plural(self.count, "time", "times")
+        );
+        if !self.plies.is_empty() {
+            let word = if self.plies.len() == 1 {
+                "ply"
+            } else {
+                "plies"
+            };
+            text.push_str(&format!(", at {word} {plies}"));
+        }
+        text.push_str(
+            "; three occurrences let a player claim a draw, and five draw the game with no \
+             claim.",
+        );
+        let missed = self.near_misses.len() as u32;
+        if missed > 0 {
+            let word = if missed == 1 { "does" } else { "do" };
+            text.push_str(&format!(
+                " {} of the same placement {word} not count.",
+                plural(missed, "earlier ply", "earlier plies")
+            ));
+        }
+        text
+    }
+}
+
+impl NearMiss {
+    /// One plain sentence: why this earlier ply is not a repetition.
+    pub fn describe(&self) -> String {
+        let reasons: Vec<String> = self
+            .differs
+            .iter()
+            .map(|difference| difference.clause().to_string())
+            .collect();
+        format!(
+            "The placement at ply {} is not a repetition of this position: {}.",
+            self.ply,
+            english_list(&reasons)
+        )
+    }
+}
+
+impl Difference {
+    /// One plain sentence naming what tells the two positions apart.
+    pub fn describe(self) -> &'static str {
+        match self {
+            Difference::CastlingRights => {
+                "The castlings still available differ, so the two are not the same position."
+            }
+            Difference::EnPassant => {
+                "The en-passant capture on offer differs, so the two are not the same position."
+            }
+            Difference::SideToMove => {
+                "The side to move differs, so the two are not the same position."
+            }
+        }
+    }
+
+    /// The same, as a clause a sentence can join to others.
+    fn clause(self) -> &'static str {
+        match self {
+            Difference::CastlingRights => "the castlings still available differ",
+            Difference::EnPassant => "the en-passant capture on offer differs",
+            Difference::SideToMove => "the side to move differs",
+        }
+    }
+}
+
+impl FiftyMove {
+    /// One plain sentence: where the clock stands and what it is counting
+    /// towards.
+    pub fn describe(&self) -> String {
+        let mut text = format!(
+            "The halfmove clock stands at {}: {} until a player may claim a draw, {} until the \
+             game is drawn with no claim.",
+            self.clock,
+            plural(self.plies_to_claim, "ply", "plies"),
+            plural(self.plies_to_automatic, "ply", "plies"),
+        );
+        if let Some(reset) = self.last_reset {
+            text.push(' ');
+            text.push_str(&reset.describe());
+        }
+        text
+    }
+}
+
+impl Reset {
+    /// One plain sentence naming the move that last cleared the clock.
+    pub fn describe(&self) -> String {
+        let what = match self.kind {
+            ResetKind::Capture => "took a unit",
+            ResetKind::PawnMove => "advanced a pawn",
+        };
+        format!(
+            "The move at ply {} {what}, which set the clock to 0.",
+            self.ply
+        )
+    }
+}
+
+impl ResetKind {
+    /// One plain sentence naming what this kind of move does to the clock.
+    pub fn describe(self) -> &'static str {
+        match self {
+            ResetKind::Capture => "A capture sets the halfmove clock back to 0.",
+            ResetKind::PawnMove => "A pawn move sets the halfmove clock back to 0.",
+        }
+    }
+}
+
+impl DrawStatus {
+    /// One plain sentence: whether the game is drawn, could be drawn on a
+    /// claim, or neither.
+    pub fn describe(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.automatic.is_empty() {
+            parts.push("The game is drawn already.".to_string());
+            parts.extend(self.automatic.iter().map(AutomaticDraw::describe));
+        }
+        if !self.claimable.is_empty() {
+            parts.push("Either player may claim a draw.".to_string());
+            parts.extend(self.claimable.iter().map(ClaimableDraw::describe));
+        }
+        if parts.is_empty() {
+            return "No draw condition holds in this position.".to_string();
+        }
+        parts.join(" ")
+    }
+}
+
+impl AutomaticDraw {
+    /// One plain sentence naming the draw and why it needs no claim.
+    pub fn describe(&self) -> String {
+        match self {
+            AutomaticDraw::Stalemate(_) => {
+                "The side to move is not in check and has no legal move, which is stalemate: a \
+                 draw."
+                    .to_string()
+            }
+            AutomaticDraw::InsufficientMaterial(config) => format!(
+                "{} Neither side could ever deliver mate, so the game is drawn.",
+                config.describe()
+            ),
+            AutomaticDraw::Fivefold(_) => {
+                "The position has stood five times, which draws the game with no claim.".to_string()
+            }
+            AutomaticDraw::SeventyFiveMoves(_) => {
+                "Seventy-five moves have passed with no capture and no pawn move, which draws \
+                 the game with no claim."
+                    .to_string()
+            }
+        }
+    }
+}
+
+impl ClaimableDraw {
+    /// One plain sentence naming the draw a player may ask for.
+    pub fn describe(&self) -> String {
+        match self {
+            ClaimableDraw::Threefold(_) => {
+                "The position has stood three times, so either player may claim a draw.".to_string()
+            }
+            ClaimableDraw::FiftyMoves(_) => {
+                "Fifty moves have passed with no capture and no pawn move, so either player may \
+                 claim a draw."
+                    .to_string()
+            }
+        }
+    }
+}
+
+impl MaterialConfig {
+    /// One plain sentence naming the material left on the board.
+    pub fn describe(self) -> &'static str {
+        match self {
+            MaterialConfig::KvK => "Only the two kings are left on the board.",
+            MaterialConfig::KNvK => "One side has a lone knight besides the two kings.",
+            MaterialConfig::KBvK => "One side has a lone bishop besides the two kings.",
+            MaterialConfig::KBvKBSameColour => {
+                "Each side has one bishop and both stand on the same square colour, so neither \
+                 ever attacks the other."
+            }
+        }
+    }
+}
+
+impl StalemateDetail {
+    /// One plain sentence: the king with nowhere to go, and how much else is
+    /// stuck with it.
+    pub fn describe(&self) -> String {
+        if self.stuck_units.is_empty() {
+            return format!(
+                "The king on {} is the only unit of the side to move, and every square it could \
+                 step to is covered.",
+                self.king
+            );
+        }
+        if self.stuck_units.len() == 1 {
+            return format!(
+                "The king on {} has nowhere to step, and the one other unit of the side to move \
+                 has no legal move either.",
+                self.king
+            );
+        }
+        format!(
+            "The king on {} has nowhere to step, and none of the {} other units of the side to \
+             move has a legal move either.",
+            self.king,
+            self.stuck_units.len()
+        )
+    }
+}
+
+impl Stuck {
+    /// One plain sentence naming what holds the unit.
+    pub fn describe(&self) -> String {
+        match self {
+            Stuck::Pinned { pinner, .. } => format!(
+                "The unit is pinned against its own king by the unit on {pinner}, so it may not \
+                 leave that line."
+            ),
+            Stuck::Blocked => "Occupancy leaves the unit no move at all.".to_string(),
+            Stuck::NoMoves => {
+                "The unit has moves, and every one of them would leave its own king in check."
+                    .to_string()
+            }
         }
     }
 }

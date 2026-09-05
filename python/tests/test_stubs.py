@@ -62,6 +62,10 @@ def test_the_explain_module_exports_what_its_stub_declares() -> None:
     assert esca.explain.__all__ == stub_all("explain.pyi")
 
 
+def test_the_endings_module_exports_what_its_stub_declares() -> None:
+    assert esca.endings.__all__ == stub_all("endings.pyi")
+
+
 def test_the_polyglot_module_exports_what_its_stub_declares() -> None:
     assert esca.polyglot.__all__ == stub_all("polyglot.pyi")
 

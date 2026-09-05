@@ -67,6 +67,14 @@ pub(crate) fn side_from(index: isize) -> PyResult<Side> {
     }
 }
 
+pub(crate) fn wing_name(wing: Wing) -> String {
+    match wing {
+        Wing::Short => "short",
+        Wing::Long => "long",
+    }
+    .to_string()
+}
+
 pub(crate) fn wing_from(name: &str) -> PyResult<Wing> {
     match name {
         "short" => Ok(Wing::Short),

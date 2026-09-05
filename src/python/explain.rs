@@ -11,7 +11,7 @@ use crate::explain;
 use crate::types::{Square, SquareSet};
 
 use super::board::PySquareSet;
-use super::convert::square_name;
+use super::convert::{colour_name, square_name, wing_name};
 
 /// Square-and-set pairs, the squares as text.
 fn pairs(items: &[(Square, SquareSet)]) -> Vec<(String, PySquareSet)> {
@@ -30,6 +30,12 @@ fn pairs(items: &[(Square, SquareSet)]) -> Vec<(String, PySquareSet)> {
 )]
 #[derive(Clone)]
 pub struct PyCastling {
+    /// Whose castling this is.
+    #[pyo3(get)]
+    colour: String,
+    /// Which castling of that colour: `short` or `long`.
+    #[pyo3(get)]
+    wing: String,
     /// The position still holds this castling right.
     #[pyo3(get)]
     right: bool,
@@ -49,23 +55,33 @@ pub struct PyCastling {
     /// Nothing above prevents the castling.
     #[pyo3(get)]
     allowed: bool,
+    inner: explain::Castling,
 }
 
 impl PyCastling {
     pub(crate) fn of(castling: &explain::Castling) -> PyCastling {
         PyCastling {
+            colour: colour_name(castling.colour),
+            wing: wing_name(castling.wing),
             right: castling.right,
             rook_present: castling.rook_present,
             king_in_check_by: PySquareSet::new(castling.king_in_check_by),
             path_attacked: pairs(&castling.path_attacked),
             path_blocked: PySquareSet::new(castling.path_blocked),
             allowed: castling.allowed,
+            inner: castling.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyCastling {
+    /// One plain sentence: whether this castling is available, and every reason
+    /// it is not.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<Castling allowed={}>", self.allowed)
     }
@@ -86,6 +102,7 @@ pub struct PyEnPassant {
     /// Every pawn of the side to move standing beside it.
     #[pyo3(get)]
     captures: Vec<PyEpCapture>,
+    inner: explain::EnPassant,
 }
 
 impl PyEnPassant {
@@ -93,12 +110,18 @@ impl PyEnPassant {
         PyEnPassant {
             target: status.target().map(square_name),
             captures: status.captures().iter().map(PyEpCapture::of).collect(),
+            inner: status.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyEnPassant {
+    /// One plain sentence: what the previous ply left on offer.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         match &self.target {
             Some(target) => format!("<EnPassant {target}>"),
@@ -125,6 +148,7 @@ pub struct PyEpCapture {
     /// What forbids it, if anything does.
     #[pyo3(get)]
     forbidden_by: Option<PyEpObstacle>,
+    inner: explain::EpCapture,
 }
 
 impl PyEpCapture {
@@ -133,12 +157,18 @@ impl PyEpCapture {
             origin: square_name(capture.from),
             legal: capture.legal,
             forbidden_by: capture.forbidden_by.as_ref().map(PyEpObstacle::of),
+            inner: capture.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyEpCapture {
+    /// One plain sentence: whether this pawn may take, and what stops it.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<EpCapture {} legal={}>", self.origin, self.legal)
     }
@@ -168,6 +198,7 @@ pub struct PyEpObstacle {
     /// The units giving check.
     #[pyo3(get)]
     by: PySquareSet,
+    inner: explain::EpObstacle,
 }
 
 impl PyEpObstacle {
@@ -178,6 +209,7 @@ impl PyEpObstacle {
             pinner: None,
             attacker: None,
             by: PySquareSet::new(SquareSet::EMPTY),
+            inner: obstacle.clone(),
         };
         match *obstacle {
             explain::EpObstacle::Pinned { ray, pinner } => {
@@ -200,6 +232,11 @@ impl PyEpObstacle {
 
 #[pymethods]
 impl PyEpObstacle {
+    /// One plain sentence naming what keeps the capture off the board.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<EpObstacle {}>", self.kind)
     }
@@ -222,6 +259,7 @@ pub struct PyPin {
     /// Between pinner and king, exclusive.
     #[pyo3(get)]
     ray: PySquareSet,
+    inner: explain::Pin,
 }
 
 impl PyPin {
@@ -231,12 +269,18 @@ impl PyPin {
             pinner: square_name(pin.pinner),
             king: square_name(pin.king),
             ray: PySquareSet::new(pin.ray),
+            inner: *pin,
         }
     }
 }
 
 #[pymethods]
 impl PyPin {
+    /// One plain sentence naming the three squares of the pin.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<Pin {} by {}>", self.pinned, self.pinner)
     }
@@ -259,6 +303,7 @@ pub struct PySkewer {
     /// Between attacker and the unit behind, exclusive.
     #[pyo3(get)]
     ray: PySquareSet,
+    inner: explain::Skewer,
 }
 
 impl PySkewer {
@@ -268,12 +313,18 @@ impl PySkewer {
             front: square_name(skewer.front),
             behind: square_name(skewer.behind),
             ray: PySquareSet::new(skewer.ray),
+            inner: *skewer,
         }
     }
 }
 
 #[pymethods]
 impl PySkewer {
+    /// One plain sentence naming the three squares of the skewer.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<Skewer {} then {}>", self.front, self.behind)
     }
@@ -297,6 +348,7 @@ pub struct PyRepetition {
     /// The earlier plies with the same placement that do not count.
     #[pyo3(get)]
     near_misses: Vec<PyNearMiss>,
+    inner: explain::Repetition,
 }
 
 impl PyRepetition {
@@ -305,12 +357,19 @@ impl PyRepetition {
             count: repetition.count,
             plies: repetition.plies.clone(),
             near_misses: repetition.near_misses.iter().map(PyNearMiss::of).collect(),
+            inner: repetition.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyRepetition {
+    /// One plain sentence: how often the position has stood, and what that is
+    /// worth.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<Repetition {}>", self.count)
     }
@@ -332,6 +391,7 @@ pub struct PyNearMiss {
     /// `side_to_move`.
     #[pyo3(get)]
     differs: Vec<String>,
+    inner: explain::NearMiss,
 }
 
 impl PyNearMiss {
@@ -350,12 +410,18 @@ impl PyNearMiss {
                     .to_string()
                 })
                 .collect(),
+            inner: miss.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyNearMiss {
+    /// One plain sentence: why this earlier ply is not a repetition.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<NearMiss ply {}>", self.ply)
     }
@@ -382,6 +448,7 @@ pub struct PyFiftyMove {
     /// The last move of this game that set the clock to 0.
     #[pyo3(get)]
     last_reset: Option<PyReset>,
+    inner: explain::FiftyMove,
 }
 
 impl PyFiftyMove {
@@ -391,12 +458,18 @@ impl PyFiftyMove {
             plies_to_claim: fifty.plies_to_claim,
             plies_to_automatic: fifty.plies_to_automatic,
             last_reset: fifty.last_reset.map(|reset| PyReset::of(&reset)),
+            inner: fifty.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyFiftyMove {
+    /// One plain sentence: where the clock stands and what it counts towards.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<FiftyMove clock {}>", self.clock)
     }
@@ -412,6 +485,7 @@ pub struct PyReset {
     /// `capture` or `pawn_move`.
     #[pyo3(get)]
     kind: String,
+    inner: explain::Reset,
 }
 
 impl PyReset {
@@ -423,12 +497,18 @@ impl PyReset {
                 explain::ResetKind::PawnMove => "pawn_move",
             }
             .to_string(),
+            inner: *reset,
         }
     }
 }
 
 #[pymethods]
 impl PyReset {
+    /// One plain sentence naming the move that last cleared the clock.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<Reset ply {} {}>", self.ply, self.kind)
     }
@@ -449,6 +529,7 @@ pub struct PyDrawStatus {
     /// The draws a player may ask for, the position still playable.
     #[pyo3(get)]
     claimable: Vec<PyClaimableDraw>,
+    inner: explain::DrawStatus,
 }
 
 impl PyDrawStatus {
@@ -456,12 +537,18 @@ impl PyDrawStatus {
         PyDrawStatus {
             automatic: status.automatic.iter().map(PyAutomaticDraw::of).collect(),
             claimable: claims(&status.claimable),
+            inner: status.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyDrawStatus {
+    /// One plain sentence per draw that holds, or one saying none does.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<DrawStatus automatic {} claimable {}>",
@@ -501,6 +588,7 @@ pub struct PyAutomaticDraw {
     /// The clock that ran out.
     #[pyo3(get)]
     fifty_move: Option<PyFiftyMove>,
+    inner: explain::AutomaticDraw,
 }
 
 impl PyAutomaticDraw {
@@ -511,6 +599,7 @@ impl PyAutomaticDraw {
             material: None,
             repetition: None,
             fifty_move: None,
+            inner: draw.clone(),
         };
         match draw {
             explain::AutomaticDraw::Stalemate(detail) => {
@@ -536,6 +625,11 @@ impl PyAutomaticDraw {
 
 #[pymethods]
 impl PyAutomaticDraw {
+    /// One plain sentence naming the draw and why it needs no claim.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<AutomaticDraw {}>", self.kind)
     }
@@ -569,6 +663,7 @@ pub struct PyClaimableDraw {
     /// The clock that earns the claim.
     #[pyo3(get)]
     fifty_move: Option<PyFiftyMove>,
+    inner: explain::ClaimableDraw,
 }
 
 impl PyClaimableDraw {
@@ -578,11 +673,13 @@ impl PyClaimableDraw {
                 kind: "threefold".to_string(),
                 repetition: Some(PyRepetition::of(repetition)),
                 fifty_move: None,
+                inner: claim.clone(),
             },
             explain::ClaimableDraw::FiftyMoves(fifty) => PyClaimableDraw {
                 kind: "fifty_moves".to_string(),
                 repetition: None,
                 fifty_move: Some(PyFiftyMove::of(fifty)),
+                inner: claim.clone(),
             },
         }
     }
@@ -590,6 +687,11 @@ impl PyClaimableDraw {
 
 #[pymethods]
 impl PyClaimableDraw {
+    /// One plain sentence naming the draw a player may ask for.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<ClaimableDraw {}>", self.kind)
     }
@@ -614,6 +716,7 @@ pub struct PyStalemateDetail {
     /// Every other unit of the side to move, and what holds it.
     #[pyo3(get)]
     stuck_units: Vec<(String, PyStuck)>,
+    inner: explain::StalemateDetail,
 }
 
 impl PyStalemateDetail {
@@ -626,12 +729,19 @@ impl PyStalemateDetail {
                 .iter()
                 .map(|&(square, stuck)| (square_name(square), PyStuck::of(stuck)))
                 .collect(),
+            inner: detail.clone(),
         }
     }
 }
 
 #[pymethods]
 impl PyStalemateDetail {
+    /// One plain sentence: the king with nowhere to go, and how much else is
+    /// stuck with it.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<StalemateDetail {}>", self.king)
     }
@@ -650,6 +760,7 @@ pub struct PyStuck {
     /// The unit doing the pinning.
     #[pyo3(get)]
     pinner: Option<String>,
+    inner: explain::Stuck,
 }
 
 impl PyStuck {
@@ -659,16 +770,19 @@ impl PyStuck {
                 kind: "pinned".to_string(),
                 ray: PySquareSet::new(ray),
                 pinner: Some(square_name(pinner)),
+                inner: stuck,
             },
             explain::Stuck::Blocked => PyStuck {
                 kind: "blocked".to_string(),
                 ray: PySquareSet::new(SquareSet::EMPTY),
                 pinner: None,
+                inner: stuck,
             },
             explain::Stuck::NoMoves => PyStuck {
                 kind: "no_moves".to_string(),
                 ray: PySquareSet::new(SquareSet::EMPTY),
                 pinner: None,
+                inner: stuck,
             },
         }
     }
@@ -676,6 +790,11 @@ impl PyStuck {
 
 #[pymethods]
 impl PyStuck {
+    /// One plain sentence naming what holds the unit.
+    fn describe(&self) -> String {
+        self.inner.describe()
+    }
+
     fn __repr__(&self) -> String {
         format!("<Stuck {}>", self.kind)
     }

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- `endings` names the ending a position is, needing no feature: a canonical
+  material signature (`KRPvKR`, stronger side first), a catalogue of 32 named
+  classes from `KvK` to the pawn endings, what theory says the result is, and
+  the method it is played by — the box method, Lucena, Philidor, key squares,
+  the opposition, the rule of the square, the wrong bishop and the wrong rook
+  pawn. A position is an ending while neither side has more than two pieces;
+  above that it says so and still answers the material. The few
+  position-specific facts that overturn theory — the pawn's race, the bishops'
+  square colours, the opposition — are grouped as evidence, each behind the
+  reason it belongs to, and the verdict and the technique are adjusted by
+  them. `endings::classify`, `Position::ending` and `Game::ending` in Rust,
+  `esca.endings` in Python.
+- Every value the `explain` layer answers with says what it means in one plain
+  English sentence, through `describe()`: each enum, and each aggregate a
+  summary reads naturally off. A sentence names the squares its value carries,
+  and an aggregate lists every reason that applies, so a reader who knows no
+  chess gets the whole situation in words as well as in fields. The enum value
+  stays the answer; the sentence is derived from it.
+- `explain::Castling` carries the `colour` and the `wing` it answers for, which
+  is what lets it say "White cannot castle short: …" on its own.
 - `mcp/` is a second distribution from this repository: `chess-esca-mcp`, an MCP server over the
   library, serving the whole state of a position, a move's legality with every reason behind it,
   the named facts by group, ECO names, Polyglot book moves and PGN both ways, as JSON grouped by

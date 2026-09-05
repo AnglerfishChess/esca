@@ -199,3 +199,25 @@ defined before it is used.
 | **learn** | Four bytes per entry the format reserves for a program's own use. esca reads and writes them and gives them no meaning. |
 | **ECO** | *Encyclopaedia of Chess Openings*: the classification whose codes are a volume letter A–E and two digits, `B90` for the Najdorf. |
 | **transposition** | Reaching a position by a move order other than the usual one. A catalogue keyed by position names a transposition; one keyed by move order does not. |
+
+---
+
+## 9. Endings
+
+| Term | Definition |
+|---|---|
+| **ending** (*endgame*) | In esca, a position in which neither side has more than two **pieces**, a piece being any unit that is neither a king nor a pawn. Anything above that is not an ending, and esca says so rather than guessing. |
+| **material signature** | The material of both sides written as one string, stronger side first, `K` then the pieces by descending value then the pawns, the two halves separated by `v`: `KRPvKR`. The stronger side is the one with more conventional material; on a tie the one holding the more valuable piece; White when even that is even. |
+| **ending class** | The books' name for one material signature, colour-blind: `KRvK`, `KBvKN`, `KRPvKR`. Which side holds which half is the verdict's answer, not the class's. |
+| **verdict** | What theory says an ending's result is with both sides playing their best — a win for a named colour, a draw, "usually" either, or no single answer. It is the answer for the ending, not a search of the position in hand. |
+| **technique** | The named method an ending is played by: the box method, the Lucena and Philidor positions, key squares, the opposition, the rule of the square, and their kin. |
+| **basic mate** | Mating a lone king with king and one piece, or with two: `KQvK`, `KRvK`, `KBBvK` and `KBNvK`. `KNNvK` is not one — mate exists on the board but cannot be forced. |
+| **box method** | Driving a lone king to the edge by making the box the piece shuts it in smaller move by move. |
+| **key squares** | The squares in front of a pawn that win the game for the pawn's side once its own king stands on one of them. |
+| **opposition** | The kings on one file, rank or diagonal with an odd number of empty squares between them. The side *not* to move holds it; the other has to give ground. *Direct* is one square between, *distant* three or five. |
+| **rule of the square** | The square whose side is the pawn's run to promotion. A lone king that cannot step inside it never catches the pawn; the geometric answer counts neither king as an obstacle. |
+| **Lucena position** | Rook and pawn against rook with the pawn on the seventh and its own king in front of it: the rook builds a bridge that shelters the king from the checks, and the pawn queens. |
+| **Philidor position** | The defence to the same material: the rook holds its own third rank until the pawn steps onto it, then drops to the far end of the board and checks the attacking king from behind. |
+| **wrong bishop** | A bishop standing on the square colour its own rook pawn does not promote on, so it can never cover the promotion square and the defending king cannot be driven out of the corner. |
+| **wrong rook pawn** | A rook pawn whose promotion corner the lone king has already reached, where the attacking king cannot come near without stalemating it. Drawn whatever else is true. |
+| **opposite-coloured bishops** | One bishop a side, on opposite square colours, so neither ever attacks the other's squares. |

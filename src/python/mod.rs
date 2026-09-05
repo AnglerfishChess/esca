@@ -6,6 +6,7 @@
 mod board;
 mod convert;
 mod encode;
+mod endings;
 mod explain;
 mod facts;
 #[cfg(feature = "lichess")]
@@ -65,6 +66,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<explain::PyClaimableDraw>()?;
     module.add_class::<explain::PyStalemateDetail>()?;
     module.add_class::<explain::PyStuck>()?;
+    endings::register(module)?;
     module.add_class::<encode::PySchema>()?;
     module.add_class::<encode::PyMoveSchema>()?;
     module.add_class::<facts::PyFacts>()?;

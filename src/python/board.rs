@@ -16,6 +16,7 @@ use super::convert::{
     move_kind_from, move_kind_name, outcome_name, role_from, role_name, square_from, square_name,
     value_error, variant_by_name, wing_from,
 };
+use super::endings::PyEnding;
 use super::explain::{
     PyCastling, PyClaimableDraw, PyDrawStatus, PyEnPassant, PyFiftyMove, PyPin, PyRepetition,
     PySkewer, claims,
@@ -494,6 +495,11 @@ impl PyPosition {
             .collect())
     }
 
+    /// What ending this position is.
+    fn ending(&self) -> PyEnding {
+        PyEnding::of(self.inner.ending())
+    }
+
     /// The position with the colours swapped and the ranks flipped.
     fn mirrored(&self) -> PyPosition {
         PyPosition::new(self.inner.mirrored())
@@ -712,6 +718,11 @@ impl PyGame {
     /// legal here.
     fn claims_after(&self, mv: &PyMove) -> Vec<PyClaimableDraw> {
         claims(&self.inner.claims_after(mv.inner))
+    }
+
+    /// What ending the current position is.
+    fn ending(&self) -> PyEnding {
+        PyEnding::of(self.inner.ending())
     }
 
     /// The facts of the current position, repetition and history included.
