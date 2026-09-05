@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `mcp/` is a second distribution from this repository: `chess-esca-mcp`, an MCP server over the
+  library, serving the whole state of a position, a move's legality with every reason behind it,
+  the named facts by group, ECO names, Polyglot book moves and PGN both ways, as JSON grouped by
+  reason with the squares each was read off. No engine and no search. Its version is the crate's
+  and it pins the matching `esca`, so one tag releases both; the plugin that installs it lives in
+  the `plugins` repository.
 - The crate lives at the root of its own repository,
   <https://github.com/AnglerfishChess/esca>; the engine and its trainer go on
   at <https://github.com/AnglerfishChess/anglerfish>.

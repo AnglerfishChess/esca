@@ -143,3 +143,63 @@ jobs:
 
       - if: github.event_name == 'release'
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  mcp:
+    # `chess-esca-mcp` pins `esca==<this version>`, so it goes up only once the
+    # wheels it will resolve against are on PyPI. Same trusted publisher, same
+    # `pypi` environment: one workflow file, no token anywhere.
+    needs: [pypi]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Verify the server version matches the release tag
+        if: github.event_name == 'release'
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          got="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          [ "$got" = "$want" ] || { echo "chess-esca-mcp $got != tag $want" >&2; exit 1; }
+
+      - run: uv build
+      - run: uvx twine check dist/*
+
+      - if: github.event_name == 'release'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: mcp/dist
+
+      # The registry proves ownership by reading the `mcp-name:` marker out of
+      # the package description PyPI serves, so it has to see the release just
+      # uploaded rather than the one before it.
+      - name: Wait for PyPI to serve this version
+        if: github.event_name == 'release'
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          for _ in $(seq 1 30); do
+            got=$(curl -sS https://pypi.org/pypi/chess-esca-mcp/json |
+                  python3 -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
+            [ "$got" = "$want" ] && exit 0
+            sleep 10
+          done
+          echo "PyPI still serving $got, expected $want" >&2
+          exit 1
+
+      # The listing names a version, so it is republished every release or it
+      # keeps pointing at the old one. github-oidc reuses the id-token this job
+      # already holds, so there is nothing to log into by hand; the namespace
+      # io.github.AnglerfishChess comes from the repository owner, and
+      # publishing under an organisation needs Owner rights on it.
+      - name: Publish to the MCP registry
+        if: github.event_name == 'release'
+        run: |
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" |
+            tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
