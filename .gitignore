@@ -49,6 +49,7 @@ data-external
 *.pyo
 __pycache__/
 .pytest_cache/
+*.egg-info/
 .venv/
 
 # The compiled esca extension, built in place by an editable install

@@ -57,6 +57,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "PT", "RUF"]
 [tool.pyrefly]
 python-version = "3.12"
 search-path = [".", "tests"]
+# `mcp/` is a project of its own, checked from its own directory against its
+# own environment; the defaults are repeated because naming any exclude
+# replaces them.
+project-excludes = ["**/.[!/.]*", "**/*venv/**", "mcp/**"]
 
 [tool.pytest.ini_options]
 addopts = "-ra -n 4"
