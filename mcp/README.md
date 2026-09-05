@@ -7,7 +7,9 @@ agent can read.
 
 FEN and moves go in; enums and the squares behind them come out. Whether a move is legal and why
 not, what a position's status is and what either side may claim, the named facts of the position,
-the opening's ECO code, the moves an opening book holds, and PGN read and written.
+the ending the material makes and what theory says it is, the opening's ECO code, the moves an
+opening book holds, and PGN read and written. Every categorical answer also carries `prose`: the
+same thing in one plain English sentence, beside the enum rather than instead of it.
 
 **There is no engine here and no search.** Nothing this server answers says how *good* a move is.
 For a number and a line, use [chess-uci-mcp](https://github.com/AnglerfishChess/chess-uci-mcp),
@@ -54,10 +56,11 @@ when the moves that led to the position are given, since a FEN does not carry th
 
 | Tool | Answers |
 |---|---|
-| `position` | The whole state: side to move, check and its checkers, game status, automatic and claimable draws with their evidence, legal-move count, opening, material, both castlings of both colours with every obstacle, the en-passant offer, pins and skewers. |
+| `position` | The whole state: side to move, check and its checkers, game status, automatic and claimable draws with their evidence, legal-move count, opening, material, both castlings of both colours with every obstacle, the en-passant offer, pins and skewers, and the ending where the material makes one. |
 | `legal_moves` | Every legal move in SAN and UCI, each with its role, victim, promotion, check and static exchange, and grouped as captures, checks, castling, promotions, en passant and quiet. |
 | `explain_move` | Whether one move is legal. If not, every reason at once, each with the squares it was read off. If so, what it changes, the position after it, and the draws it would open. |
 | `facts` | The named facts of the position, group by group, every value labelled by name and by side. `groups` selects; `placement` and `planes` are left out unless asked for. |
+| `ending` | The ending the material makes: its signature, its class, what theory says the result is, the technique that gets it, and the pawn race, bishops and opposition it was read off. |
 | `opening` | The ECO code and name of the position, and the deepest named position the line reached. |
 | `book_moves` | The moves a Polyglot opening book holds for the position, with their weights. |
 | `pgn` | A PGN game read into headers, moves, comments, final position, opening and result. |

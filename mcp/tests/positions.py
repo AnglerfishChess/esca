@@ -19,6 +19,22 @@ EN_PASSANT = "rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3"
 #: pawns: exd6 en passant would clear the rank and expose the king.
 EN_PASSANT_EXPOSES_KING = "8/8/8/K2pP2r/8/8/8/7k w - d6 0 1"
 
+#: A white bishop on e1 stands between its own king on d1 and a black rook on
+#: g1: it is pinned and may not leave the back rank.
+PIN_ON_THE_BACK_RANK = "4k3/8/8/8/8/8/8/3KB1r1 w - - 0 1"
+
+#: King and rook against a lone king: the textbook win, driven to the edge by
+#: the box method.
+KING_AND_ROOK_V_KING = "8/8/8/4k3/8/8/8/R3K3 w - - 0 1"
+
+#: A white a-pawn with a light-squared bishop that can never cover a8, and a
+#: black king already inside the square: KBPvK drawn by the wrong bishop.
+WRONG_BISHOP = "8/8/8/8/1k6/8/P7/K1B5 w - - 0 1"
+
+#: The Italian Game after 4 moves: every piece still on the board, so no
+#: ending at all.
+MIDDLEGAME = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+
 #: Black to move with nothing to move: a king on h8 boxed in by a queen on f7.
 STALEMATE = "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"
 

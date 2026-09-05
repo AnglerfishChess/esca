@@ -12,6 +12,7 @@ TOOLS = {
     "legal_moves",
     "explain_move",
     "facts",
+    "ending",
     "opening",
     "book_moves",
     "pgn",

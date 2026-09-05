@@ -20,6 +20,12 @@ ROLES = {"p": "pawn", "n": "knight", "b": "bishop", "r": "rook", "q": "queen", "
 #: The role order of a side's six placement and attack planes.
 ROLE_ORDER = ("pawn", "knight", "bishop", "rook", "queen", "king")
 
+#: The letter esca spells each role name with.
+ROLE_LETTERS = {name: letter for letter, name in ROLES.items()}
+
+#: The ending class of a position that holds too much material to be one.
+NOT_AN_ENDING = "not_an_ending"
+
 
 def colour(letter: str) -> str:
     """The name of the colour `letter` spells."""
@@ -57,8 +63,10 @@ def units(position: esca.Position, square_set: esca.SquareSet) -> list[dict[str,
 def prose(subject: object) -> list[str]:
     """The sentences esca tells about `subject`.
 
-    Empty while esca has no `describe()`; the field is present in every answer
-    so that the shape does not change when it grows sentences.
+    Empty where esca has no `describe()`; the field is present in every answer
+    so that the shape does not change when a value grows sentences. A sentence
+    sits beside the value it was read off, and an aggregate that already says
+    what its parts say carries it instead of them.
     """
     describe = getattr(subject, "describe", None)
     if not callable(describe):
@@ -67,6 +75,29 @@ def prose(subject: object) -> list[str]:
     if isinstance(said, str):
         return [said]
     return [str(line) for line in said] if isinstance(said, Iterable) else []
+
+
+def gathered(answer: object) -> list[str]:
+    """Every sentence `answer` carries anywhere in it, in reading order.
+
+    One index over the `prose` of the fields below it, each sentence once, so
+    that the whole answer can be read as English without walking the object.
+    """
+    found: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "prose" and isinstance(value, list):
+                    found.extend(line for line in value if line not in found)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(answer)
+    return found
 
 
 # --- the explanations -----------------------------------------------------
@@ -138,6 +169,7 @@ def ep_obstacle(obstacle: esca.explain.EpObstacle) -> dict[str, Any]:
         answer["ray"] = squares(obstacle.ray)
     if obstacle.by:
         answer["checked_by"] = squares(obstacle.by)
+    answer["prose"] = prose(obstacle)
     return answer
 
 
@@ -167,7 +199,13 @@ def en_passant(position: esca.Position) -> dict[str, Any]:
 
 def pin(item: esca.explain.Pin) -> dict[str, Any]:
     """One absolute pin, and the line it holds."""
-    return {"pinned": item.pinned, "pinner": item.pinner, "king": item.king, "ray": squares(item.ray)}
+    return {
+        "pinned": item.pinned,
+        "pinner": item.pinner,
+        "king": item.king,
+        "ray": squares(item.ray),
+        "prose": prose(item),
+    }
 
 
 def skewer(item: esca.explain.Skewer) -> dict[str, Any]:
@@ -177,6 +215,7 @@ def skewer(item: esca.explain.Skewer) -> dict[str, Any]:
         "front": item.front,
         "behind": item.behind,
         "ray": squares(item.ray),
+        "prose": prose(item),
     }
 
 
@@ -185,17 +224,22 @@ def repetition(item: esca.explain.Repetition) -> dict[str, Any]:
     return {
         "count": item.count,
         "plies": list(item.plies),
-        "near_misses": [{"ply": miss.ply, "differs": list(miss.differs)} for miss in item.near_misses],
+        "near_misses": [
+            {"ply": miss.ply, "differs": list(miss.differs), "prose": prose(miss)} for miss in item.near_misses
+        ],
+        "prose": prose(item),
     }
 
 
 def fifty_move(item: esca.explain.FiftyMove) -> dict[str, Any]:
     """The halfmove clock and how far it is from ending the game."""
+    reset = item.last_reset
     return {
         "clock": item.clock,
         "plies_to_claim": item.plies_to_claim,
         "plies_to_automatic": item.plies_to_automatic,
-        "last_reset": (None if item.last_reset is None else {"ply": item.last_reset.ply, "kind": item.last_reset.kind}),
+        "last_reset": (None if reset is None else {"ply": reset.ply, "kind": reset.kind, "prose": prose(reset)}),
+        "prose": prose(item),
     }
 
 
@@ -210,14 +254,20 @@ def stalemate(item: esca.explain.StalemateDetail) -> dict[str, Any]:
                 "reason": held.kind,
                 "pinner": held.pinner,
                 "ray": squares(held.ray),
+                "prose": prose(held),
             }
             for square, held in item.stuck_units
         ],
+        "prose": prose(item),
     }
 
 
-def draw(item: esca.explain.AutomaticDraw | esca.explain.ClaimableDraw) -> dict[str, Any]:
-    """One draw condition and the evidence behind it."""
+def draw(item: esca.explain.AutomaticDraw | esca.explain.ClaimableDraw, *, sentence: bool = True) -> dict[str, Any]:
+    """One draw condition and the evidence behind it.
+
+    `sentence` is false where the answer around it already says what this one
+    would say, which is the whole draw status.
+    """
     answer: dict[str, Any] = {"kind": item.kind}
     material = getattr(item, "material", None)
     if material is not None:
@@ -229,14 +279,104 @@ def draw(item: esca.explain.AutomaticDraw | esca.explain.ClaimableDraw) -> dict[
         answer["repetition"] = repetition(item.repetition)
     if item.fifty_move is not None:
         answer["fifty_move"] = fifty_move(item.fifty_move)
-    answer["prose"] = prose(item)
+    if sentence:
+        answer["prose"] = prose(item)
     return answer
 
 
 def draw_status(game: esca.Game) -> dict[str, Any]:
-    """Every draw condition that holds, automatic and claimable alike."""
+    """Every draw condition that holds, automatic and claimable alike.
+
+    The `prose` here is the whole status in one go, the sentence of every
+    condition listed included, so the conditions carry none of their own.
+    """
     status = game.draw_status()
     return {
-        "automatic": [draw(item) for item in status.automatic],
-        "claimable": [draw(item) for item in status.claimable],
+        "automatic": [draw(item, sentence=False) for item in status.automatic],
+        "claimable": [draw(item, sentence=False) for item in status.claimable],
+        "prose": prose(status),
+    }
+
+
+# --- the named ending ------------------------------------------------------
+
+
+def signature(item: esca.endings.MaterialSignature) -> dict[str, Any]:
+    """The material both sides hold, written the way endings are named."""
+    return {
+        "text": item.text,
+        "stronger": colour(item.stronger),
+        "pawns": item.pawns,
+        "count": {
+            name: {role_name: item.count(letter, ROLE_LETTERS[role_name]) for role_name in ROLE_ORDER}
+            for letter, name in COLOURS.items()
+        },
+        "pieces": {name: item.pieces(letter) for letter, name in COLOURS.items()},
+        "value": {name: item.value(letter) for letter, name in COLOURS.items()},
+    }
+
+
+def pawn_race(item: esca.endings.PawnRace) -> dict[str, Any]:
+    """The race of the only pawn on the board."""
+    return {
+        "pawn": item.pawn,
+        "colour": colour(item.colour),
+        "promotion": item.promotion,
+        "rook_pawn": item.rook_pawn,
+        "steps": item.steps,
+        "defender_inside_square": item.defender_inside_square,
+        "attacker_in_front": item.attacker_in_front,
+        "defender_in_front": item.defender_in_front,
+        "defender_holds_the_corner": item.defender_holds_the_corner,
+    }
+
+
+def bishops(item: esca.endings.Bishops) -> dict[str, Any]:
+    """The bishops on the board, when at least one stands on it."""
+    return {
+        "opposite_colours": item.opposite_colours,
+        "same_colour": item.same_colour,
+        "wrong_bishop": item.wrong_bishop,
+    }
+
+
+def ending_evidence(item: esca.endings.EndingEvidence) -> dict[str, Any]:
+    """The position-specific facts behind an ending's verdict and technique.
+
+    Each group is filled in only where the material puts it in question, and
+    the `prose` covers every group at once, so the groups carry none of it.
+    """
+    return {
+        "pawn": None if item.pawn is None else pawn_race(item.pawn),
+        "bishops": None if item.bishops is None else bishops(item.bishops),
+        "opposition": item.opposition,
+        "prose": prose(item),
+    }
+
+
+def verdict(item: esca.endings.EndingVerdict) -> dict[str, Any]:
+    """What theory says the result of an ending is, and for whom."""
+    winner = item.winner
+    return {"kind": item.name, "colour": None if winner is None else colour(winner)}
+
+
+def ending(item: esca.endings.Ending) -> dict[str, Any]:
+    """The ending on the board: its name, its result and the facts behind it."""
+    return {
+        "signature": signature(item.signature),
+        "class": item.class_.name,
+        "verdict": verdict(item.verdict),
+        "technique": item.technique.name,
+        "evidence": ending_evidence(item.evidence),
+        "prose": prose(item),
+    }
+
+
+def ending_summary(item: esca.endings.Ending) -> dict[str, Any]:
+    """The ending as a whole-position answer carries it: the naming only."""
+    return {
+        "class": item.class_.name,
+        "verdict": verdict(item.verdict),
+        "technique": item.technique.name,
+        "prose": prose(item),
     }
