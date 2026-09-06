@@ -6,7 +6,10 @@ import sys
 
 import pytest
 
-#: What the server must offer once it is up.
+from chess_esca_mcp import server
+
+#: What the server must offer once it is up. A listing promises no order, so
+#: the names are compared as a set.
 TOOLS = {
     "position",
     "legal_moves",
@@ -83,11 +86,10 @@ def test_the_server_completes_a_handshake_and_lists_its_tools(client):
     assert initialised["result"]["serverInfo"]["name"] == "chess-esca"
     client.notify("notifications/initialized")
 
-    listed = client.send("tools/list")
-    assert {tool["name"] for tool in listed["result"]["tools"]} == TOOLS
-    for tool in listed["result"]["tools"]:
-        assert tool["description"]
-        assert tool["annotations"]["readOnlyHint"] is True
+    listed = client.send("tools/list")["result"]["tools"]
+    assert {tool["name"] for tool in listed} == TOOLS
+    assert [tool["name"] for tool in listed if not tool["description"]] == []
+    assert [tool["name"] for tool in listed if tool["annotations"]["readOnlyHint"] is not True] == []
 
 
 def test_a_tool_called_over_the_wire_answers_structured_content(client):
@@ -98,6 +100,8 @@ def test_a_tool_called_over_the_wire_answers_structured_content(client):
     client.notify("notifications/initialized")
 
     called = client.send("tools/call", {"name": "position", "arguments": {"fen": None}})
+    # One tool call, one content block: an answer is a single JSON document.
+    assert len(called["result"]["content"]) == 1
     answer = json.loads(called["result"]["content"][0]["text"])
     assert answer["side_to_move"] == "white"
     assert answer["legal_move_count"] == 20
@@ -114,9 +118,10 @@ def test_the_facts_catalogue_is_served_as_a_resource(client):
     assert [resource["uri"] for resource in listed["result"]["resources"]] == ["esca://facts-catalogue"]
 
     read = client.send("resources/read", {"uri": "esca://facts-catalogue"})
+    # One resource read, one content block.
+    assert len(read["result"]["contents"]) == 1
     catalogue = json.loads(read["result"]["contents"][0]["text"])
-    assert {group["name"] for group in catalogue["groups"]} >= {"material", "tactics"}
-    assert catalogue["move"]
+    assert catalogue == server.facts_catalogue()
 
 
 def test_the_analysis_prompt_is_served(client):

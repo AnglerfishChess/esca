@@ -43,8 +43,8 @@ def role(letter: str) -> str:
 
 
 def squares(square_set: esca.SquareSet) -> list[str]:
-    """The squares of `square_set`, in board order."""
-    return sorted(square_set)
+    """The squares of `square_set`, in board order: a1 to h1, then a2 upward."""
+    return list(square_set)
 
 
 def unit(position: esca.Position, square: str) -> dict[str, str] | None:
