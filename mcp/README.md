@@ -59,7 +59,7 @@ when the moves that led to the position are given, since a FEN does not carry th
 | `position` | The whole state: side to move, check and its checkers, game status, automatic and claimable draws with their evidence, legal-move count, opening, material, both castlings of both colours with every obstacle, the en-passant offer, pins and skewers, and the ending where the material makes one. |
 | `legal_moves` | Every legal move in SAN and UCI, each with its role, victim, promotion, check and static exchange, and grouped as captures, checks, castling, promotions, en passant and quiet. |
 | `explain_move` | Whether one move is legal. If not, every reason at once, each with the squares it was read off. If so, what it changes, the position after it, and the draws it would open. |
-| `facts` | The named facts of the position, group by group, every value labelled by name and by side. `groups` selects; `placement` and `planes` are left out unless asked for. |
+| `facts` | The named facts of the position, group by group, every value labelled by name and, where it differs between the sides, by colour. `groups` selects; `placement` and `maps` are left out unless asked for. |
 | `ending` | The ending the material makes: its signature, its class, what theory says the result is, the technique that gets it, and the pawn race, bishops and opposition it was read off. |
 | `opening` | The ECO code and name of the position, and the deepest named position the line reached. |
 | `book_moves` | The moves a Polyglot opening book holds for the position, with their weights. |
@@ -69,8 +69,9 @@ when the moves that led to the position are given, since a FEN does not carry th
 An input that names no position, no move or no game comes back as
 `{"error": {"kind": ..., "message": ..., "hint": ...}}` — never a traceback.
 
-One resource, `esca://facts-schema`, lists the fact groups and the feature names of each, with
-the schema id. One prompt, `analyse-position`, walks an agent through reading a position with
+One resource, `esca://facts-catalogue`, lists every fact group and every field it holds, with the
+type each carries and one sentence of what it means; esca generates it from the fact definitions
+themselves. One prompt, `analyse-position`, walks an agent through reading a position with
 these tools.
 
 ### Opening books

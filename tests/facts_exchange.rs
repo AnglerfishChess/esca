@@ -5,8 +5,8 @@
 
 mod common;
 
-use common::facts_of;
-use esca::{CLASSIC, Position, Side, Variant};
+use common::{by_colour, facts_of};
+use esca::{CLASSIC, Position, Variant};
 use rstest::rstest;
 
 /// A rook takes an undefended pawn.
@@ -180,106 +180,93 @@ fn the_see_of_a_unit_is_what_the_other_side_wins_by_taking_it(
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::crowd(CROWD, [1, 0])]
-#[case::crowd_black(CROWD_BLACK, [0, 1])]
+#[case::crowd_black(CROWD_BLACK, [1, 0])]
 #[case::queen_free(QUEEN_FREE, [9, 0])]
 #[case::in_check(IN_CHECK, [5, 0])]
 #[case::knight_trade(KNIGHT_TRADE, [0, 3])]
-#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [3, 0])]
+#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [0, 3])]
 #[case::defended_pawn(DEFENDED_PAWN, [-4, 0])]
-#[case::defended_pawn_black(DEFENDED_PAWN_BLACK, [0, -4])]
+#[case::defended_pawn_black(DEFENDED_PAWN_BLACK, [-4, 0])]
 #[case::pawn_chains(PAWN_CHAINS, [1, 1])]
 #[case::pawn_chains_black(PAWN_CHAINS_BLACK, [1, 1])]
-#[case::pawn_trade_black(PAWN_TRADE_BLACK, [1, 0])]
+#[case::pawn_trade_black(PAWN_TRADE_BLACK, [0, 1])]
 fn the_best_capture_is_the_largest_see_the_side_has(#[case] fen: &str, #[case] best: [i32; 2]) {
     let exchange = facts_of(fen).exchange;
-    assert_eq!(exchange[Side::Us.index()].see_best_capture, best[0]);
-    assert_eq!(exchange[Side::Them.index()].see_best_capture, best[1]);
+    assert_eq!(exchange.see_best_capture, by_colour(best));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::crowd(CROWD, [1, 0])]
-#[case::crowd_black(CROWD_BLACK, [0, 1])]
+#[case::crowd_black(CROWD_BLACK, [1, 0])]
 #[case::queen_free(QUEEN_FREE, [1, 0])]
 #[case::in_check(IN_CHECK, [1, 0])]
 #[case::knight_trade(KNIGHT_TRADE, [0, 1])]
-#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [1, 0])]
+#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [0, 1])]
 #[case::defended_pawn(DEFENDED_PAWN, [0, 0])]
 #[case::defended_pawn_black(DEFENDED_PAWN_BLACK, [0, 0])]
 #[case::pawn_chains(PAWN_CHAINS, [2, 3])]
-#[case::pawn_chains_black(PAWN_CHAINS_BLACK, [3, 2])]
-#[case::pawn_trade_black(PAWN_TRADE_BLACK, [1, 0])]
+#[case::pawn_chains_black(PAWN_CHAINS_BLACK, [2, 3])]
+#[case::pawn_trade_black(PAWN_TRADE_BLACK, [0, 1])]
 fn a_positive_capture_is_one_that_wins_material_outright(
     #[case] fen: &str,
     #[case] count: [u16; 2],
 ) {
     let exchange = facts_of(fen).exchange;
-    assert_eq!(
-        exchange[Side::Us.index()].see_positive_capture_count,
-        count[0]
-    );
-    assert_eq!(
-        exchange[Side::Them.index()].see_positive_capture_count,
-        count[1]
-    );
+    assert_eq!(exchange.see_positive_capture_count, by_colour(count));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::crowd(CROWD, [0, 1])]
-#[case::crowd_black(CROWD_BLACK, [1, 0])]
+#[case::crowd_black(CROWD_BLACK, [0, 1])]
 #[case::queen_free(QUEEN_FREE, [0, 1])]
 #[case::in_check(IN_CHECK, [0, 0])]
 #[case::knight_trade(KNIGHT_TRADE, [1, 0])]
-#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [0, 1])]
+#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [1, 0])]
 #[case::defended_pawn(DEFENDED_PAWN, [0, 0])]
 #[case::defended_pawn_black(DEFENDED_PAWN_BLACK, [0, 0])]
 #[case::pawn_chains(PAWN_CHAINS, [1, 0])]
-#[case::pawn_chains_black(PAWN_CHAINS_BLACK, [0, 1])]
-#[case::pawn_trade_black(PAWN_TRADE_BLACK, [0, 1])]
+#[case::pawn_chains_black(PAWN_CHAINS_BLACK, [1, 0])]
+#[case::pawn_trade_black(PAWN_TRADE_BLACK, [1, 0])]
 fn an_equal_capture_is_one_the_exchange_leaves_level(#[case] fen: &str, #[case] count: [u16; 2]) {
     let exchange = facts_of(fen).exchange;
-    assert_eq!(exchange[Side::Us.index()].see_equal_capture_count, count[0]);
-    assert_eq!(
-        exchange[Side::Them.index()].see_equal_capture_count,
-        count[1]
-    );
+    assert_eq!(exchange.see_equal_capture_count, by_colour(count));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::crowd(CROWD, [1, 0])]
-#[case::crowd_black(CROWD_BLACK, [0, 1])]
+#[case::crowd_black(CROWD_BLACK, [1, 0])]
 #[case::queen_free(QUEEN_FREE, [9, 0])]
 #[case::in_check(IN_CHECK, [5, 0])]
 #[case::knight_trade(KNIGHT_TRADE, [0, 3])]
-#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [3, 0])]
+#[case::knight_trade_black(KNIGHT_TRADE_BLACK, [0, 3])]
 #[case::defended_pawn(DEFENDED_PAWN, [0, 0])]
 #[case::defended_pawn_black(DEFENDED_PAWN_BLACK, [0, 0])]
 #[case::pawn_chains(PAWN_CHAINS, [2, 3])]
-#[case::pawn_chains_black(PAWN_CHAINS_BLACK, [3, 2])]
-#[case::pawn_trade_black(PAWN_TRADE_BLACK, [1, 0])]
+#[case::pawn_chains_black(PAWN_CHAINS_BLACK, [2, 3])]
+#[case::pawn_trade_black(PAWN_TRADE_BLACK, [0, 1])]
 fn the_positive_total_adds_up_the_captures_that_win_material(
     #[case] fen: &str,
     #[case] total: [i32; 2],
 ) {
     let exchange = facts_of(fen).exchange;
-    assert_eq!(exchange[Side::Us.index()].see_positive_total, total[0]);
-    assert_eq!(exchange[Side::Them.index()].see_positive_total, total[1]);
+    assert_eq!(exchange.see_positive_total, by_colour(total));
 }
 
-/// In check there is no null move, so the `them` block is zero and
-/// `tactics.them` says why.
+/// In check there is no null move, so the other side's values are zero and
+/// `tactics.available` says why.
 #[test]
-fn the_them_block_is_empty_when_we_are_in_check() {
+fn the_side_not_to_move_is_left_unread_when_the_mover_is_in_check() {
     let facts = facts_of(IN_CHECK);
     assert!(facts.state.in_check);
-    assert!(!facts.tactics[Side::Them.index()].available);
-    let theirs = facts.exchange[Side::Them.index()];
-    assert_eq!(theirs.see_best_capture, 0);
-    assert_eq!(theirs.see_positive_capture_count, 0);
-    assert_eq!(theirs.see_equal_capture_count, 0);
-    assert_eq!(theirs.see_positive_total, 0);
+    assert!(!facts.tactics.available.black);
+    let exchange = facts.exchange;
+    assert_eq!(exchange.see_best_capture.black, 0);
+    assert_eq!(exchange.see_positive_capture_count.black, 0);
+    assert_eq!(exchange.see_equal_capture_count.black, 0);
+    assert_eq!(exchange.see_positive_total.black, 0);
 }
 
 /// The block's counts and the move list agree: every capture falls in exactly
@@ -292,7 +279,8 @@ fn the_them_block_is_empty_when_we_are_in_check() {
 fn the_three_counts_partition_the_captures(#[case] fen: &str) {
     let facts = facts_of(fen);
     let position = Position::from_fen(fen).expect("a test FEN is a legal position");
-    let ours = facts.exchange[Side::Us.index()];
+    let mover = facts.side_to_move();
+    let exchange = facts.exchange;
     let captures: Vec<i32> = facts
         .moves
         .iter()
@@ -302,15 +290,17 @@ fn the_three_counts_partition_the_captures(#[case] fen: &str) {
 
     let negative = captures.iter().filter(|see| **see < 0).count() as u16;
     assert_eq!(
-        ours.see_positive_capture_count + ours.see_equal_capture_count + negative,
+        exchange.see_positive_capture_count.of(mover)
+            + exchange.see_equal_capture_count.of(mover)
+            + negative,
         captures.len() as u16
     );
     assert_eq!(
-        ours.see_positive_total,
+        exchange.see_positive_total.of(mover),
         captures.iter().filter(|see| **see > 0).sum::<i32>()
     );
     assert_eq!(
-        ours.see_best_capture,
+        exchange.see_best_capture.of(mover),
         captures.iter().copied().max().unwrap_or(0)
     );
 }

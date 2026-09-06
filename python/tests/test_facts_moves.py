@@ -834,7 +834,7 @@ def test_a_move_states_what_it_does_to_both_king_rings(
     fen: str, uci: str, deltas: tuple[int, int], move_facts: MoveFactsOf
 ) -> None:
     facts = move_facts(fen, uci)
-    assert (facts.our_ring_attackers_delta, facts.their_ring_attackers_delta) == deltas
+    assert (facts.enemy_king_attackers_delta, facts.mover_king_attackers_delta) == deltas
 
 
 @pytest.mark.parametrize(
@@ -870,7 +870,7 @@ def test_a_move_states_how_many_units_of_each_side_it_leaves_hanging(
     fen: str, uci: str, deltas: tuple[int, int], move_facts: MoveFactsOf
 ) -> None:
     facts = move_facts(fen, uci)
-    assert (facts.own_hanging_delta, facts.their_hanging_delta) == deltas
+    assert (facts.mover_hanging_delta, facts.enemy_hanging_delta) == deltas
 
 
 @pytest.mark.parametrize(
@@ -995,31 +995,6 @@ BLACK_CAPTURE_ROW = [
 # fmt: on
 
 
-@pytest.mark.parametrize(
-    ("fen", "uci", "row"),
-    [
-        (PROMOTION, "e7d8q", PROMOTION_CAPTURE_ROW),
-        (EVERY_ROLE, "e1h1", CASTLING_ROW),
-        (EN_PASSANT, "e5d6", EN_PASSANT_ROW),
-        (WHEEL, "e4g5", HANGING_CAPTURE_ROW),
-        (THREAT, "a1a4", QUIET_BLUNDER_ROW),
-        (EXCHANGE_BLACK, "g8b3", BLACK_CAPTURE_ROW),
-    ],
-    ids=[
-        "promotion_capture_with_check",
-        "castling",
-        "en_passant",
-        "capture_that_hangs",
-        "quiet_move_that_hangs_a_rook",
-        "black_capture",
-    ],
-)
-def test_a_move_is_forty_values_in_the_order_the_catalogue_lists(fen: str, uci: str, row: list[float]) -> None:
-    moves, encoded = esca.encode_moves(fen)
-    assert encoded.shape[1] == esca.MOVE_WIDTH == 40
-    assert encoded[[move.uci for move in moves].index(uci)].tolist() == row
-
-
 def test_the_move_facts_of_a_chess960_position_follow_its_own_castling_geometry(
     move_facts: MoveFactsOf,
 ) -> None:
@@ -1083,8 +1058,8 @@ def test_a_chess960_move_reads_its_own_castling_geometry(
     under the enemy queen."""
     facts = move_facts(fen, uci, esca.CHESS960)
     assert facts.threat_created_max == threat
-    assert facts.their_ring_attackers_delta == their_ring_delta
-    assert facts.our_ring_attackers_delta == 0
+    assert facts.mover_king_attackers_delta == their_ring_delta
+    assert facts.enemy_king_attackers_delta == 0
     assert not facts.blocks_check
     assert not facts.moves_attacked_unit
     assert not facts.leaves_unit_hanging
@@ -1101,7 +1076,7 @@ def test_a_chess960_capture_states_what_it_leaves_behind(fen: str, uci: str, mov
     """The queen that walks into three defenders hangs on the square it lands on."""
     facts = move_facts(fen, uci, esca.CHESS960)
     assert facts.moves_attacked_unit
-    assert facts.own_hanging_delta == 1
+    assert facts.mover_hanging_delta == 1
     assert facts.leaves_unit_hanging
-    assert facts.our_ring_attackers_delta == 1
+    assert facts.enemy_king_attackers_delta == 1
     assert facts.threat_created_max == 0

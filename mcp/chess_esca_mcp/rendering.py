@@ -12,12 +12,12 @@ from typing import Any
 import esca
 
 #: A colour letter as the answers spell it.
-COLOURS = {"w": "white", "b": "black"}
+COLOURS = {"w": "white", "b": "black", "white": "white", "black": "black"}
 
 #: A role letter as the answers spell it.
 ROLES = {"p": "pawn", "n": "knight", "b": "bishop", "r": "rook", "q": "queen", "k": "king"}
 
-#: The role order of a side's six placement and attack planes.
+#: The roles, in the order the board vocabulary writes them.
 ROLE_ORDER = ("pawn", "knight", "bishop", "rook", "queen", "king")
 
 #: The letter esca spells each role name with.
@@ -27,9 +27,9 @@ ROLE_LETTERS = {name: letter for letter, name in ROLES.items()}
 NOT_AN_ENDING = "not_an_ending"
 
 
-def colour(letter: str) -> str:
-    """The name of the colour `letter` spells."""
-    return COLOURS[letter.lower()]
+def colour(name: str) -> str:
+    """The full name of the colour `name` spells, from either spelling."""
+    return COLOURS[name.lower()]
 
 
 def other(name: str) -> str:

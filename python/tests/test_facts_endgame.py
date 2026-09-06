@@ -112,12 +112,12 @@ def endgame_row(fen: str) -> list[float]:
     [
         (START, (3, 3)),
         (BARE_KINGS, (1, 0)),
-        (BARE_KINGS_BLACK, (0, 1)),
+        (BARE_KINGS_BLACK, (1, 0)),
         (DISTANT, (2, 3)),
         (NO_OPPOSITION, (2, 2)),
         (BLOCKED_FILE, (0, 1)),
         (KEY_SQUARE, (1, 3)),
-        (KEY_SQUARE_BLACK, (3, 1)),
+        (KEY_SQUARE_BLACK, (1, 3)),
         (TWO_KNIGHTS, (3, 0)),
         (OPPOSITE_BISHOPS, (3, 2)),
     ],
@@ -137,7 +137,7 @@ def endgame_row(fen: str) -> list[float]:
 def test_the_king_centralisation_is_the_distance_to_the_nearest_central_square(
     fen: str, distance: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).endgame.king_centralisation == distance
+    assert facts_of(fen).endgame.king_centralisation == esca.ByColour(*distance)
 
 
 @pytest.mark.parametrize(
@@ -146,10 +146,10 @@ def test_the_king_centralisation_is_the_distance_to_the_nearest_central_square(
         (START, (8, 8)),
         (BLOCKED_PAWNS, (8, 8)),
         (PAWN_RACE, (2, 1)),
-        (PAWN_RACE_BLACK, (0, 3)),
+        (PAWN_RACE_BLACK, (3, 0)),
         (BLOCKED_FILE, (8, 4)),
         (KEY_SQUARE, (3, 8)),
-        (KEY_SQUARE_BLACK, (8, 4)),
+        (KEY_SQUARE_BLACK, (4, 8)),
         (KEY_SQUARE_HIGH, (2, 8)),
         (WRONG_BISHOP, (4, 8)),
         (WRONG_BISHOP_THEM, (8, 5)),
@@ -170,32 +170,7 @@ def test_the_king_centralisation_is_the_distance_to_the_nearest_central_square(
 def test_race_plies_are_what_the_leading_passer_still_needs(
     fen: str, plies: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).endgame.race_plies == plies
-
-
-@pytest.mark.parametrize(
-    ("fen", "difference"),
-    [
-        (START, 0),
-        (PAWN_RACE, 1),
-        (PAWN_RACE_BLACK, -3),
-        (BLOCKED_FILE, 4),
-        (KEY_SQUARE, -5),
-        (KEY_SQUARE_HIGH, -6),
-        (WRONG_BISHOP_THEM, 3),
-    ],
-    ids=[
-        "start",
-        "pawn_race",
-        "pawn_race_black",
-        "blocked_file",
-        "key_square",
-        "key_square_high",
-        "wrong_bishop_them",
-    ],
-)
-def test_the_race_difference_is_ours_less_theirs(fen: str, difference: int, facts_of: FactsOf) -> None:
-    assert facts_of(fen).endgame.race_plies_diff == difference
+    assert facts_of(fen).endgame.race_plies == esca.ByColour(*plies)
 
 
 @pytest.mark.parametrize(
@@ -234,10 +209,10 @@ def test_the_opposition_needs_an_odd_number_of_empty_squares_between_the_kings(
     [
         (START, (False, False)),
         (KEY_SQUARE, (True, False)),
-        (KEY_SQUARE_BLACK, (False, True)),
+        (KEY_SQUARE_BLACK, (True, False)),
         (KEY_SQUARE_HIGH, (True, False)),
         (PAWN_RACE, (False, True)),
-        (PAWN_RACE_BLACK, (True, False)),
+        (PAWN_RACE_BLACK, (False, True)),
         (ROOK_PAWN_KING, (False, False)),
         (SHORT_OF_KEY, (False, False)),
         (KEY_SQUARE_NOT_PASSED, (False, False)),
@@ -257,7 +232,7 @@ def test_the_opposition_needs_an_odd_number_of_empty_squares_between_the_kings(
 def test_the_king_stands_on_a_key_square_of_a_passer_of_its_own(
     fen: str, occupied: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).endgame.key_square_occupied == occupied
+    assert facts_of(fen).endgame.key_square_occupied == esca.ByColour(*occupied)
 
 
 @pytest.mark.parametrize(
@@ -265,7 +240,7 @@ def test_the_king_stands_on_a_key_square_of_a_passer_of_its_own(
     [
         (START, (False, False)),
         (WRONG_BISHOP, (True, False)),
-        (WRONG_BISHOP_BLACK, (False, True)),
+        (WRONG_BISHOP_BLACK, (True, False)),
         (WRONG_BISHOP_THEM, (False, True)),
         (RIGHT_BISHOP, (False, False)),
         (BOTH_ROOK_PAWNS, (False, False)),
@@ -286,7 +261,7 @@ def test_the_king_stands_on_a_key_square_of_a_passer_of_its_own(
 def test_a_bishop_is_the_wrong_colour_for_rook_pawns_promoting_on_the_other(
     fen: str, wrong: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).endgame.wrong_colour_bishop == wrong
+    assert facts_of(fen).endgame.wrong_colour_bishop == esca.ByColour(*wrong)
 
 
 @pytest.mark.parametrize(
@@ -322,52 +297,3 @@ def test_drawish_material_names_the_three_configurations_that_still_draw(
     fen: str, drawn: str | None, facts_of: FactsOf
 ) -> None:
     assert facts_of(fen).endgame.drawish_material == drawn
-
-
-# The seven features in schema order: two centralisations, two race counts,
-# their difference, the opposition one-hot with its third slot for none, the
-# two bit pairs, and the drawn-material one-hot.
-# fmt: off
-BARE_KINGS_ROW = [
-    1.0 / 3.0, 0.0,
-    1.0, 1.0,
-    0.0,
-    1.0, 0.0, 0.0,
-    0.0, 0.0,
-    0.0, 0.0,
-    0.0, 0.0, 0.0,
-]
-
-PAWN_RACE_ROW = [
-    1.0, 1.0,
-    0.25, 0.125,
-    0.125,
-    0.0, 0.0, 1.0,
-    0.0, 1.0,
-    0.0, 0.0,
-    0.0, 0.0, 0.0,
-]
-
-WRONG_BISHOP_ROW = [
-    1.0, 1.0,
-    0.5, 1.0,
-    -0.5,
-    0.0, 0.0, 1.0,
-    0.0, 0.0,
-    1.0, 0.0,
-    0.0, 1.0, 0.0,
-]
-# fmt: on
-
-
-@pytest.mark.parametrize(
-    ("fen", "row"),
-    [
-        (BARE_KINGS, BARE_KINGS_ROW),
-        (PAWN_RACE, PAWN_RACE_ROW),
-        (WRONG_BISHOP, WRONG_BISHOP_ROW),
-    ],
-    ids=["bare_kings", "pawn_race", "wrong_bishop"],
-)
-def test_the_encoded_row_carries_the_group_in_the_schemas_order(fen: str, row: list[float]) -> None:
-    assert endgame_row(fen) == pytest.approx(row)

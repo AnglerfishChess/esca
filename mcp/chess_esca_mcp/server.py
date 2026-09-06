@@ -1,4 +1,4 @@
-"""The tools, the facts-schema resource and the analysis prompt.
+"""The tools, the facts-catalogue resource and the analysis prompt.
 
 Every tool reads: nothing on the machine is written and nothing off it is
 fetched. An answer is a JSON object, and a call that names no position, no
@@ -91,15 +91,15 @@ def _opening(found: esca.openings.Opening | None) -> dict[str, str] | None:
 def _material(facts: esca.Facts) -> dict[str, Any]:
     """What each side has on the board, and what it comes to."""
     counted = facts_module.group_facts(facts, "material")
-    white = facts.side("w")
+    roles = ("pawns", "knights", "bishops", "rooks", "queens")
     return {
-        "white": counted["count"]["white"],
-        "black": counted["count"]["black"],
+        "white": {role: counted[role]["white"] for role in roles},
+        "black": {role: counted[role]["black"] for role in roles},
         "value": counted["value"],
         "non_pawn_value": counted["non_pawn_value"],
-        "balance": facts.material.value[white] - facts.material.value[1 - white],
-        "phase": facts.material.phase,
-        "insufficient": counted["insufficient"],
+        "balance": facts.material.value.white - facts.material.value.black,
+        "phase_points": facts.material.phase_points,
+        "insufficient_material": counted["insufficient_material"],
     }
 
 
@@ -482,30 +482,32 @@ def facts(
         list[str] | None,
         Field(
             description=(
-                "Which fact groups to read. Every group the esca://facts-schema resource lists is "
-                "allowed; `placement` and `planes` are left out unless asked for."
+                "Which fact groups to read. Every group the esca://facts-catalogue resource lists "
+                "is allowed; `placement` and `maps` are left out unless asked for."
             )
         ),
     ] = None,
 ) -> dict:
     """The named facts esca reads off a position, group by group.
 
-    Each value is labelled by its own name and by the side it belongs to,
-    never a bare vector. The groups are `state`, `history`, `material`,
-    `pawns`, `pieces`, `king`, `mobility`, `attacks`, `exchange`, `threats`,
-    `tactics`, `endgame`, and the two raw ones, `placement` and `planes`.
+    Every fact is labelled by its own name, and a value that differs between
+    the two sides is written `{"white": …, "black": …}`, so nothing has to be
+    read against whose turn it is. The groups are `state`, `history`,
+    `material`, `pawns`, `pieces`, `king`, `mobility`, `attacks`, `exchange`,
+    `threats`, `tactics`, `endgame`, and the two that restate others,
+    `placement` and `maps`. `esca://facts-catalogue` says what every field
+    means.
 
     Args:
         fen: the position as FEN or EPD; the start position when omitted.
         moves: moves played from it, SAN or UCI. `history` needs them.
         pgn: a whole game instead of `fen` and `moves`.
         variant: 'classic' or 'chess960'.
-        groups: the groups to read; all but `placement` and `planes` by default.
+        groups: the groups to read; all but `placement` and `maps` by default.
 
     Returns:
-        dict: `fen`, `schema_id`, `schema_version`, `perspective`, `groups`
-        keyed by group name, `groups_returned`, `groups_available` — or
-        `error`.
+        dict: `fen`, `side_to_move`, `groups` keyed by group name, each holding
+        `{field: value}`, `groups_available` and `prose` — or `error`.
     """
     if groups:
         unknown = facts_module.unknown_groups(groups)
@@ -513,7 +515,7 @@ def facts(
             raise ChessInputError(
                 "unknown_fact_group",
                 f"no group is named {', '.join(repr(name) for name in unknown)}",
-                hint="read esca://facts-schema for the groups and what each holds",
+                hint="read esca://facts-catalogue for the groups and what each holds",
                 groups_available=list(facts_module.GROUPS),
             )
     game = read_game(fen, moves, pgn, variant)
@@ -760,28 +762,20 @@ def to_pgn(
 
 
 @mcp.resource(
-    "esca://facts-schema",
-    name="esca facts schema",
-    description="The fact groups and feature names of the esca schema, with its id and width.",
+    "esca://facts-catalogue",
+    name="esca facts catalogue",
+    description="Every fact group, and every field it holds, with its type and what it means.",
     mime_type="application/json",
 )
-def facts_schema() -> dict:
-    """The schema the `facts` tool answers from.
+def facts_catalogue() -> dict:
+    """What the `facts` tool answers with.
 
-    Every group with its version, its width and its offset in the encoded row,
-    and the names of the features it writes.
+    One entry per group, each listing its fields with the type each carries and
+    one sentence of what it means; then the same for the facts of one legal
+    move, and a note on the types themselves. esca generates it from the fact
+    definitions, so it says what the tool actually answers.
     """
-    schema = esca.SCHEMA
-    named: dict[str, list[str]] = {name: [] for name in schema.group_names}
-    for group, feature in schema.features_for(esca.CLASSIC):
-        named[group].append(feature)
-    return {
-        "schema_id": schema.id,
-        "version": schema.semver,
-        "width": schema.width,
-        "feature_count": schema.feature_count,
-        "groups": [dict(group, features=named[group["name"]]) for group in schema.groups()],
-    }
+    return facts_module.catalogue()
 
 
 @mcp.prompt(

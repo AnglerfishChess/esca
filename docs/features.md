@@ -1,816 +1,380 @@
-# Feature catalogue v1
-
-Fixed-width vectors of cheaply derivable position facts. Everything here is
-derivable from the current position plus at most one ply of lookahead (the
-legal move list, the attack maps and one exchange loop per square), or from a
-supplied game history. Rust is the single source of truth; the Python trainer
-calls the same code through the PyO3 binding.
-
-Two schemas are defined:
-
-| Schema | Shape | Consumer |
-|---|---|---|
-| `position` | one vector of 2039 f32 per position | value head, policy head |
-| `move` | one vector of 40 f32 per legal move | policy head |
-
-The raw board is the `placement` group, first in the schema order, so that a
-run measuring the augmentation against the board alone selects one group
-rather than building its own input.
-
-[`features-v1.md`](features-v1.md) is the candidate list this catalogue is
-being filled from; it never overrides an entry here.
-
----
-
-## 1. Glossary
-
-Defined once, used everywhere below. Where a definition is a cheap
-approximation of a costlier truth, the approximation *is* the contract.
-
-### Sides and orientation
-
-| Term | Definition |
-|---|---|
-| **us** | The side to move. |
-| **them** | The side not to move. |
-| **mover's view** | The board as seen by *us*: when Black is to move, the board is flipped vertically (rank *r* becomes rank 9−*r*) and the colours are swapped. Files are **not** mirrored — file a stays file a. Every square index, file index and rank index below is in the mover's view. |
-| **relative rank** | Rank counted from the owner's own back rank: our relative rank 1 is where our king starts, relative rank 8 is where our pawns promote. In the mover's view our relative rank equals the absolute rank. |
-| **side-relative** | Every feature exists for us and for them; the two are computed by the same code with the sides exchanged. |
-| **wing** | Files a–d are the queen-side, files e–h the king-side. A unit stands on the wing its own file falls in. |
-
-Because of the flip, "side to move" is constant and is not emitted, and no
-feature distinguishes actual White from actual Black.
-
-### Attacks and safety
-
-| Term | Definition |
-|---|---|
-| **attacks** | Square *s* is attacked by side X if some piece of X could capture a piece standing on *s*, ignoring pins and ignoring whether X's king would be left in check. Pawns attack diagonally only. Sliders stop at the first occupied square; occupancy includes both colours, and the enemy king is *not* removed from it. |
-| **attack map** | For a side, the union of its attacked squares; kept per piece type as well. |
-| **defended** | A unit of X on *s* is defended if *s* is attacked by X. A piece never defends itself. |
-| **hanging** | A unit of X on *s* is attacked by the opponent and not defended by X. Kings are never hanging. |
-| **value order** | P=1, N=B=3, R=5, Q=9, K=∞. Used only for comparisons, never as an evaluation. Where a value is added or subtracted instead of compared, a king contributes 0, except as a forked or hanging target, where it counts as 9 so that the feature's scale holds. |
-| **en prise** | A unit of X is en prise if it is hanging, or if it is attacked by an enemy unit of strictly lower value. Kings are never en prise. |
-| **destination** | The square the moved unit ends on. For castling that is the king's landing square, c1 or g1 in the mover's frame, never the rook's square the move is written with. |
-| **safe destination** | A move of piece *p* to square *t* is safe if, in the position after the move, *t* is not attacked by an enemy pawn, *t* is not attacked by an enemy piece of value below value(*p*), and *t* is not both attacked by them and undefended by us. *p* is the unit standing on *t* after the move, so a promotion is valued as the piece it becomes. No exchange sequence is played out: a defender that is pinned or overloaded is still counted as a defender. This is a 1-ply approximation of "does not lose material", and it is wrong exactly where a static exchange evaluation would be needed. |
-| **safe check** | A checking move whose destination is a safe destination. |
-| **trapped unit** | A unit that is neither a pawn nor a king and has no safe destination: of the squares its attack map reaches and no unit of its own side holds, none is safe. A unit that reaches no such square at all is trapped. Destinations are read from the attack map, as `mobility.immobile_pieces` reads them, so an absolute pin does not by itself trap a unit, and every immobile unit is a trapped one. |
-| **knight pair** | Two or more knights of one side, as the *bishop pair* is bishops on both square colours. |
-| **king ring** | The up-to-8 squares adjacent to a king. A king does not defend its own ring: its own attacks are left out of "defended" there. |
-| **ring attacker** | An enemy knight, bishop, rook or queen attacking a king ring square. Pawns and the enemy king do not count. The same set is what tropism averages over. |
-| **ring defender** | A knight, bishop, rook or queen of the king's own side attacking a king ring square. Pawns and the king itself do not count, so the set mirrors the ring attackers exactly. |
-| **king files** | The three files a king's shelter and storm are read on: the king's own file clamped to b–g, and its two neighbours, in ascending order. |
-| **virtual mobility** | The number of squares a queen placed on our own king's square would attack. A cheap proxy for how exposed the king is. |
-| **open ray** | One of the eight directions from a king, when it holds at least one square of the board and every one of them, out to the edge, is empty. A direction that leaves the board at once — southward from a king on its first rank — holds no square and is therefore not open. |
-| **luft** | A king on its relative rank 1 with at least one of the up-to-three squares diagonally or straight ahead of it empty and unattacked by the enemy. A king off its relative rank 1 has none. |
-| **castled side** | Read off the king's square and the castling rights alone, never off the moves played: *short* when the side has no castling right left and its king stands on files g or h, *long* when it has none left and its king stands on files a to c, *none* otherwise. The rights are the ones the position declares, the same ones `state.castle_short` and `castle_long` report, so a right the side could not in fact exercise still counts as one held. |
-
-### Values and exchange
-
-| Term | Definition |
-|---|---|
-| **value sum** | Σ over a set of units of P=1, N=B=3, R=5, Q=9, K=0. |
-| **exchange on a square** | Both sides capture on one square in turn, each with its least valuable attacker of that square, until one has no attacker left or stops. Attackers are read from the occupancy of the moment, so a slider standing behind a departed attacker on the same ray joins in. Pins are ignored: a pinned defender still counts. A king captures only when the square is no longer attacked by the other side, so it is the last attacker of its side. A pawn capturing onto its relative rank 8 promotes to a queen: that capture wins 8 more, and a queen stands on the square from then on. |
-| **SEE** | Static exchange evaluation, in value units, signed, positive for material won. Of a capture: the value its side wins from the exchange that capture begins, each side stopping as soon as going on would cost it material. The move itself is played whatever it costs, so a capture's SEE may be negative. Of a quiet move: the same reckoning with nothing captured, so 0 or negative unless it promotes. A promoting move wins the piece it becomes, less the pawn, besides whatever it captures. Of castling: 0. |
-| **SEE of a unit** | The SEE of the exchange the opponent begins by capturing that unit. Never negative — the opponent may leave it alone. 0 for a square no enemy unit attacks, and for a king. |
-| **signed SEE of a unit** | The same exchange with the opponent's first capture played whatever it costs, so it may be negative. Absent where the opponent has no capture there: an unattacked unit, a king, and a unit whose only attacker is a king the square is still defended against. |
-| **max gain** | The largest SEE over a side's captures. |
-| **threatened** | A unit whose SEE of a unit is above 0: the opponent wins material by taking it now. The exchange-exact form of *en prise*. |
-| **loose unit** | A unit no unit of its own side defends, attacked or not. Never a king. |
-| **attacker surplus** | On a unit: the enemy units attacking it, less the friendly units defending it, counting on both sides only units whose value order is at most the unit's own. A king is above every value order, so it counts on neither side. |
-
-### History
-
-| Term | Definition |
-|---|---|
-| **quiet plies** | Plies since the last ply of the supplied history that captured or gave check; the whole history when it holds none. Distinct from the halfmove clock, which counts captures and pawn moves. |
-| **material trend** | The material balance now, less the balance eight plies ago, both as a value sum of the side to move's units less the other side's. Fewer than eight plies means the start of the supplied history. |
-
-An exchange is a one-square reckoning, not a search: it answers "what does
-taking here cost", never "is taking here best".
-
-### Defenders, x-rays and batteries
-
-| Term | Definition |
-|---|---|
-| **sole defender** | The one unit defending a unit that exactly one friendly unit defends. |
-| **overloaded defender** | The sole defender of two or more friendly units that are each attacked. |
-| **removable defender** | A sole defender of an attacked friendly unit, itself attacked and with a signed SEE of a unit of at least 0: taking it costs the capturer nothing. |
-| **x-ray attack** | A slider's attack on a square that exists once the single unit standing between them is removed. *Through own*: that unit is the slider's own. *Through enemy*: it is not. Counted per (slider, target) pair. |
-| **battery** | Two friendly sliders on one rank, file or diagonal that both move along it — Q+R and R+R on a rank or file, Q+B and B+B on a diagonal, Q+Q on either — with nothing between them but friendly sliders that also move along it. Counted per pair, so three sliders in a row are three batteries. |
-
-### Pawns
-
-| Term | Definition |
-|---|---|
-| **front span** | For a pawn of X on file *f*, relative rank *r*: all squares on file *f* with relative rank > *r*. |
-| **passed** | No enemy pawn stands on files *f*−1, *f*, *f*+1 at any relative rank greater than *r*. |
-| **candidate passer** | Not passed, no enemy pawn on file *f* ahead of *r*, and the number of our pawns on adjacent files at relative rank ≤ *r* is at least the number of enemy pawns on adjacent files at relative rank > *r*. |
-| **unstoppable passer** | A passed pawn whose promotion square the enemy king cannot reach in time by the rule of the square: `dist(enemy_king, promo_sq) − (defender to move ? 1 : 0) > 8 − r`, and no piece other than kings remains for the defender. The defender is the passer owner's opponent, whichever side that is; its own pawns do not stop the pawn being unstoppable. |
-| **doubled** | Two or more pawns of the same colour on one file. All of them are marked. |
-| **isolated** | No friendly pawn on either adjacent file. |
-| **backward** | Not passed, no friendly pawn on an adjacent file at relative rank ≤ *r*, and the square directly ahead is attacked by an enemy pawn. |
-| **open file** | No pawn of either colour on it. |
-| **semi-open for X** | No pawn of X on it, at least one pawn of the opponent. |
-| **pawn island** | A maximal run of adjacent files carrying at least one pawn of the side. |
-| **lever** | A pawn one of whose attacked squares carries an enemy pawn. Counted once per such pawn, from the attack alone. |
-| **stop square** | The square directly ahead of a pawn on its own file: file *f*, relative rank *r*+1. |
-| **ram** | A pawn whose stop square holds an enemy pawn. |
-| **fixed pawn** | A pawn whose stop square holds any unit, its own side's or the enemy's. A ram is the case where that unit is an enemy pawn. |
-| **blocked passer** | A passed pawn whose stop square holds an enemy unit. |
-| **pawn chain** | A maximal run of friendly pawns each defending the next, along one diagonal direction. Its **length** is the number of pawns in it. Every pawn heads a run of at least itself, so a side with pawns none of which defends another has a longest chain of 1, and a side with no pawns has 0. |
-| **chain base** | The rearmost pawn of a chain of two or more: the one no other pawn of that chain defends. |
-| **majority** | On a wing, strictly more own pawns than enemy pawns. |
-| **hole for X** | A square on X's relative ranks 3 to 6 that no pawn of X can ever attack: no pawn of X stands on either adjacent file at a lower relative rank. Occupancy does not matter — a hole may carry a unit of either side, X's own pawn included. |
-| **promotion distance** | For a pawn on relative rank *r*: 8 − *r*, the pushes it still needs. |
-| **lead passer** | A side's most advanced passer: the one of greatest relative rank, and among equals the one nearest file a. |
-| **in the square** | Of the king defending against a passer on relative rank *r*: `dist(king, promotion square) − (defender to move ? 1 : 0) ≤ 8 − r`, the rule of the square. The defender is the passer owner's opponent. An `unstoppable passer` is this test failing with a bare-king defender besides. |
-| **outpost square for X** | A square on relative ranks 4–6, attacked by one of X's pawns, and never attackable by an enemy pawn (no enemy pawn on either adjacent file at that relative rank or ahead of it). |
-| **pawn shield** | For each of the king files: the nearest friendly pawn ahead of the king on that file. |
-| **pawn storm** | The same three files: the nearest enemy pawn ahead of the king. |
-| **behind a passer** | On the passer's file, at a lower relative rank in the passer owner's frame. Nothing has to stand clear between the two. |
-
-### Tactical patterns (all measured over one ply)
-
-| Term | Definition |
-|---|---|
-| **fork** | A legal move after which the moved piece attacks two or more enemy units that are each either of greater value than the moved piece, or undefended. The enemy king counts as greater value. |
-| **royal fork** | A fork one of whose targets is the king (i.e. a forking check). |
-| **absolute pin** | A unit that may not legally move because its own king would be exposed. |
-| **relative pin** | A unit that, if it moved off the ray, would expose a strictly more valuable non-king unit to the pinning slider. |
-| **skewer** | A slider attacks a unit that, if it moved off the ray, would expose a unit of lower or equal value behind it. Counted per (slider, front unit, back unit) triple, for the side whose slider it is. |
-| **discovered check available** | Some friendly unit stands on a ray between one of our sliders and the enemy king, and has at least one legal move off that ray. |
-| **mate in 1** | Some legal move leaves the opponent checkmated. |
-| **stalemate in 1** | Some legal move leaves the opponent stalemated. |
-| **quiet move** | A legal move that captures nothing. It may still promote, and it may still give check. |
-| **back rank blocked** | Of a king on its relative rank 1: every square adjacent to it on the rank ahead carries a unit of its own side. Two such squares for a king on file a or h, three otherwise. |
-
-### Endgame
-
-| Term | Definition |
-|---|---|
-| **centralisation distance** | Chebyshev distance from a square to the nearest of d4, e4, d5, e5. At most 3, so a corner is as far out as a square gets. |
-| **race plies** | For a side, the plies its most advanced passer needs to promote unopposed: 8 − its relative rank, one less when that side is to move. Nothing on the board is asked to get out of the way. |
-| **opposition** | The kings on one file, rank or diagonal, every square between them empty and their number odd. *Direct* when that number is 1, *distant* when it is 3 or 5. The side **not** to move holds it. |
-| **key square** | Of a pawn on relative rank 4 or below: the three squares two ranks ahead, on its own file and both neighbours. Of a pawn above that: the three squares one rank ahead. A rook pawn has none. |
-| **wrong-colour bishop** | A side with a bishop and a pawn, whose bishops all stand on one square colour, whose pawns are all rook pawns, and none of whose pawns promotes on that colour. Two colours are compared, so the mover's view does not enter. |
-
-### Phase
-
-`phase_points = 4·Q + 2·R + 1·B + 1·N` summed over both sides, capped at 24.
-`phase = phase_points / 24`; 1.0 is a full opening set, 0.0 is a bare pawn
-endgame.
-
-### Them-facts and the null move
-
-Facts about *their* one-ply options are computed in the position after a null
-move (they move next, everything else unchanged). When we are in check the
-null move does not exist; the whole `tactics.them` block is then zero and its
-`facts_available` bit is 0. Safety of their moves is judged against our
-pieces where they currently stand.
-
-### Cost classes
-
-Marginal cost of one feature, given a shared scratch buffer that is built
-once per position (per-piece attack sets, per-side attack maps, pawn spans,
-the legal move list).
-
-| Class | Meaning | Rough budget |
-|---|---|---|
-| **A** | A fixed number of bitwise ops, popcounts or table lookups. | ~1–20 ns |
-| **B** | One pass over the pieces present (≤32). | ~20–100 ns |
-| **C** | One pass over the legal move list (typically 20–40 moves), a few ops each. | ~50–300 ns |
-| **D** | Make-move plus movegen for a *subset* of moves (checking moves only). | ~0.2–3 µs |
-| **E** | One exchange loop on one square: least valuable attacker, x-rays refreshed, at most about 32 steps. | ~50–500 ns |
-| **F** | Make-move plus a rescan of the attack maps and the pawn structure. | ~1–5 µs |
-
-Class D applies to exactly two features (`mate_in_1`, `stalemate_in_1`). They
-sit in their own sub-group so that a search that cannot afford them can turn
-them off without changing any other offset. `C·E` is one exchange loop per
-capture in the move list, `B·E` one per unit of a side, and `C·B·E` one per
-enemy unit per quiet move — the dearest position-level class, borne by
-`tactics.quiet_threat_available` alone. Class F belongs to the `move` schema
-alone, where it is paid once per legal move.
-
-### Encoding rules
-
-| Kind | Encoding |
-|---|---|
-| bit | 0.0 or 1.0 |
-| count | `min(n, SCALE) / SCALE`, `SCALE` named per feature |
-| difference | `clamp(d / SCALE, −1, 1)`, sign kept |
-| one-hot *k* | exactly one 1.0, or all zeros when the feature is absent |
-| 8-per-file | index 0 = file a, in the mover's view |
-| 64-plane | index = square index in the mover's view (a1 = 0 … h8 = 63) |
-| square colour | light and dark are read in the mover's view too, so the rank flip does not swap them |
-
-All values are `f32` in [−1, 1]. No NaN, no infinity, ever. Side-paired
-features are written us-block first, them-block second.
-
----
-
-## 2. Groups
-
-Fourteen groups, in schema order. "Head" says which head the feature is
-expected to serve: **V** value, **P** policy, **B** both.
-
-A group with no features is named and ordered anyway: its width is 0, it
-writes nothing, and the group after it keeps its offset when the empty one is
-filled.
-
-### 2.1 `placement` — piece planes (width 768)
-
-The raw board: twelve 64-square planes in the mover's view, ours before
-theirs and in the role order P, N, B, R, Q, K.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `our_pawns` | 64 | 64-plane | A | B |
-| `our_knights` | 64 | 64-plane | A | B |
-| `our_bishops` | 64 | 64-plane | A | B |
-| `our_rooks` | 64 | 64-plane | A | B |
-| `our_queens` | 64 | 64-plane | A | B |
-| `our_king` | 64 | 64-plane | A | B |
-| `their_pawns` | 64 | 64-plane | A | B |
-| `their_knights` | 64 | 64-plane | A | B |
-| `their_bishops` | 64 | 64-plane | A | B |
-| `their_rooks` | 64 | 64-plane | A | B |
-| `their_queens` | 64 | 64-plane | A | B |
-| `their_king` | 64 | 64-plane | A | B |
-
-Because the planes are read in the mover's view, the same structure with the
-colours swapped gives the same 768 values.
-
-### 2.2 `state` — game-state flags (width 16)
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `in_check` | 1 | bit | A | B |
-| `double_check` | 1 | bit: two or more checkers | A | B |
-| `castle_rights` | 4 | bits: us short, us long, them short, them long | A | B |
-| `ep_available` | 1 | bit: the FEN names an en-passant file | A | P |
-| `ep_file` | 8 | one-hot, zeros when none | A | P |
-| `ep_capture_legal` | 1 | bit: some legal move actually captures en passant | C | P |
-
-The clock and the repetition facts are the `history` group's ([§2.13](#213-history--what-the-plies-before-say-width-27)).
-
-### 2.3 `material` — material and phase (width 28)
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `piece_count` | 10 | 5 types × 2 sides, count / 8 (pawns) or / 4 (pieces) | A | V |
-| `piece_count_diff` | 5 | difference us − them per type, / 4 | A | V |
-| `non_pawn_material` | 2 | value sum of N,B,R,Q per side, / 62 | A | V |
-| `material_balance` | 1 | (us − them) value sum, / 20 | A | V |
-| `phase` | 1 | see glossary | A | V |
-| `phase_bucket` | 3 | one-hot: phase > 0.75 / 0.25 ≤ phase ≤ 0.75 / < 0.25 | A | V |
-| `both_queens` | 1 | bit: both sides have at least one queen | A | V |
-| `pawns_only` | 1 | bit: no piece other than kings and pawns | A | V |
-| `insufficient_material` | 2 | bit per side: no pawn, rook or queen, and either at most one minor or no knight and bishops of a single square colour | A | V |
-| `bishop_pair_imbalance` | 1 | diff / 1: our bishop pair less theirs, a side holding the pair when it has bishops on both square colours | A | V |
-| `non_pawn_material_diff` | 1 | diff / 20: value sum of N, B, R and Q, us less them | A | V |
-
-### 2.4 `pawns` — pawn structure (width 195)
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `pawn_count_by_file` | 16 | 8 per side, count / 3 | A | V |
-| `pawn_count_by_rank` | 16 | 8 per side, relative rank, count / 8 | A | V |
-| `doubled_files` | 16 | 8-bit mask per side | A | V |
-| `isolated_files` | 16 | 8-bit mask per side | A | V |
-| `backward_files` | 16 | 8-bit mask per side | A | V |
-| `passed_files` | 16 | 8-bit mask per side | A | B |
-| `candidate_files` | 16 | 8-bit mask per side | A | V |
-| `passer_lead_rank` | 16 | one-hot 8 per side: relative rank of the most advanced passer; zeros if none | A | V |
-| `passer_protected` | 2 | count per side of passers defended by a friendly pawn, / 4 | A | V |
-| `passers_connected` | 2 | bit per side: two passers on adjacent files | A | V |
-| `passer_unstoppable` | 2 | bit per side | A | V |
-| `open_files` | 8 | 8-bit mask, colour-independent | A | B |
-| `semi_open_files_us` | 8 | 8-bit mask | A | B |
-| `semi_open_files_them` | 8 | 8-bit mask | A | B |
-| `pawn_islands` | 2 | count per side, / 4 | A | V |
-| `defended_pawns` | 2 | count per side of pawns defended by a pawn, / 8 | A | V |
-| `levers` | 2 | count per side, / 4 | A | P |
-| `rams` | 1 | count of blocked pawn pairs, / 8 | A | V |
-| `chain_max_length` | 2 | longest pawn chain per side, / 5 | B | V |
-| `chain_base_attacked` | 2 | bit per side: an enemy unit attacks a chain base | B | V |
-| `majority_by_wing` | 4 | bits per side: majority on the queen-side, on the king-side | A | V |
-| `holes` | 2 | count of holes for the side, / 16 | A | V |
-| `holes_occupied` | 2 | enemy knights and bishops standing on those holes, / 4 | B | V |
-| `fixed_pawns` | 2 | count per side, / 8 | A | V |
-| `blocked_passers` | 2 | count per side, / 2 | A | V |
-| `passer_distance` | 2 | promotion distance of the lead passer, / 6; 0 when the side has none, which no passer's distance is | A | V |
-| `passer_king_distance` | 4 | per side: Chebyshev distance to the lead passer's promotion square from its own king, then from the enemy king, / 8; 8 when the side has no passer, one more than any distance on a board | A | V |
-| `passer_in_square` | 2 | bit per side: the defending king is in the square of the lead passer; 0 when the side has no passer | A | V |
-| `passer_free_path` | 2 | passers whose whole front span is empty, / 2 | A | V |
-| `half_open_at_enemy_king` | 2 | files semi-open for the side among the enemy king files, / 3 | A | V |
-| `backward_on_semi_open` | 2 | backward pawns on a file semi-open for the enemy, / 4 | A | V |
-
-### 2.5 `pieces` — bishops, rooks, knights, queens (width 44)
-
-Every row is a pair: us then them.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `bishop_pair` | 2 | bit: bishops on both square colours | A | V |
-| `bishops_by_square_colour` | 4 | count on light, count on dark, / 2, per side | A | V |
-| `opposite_coloured_bishops` | 1 | bit: exactly one bishop each, on different colours | A | V |
-| `pawns_on_bishop_colour` | 2 | own pawns standing on the colour of own bishops, / 8 | A | V |
-| `rooks_connected_rank` | 2 | bit: two rooks share a rank with nothing between | A | V |
-| `rooks_connected_file` | 2 | bit: two rooks share a file with nothing between | A | V |
-| `rooks_on_open_file` | 2 | count / 2 | A | B |
-| `rooks_on_semi_open_file` | 2 | count / 2 | A | B |
-| `rooks_on_relative_7th` | 2 | count / 2 | A | V |
-| `rook_behind_own_passer` | 2 | count / 2 | A | V |
-| `rook_behind_enemy_passer` | 2 | count / 2 | A | V |
-| `trapped_rook` | 2 | bit: a rook with ≤2 non-capture destinations, on a file beyond its own king's on the wing the king stands on, its side having lost both castling rights | B | V |
-| `minors_on_outpost` | 2 | knights and bishops on an own outpost square, count / 2 | B | V |
-| `outpost_squares_free` | 2 | count of unoccupied outpost squares, / 4 | A | P |
-| `knights_on_rim` | 2 | count on files a/h or relative ranks 1/8, / 2 | A | V |
-| `minors_undeveloped` | 2 | knights and bishops still on their classic starting squares b1, c1, f1, g1 relative, / 4 | A | V |
-| `queen_developed` | 2 | bit: a queen stands off its classic starting square d1 relative | A | V |
-| `fixed_pawns_on_bishop_colour` | 2 | own fixed pawns standing on the colour of own bishops, / 8 | B | V |
-| `bishop_pair_vs_knight_pair` | 1 | diff / 1: we hold the bishop pair and they the knight pair, less the reverse | A | V |
-| `rook_on_7th_with_king_on_8th` | 2 | bit per side: a rook on the side's relative rank 7 and the enemy king on the side's relative rank 8 | A | V |
-| `trapped_pieces` | 2 | count per side of trapped units, / 4 | C | V |
-| `trapped_value` | 2 | per side, value sum of those, / 20 | C | V |
-
-`fixed_pawns_on_bishop_colour` is `pawns_on_bishop_colour` narrowed to the
-fixed pawns, so it is never the larger of the two: a pawn on the bishop's
-colour costs the bishop nothing while it can still move. In the starting array
-`trapped_pieces` is 5 a side and `trapped_value` 25: two rooks, two bishops and
-a queen with their own pawns in front of them, which is what the definition
-says of a piece that cannot move.
-
-### 2.6 `king` — king safety and shelter (width 137)
-
-Every row is a pair: our king then their king, unless noted.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `king_file` | 16 | one-hot 8 per side | A | V |
-| `king_rank` | 16 | one-hot 8 per side, relative rank | A | V |
-| `king_on_home_square` | 2 | bit: the king stands on e1 relative; classic chess only | A | V |
-| `king_castled_zone` | 4 | bits: king on files a–c, king on files f–h, per side; classic chess only | A | V |
-| `pawn_shield` | 24 | per side, for each of the king files: one-hot 4 over "friendly pawn 1 rank ahead / 2 ahead / 3+ ahead / none" | A | V |
-| `king_file_openness` | 12 | per side, for each of the king files: bit open, bit semi-open for the enemy | A | V |
-| `pawn_storm` | 24 | per side, for each of the king files: one-hot 4 over the distance of the nearest enemy pawn ahead (≤2 / 3 / 4 / 5+ or none) | A | V |
-| `ring_attackers` | 2 | count of ring attackers, / 6 | B | V |
-| `ring_attack_weight` | 2 | Σ over attackers of (N,B = 1, R = 2, Q = 4), / 16 | B | V |
-| `ring_defended` | 2 | ring squares attacked by the king's own side, / 8 | A | V |
-| `ring_holes` | 2 | ring squares attacked by the enemy and not defended, / 8 | A | V |
-| `king_escape_squares` | 2 | adjacent squares that are empty or capturable and not attacked, / 8 | A | V |
-| `back_rank_risk` | 2 | bit: king on its relative rank 1 with every forward-adjacent square occupied by a friendly unit | A | V |
-| `king_distance` | 6 | one-hot over Chebyshev distance 2–7 between the kings, shared; two kings stand neither nearer nor further apart | A | V |
-| `king_tropism` | 2 | mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king, 0 when it has none, / 8 | B | V |
-| `virtual_mobility` | 2 | see glossary, / 27 | A | V |
-| `ring_defenders` | 2 | count of ring defenders, / 6 | B | V |
-| `ring_defence_weight` | 2 | Σ over defenders of (N,B = 1, R = 2, Q = 4), / 16 | B | V |
-| `ring_attacker_surplus` | 2 | `ring_attack_weight` less `ring_defence_weight`, / 16 | B | V |
-| `open_rays_to_king` | 2 | open rays from the king, / 8 | A | V |
-| `luft` | 2 | bit: the king has luft | A | V |
-| `castled_side` | 6 | per side, one-hot 3 over short / long / none; classic chess only | A | V |
-| `opposite_side_castling` | 1 | bit: the two kings stand on opposite wings, shared | A | V |
-
-`ring_defenders` counts the pieces bearing on the ring where `ring_defended`
-counts the squares they cover, so a lone rook raking three ring squares is one
-defender. `ring_attacker_surplus` is signed: it is negative for the king whose
-own side outweighs the besiegers.
-
-`castled_side` reads the geometry, not the game: a king that walked to g1 and
-lost its rights is short, a king holding a right is none wherever it stands,
-and a king that castled and then walked back to the centre is none again.
-Chess960 starts kings anywhere on the first rank, so the feature is written as
-zeros there, as §4 says.
-
-### 2.7 `mobility` — mobility and space (width 44)
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `mobility_ratio` | 1 | our total mobility / (ours + theirs), zero when both are zero | B | V |
-| `mobility_by_type` | 10 | per side, per type (P,N,B,R,Q): squares the type's attack map covers and own units do not occupy — a union over the pieces of that type, not a sum, / 16 | B | B |
-| `safe_mobility_by_type` | 10 | as above, minus squares attacked by an enemy pawn, / 16 | B | B |
-| `mobility_diff_by_type` | 5 | us − them per type, / 16 | A | V |
-| `space` | 2 | per side: attacked squares in the opponent's half, / 32 | A | V |
-| `controlled_squares` | 3 | attacked-square count us, them, and the difference, / 48 | A | V |
-| `centre_control` | 2 | per side: attacks on d4, e4, d5, e5, / 4 | A | B |
-| `extended_centre_control` | 2 | per side: attacks on c3–f6, / 16 | A | V |
-| `immobile_pieces` | 2 | per side: non-pawn, non-king units with no destination, / 4 | B | V |
-| `total_mobility` | 2 | per side: sum over types, / 96 | B | V |
-| `safe_mobility_diff_by_type` | 5 | safe mobility us − them per type, / 16 | A | V |
-
-`immobile_pieces` reads a unit's destinations off its attack map alone, so a
-piece under an absolute pin is not immobile.
-
-### 2.8 `attacks` — attack-map summary (width 25)
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `attacked_square_count` | 3 | us, them, difference, / 48 | A | V |
-| `attacked_count` | 2 | per side, own units the opponent attacks, defended or not, / 8 | A | B |
-| `attacked_value` | 2 | per side, value sum of those, / 20 | B | B |
-| `hanging_count` | 2 | per side, / 4 | A | B |
-| `hanging_value` | 2 | per side, value sum of hanging units, / 20 | B | B |
-| `en_prise_count` | 2 | per side, / 4 | B | B |
-| `en_prise_value` | 2 | per side, value sum of the units en prise, / 20 | B | B |
-| `en_prise_max_value` | 2 | per side, largest value en prise, / 9 | B | B |
-| `pinned_count` | 2 | per side, absolute pins, / 4 | B | B |
-| `pinned_value` | 2 | per side, value sum of those, / 20 | B | B |
-| `skewer_candidates` | 2 | per side, / 4 | B | P |
-| `defended_count` | 2 | per side, own units that are defended, / 16 | A | V |
-
-### 2.9 `exchange` — static exchange evaluation (width 8)
-
-The same 4-wide block twice: `exchange.us` then `exchange.them`, the second
-computed after a null move. The schema names the two blocks' features
-`us.<feature>` and `them.<feature>`. When we are in check the null move does
-not exist and the `them` block is zero, which `tactics.them.facts_available`
-reports.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `see_best_capture` | 1 | diff / 9: the largest SEE over the side's captures, 0 when it has none | C·E | B |
-| `see_positive_capture_count` | 1 | count / 8: captures whose SEE is above 0 | C·E | P |
-| `see_equal_capture_count` | 1 | count / 8: captures whose SEE is 0 | C·E | P |
-| `see_positive_total` | 1 | count / 20: Σ of the SEEs above 0, the value twin of the count above | C·E | V |
-
-Only one of a side's captures can be played, so `see_positive_total` says how
-many ways there are to win material, not how much is to be won.
-
-### 2.10 `threats` — what is about to be lost (width 24)
-
-Every row is a pair: us then them. A threat is read on the units it is against,
-so `threats.threatened_count[us]` counts what *we* stand to lose. Kings are left
-out of every set: they cannot be captured. The last three rows are threats not
-yet made — the geometry a pin, a skewer or a piled-up attack comes from.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `threatened_count` | 2 | per side, own threatened units, / 4 | B·E | B |
-| `threatened_value` | 2 | per side, value sum of those, / 20 | B·E | B |
-| `threat_max_gain` | 2 | per side, largest SEE of a unit over its own units, / 9 | B·E | B |
-| `attacked_by_lesser_count` | 2 | per side, own units an enemy unit of strictly lower value order attacks, / 4 | B | B |
-| `queen_attacked_by_lesser` | 2 | bit per side: one of those units is a queen | A | B |
-| `overloaded_defenders` | 2 | per side, / 4 | B | V |
-| `removable_defenders` | 2 | per side, / 4 | B·E | V |
-| `loose_units` | 2 | per side, / 8 | A | V |
-| `attacker_surplus_count` | 2 | per side, own units whose attacker surplus is above 0, / 4 | B | V |
-| `xray_through_enemy` | 2 | per side, x-rays through one enemy unit onto an enemy unit, / 4 | B | P |
-| `battery_count` | 2 | per side, / 4 | B | P |
-| `battery_at_king` | 2 | bit per side: a battery whose line holds a square of the enemy king ring | B | B |
-
-`threatened_count` answers exactly what `attacks.en_prise_count` approximates:
-a unit an enemy pawn attacks is en prise whatever defends it, and threatened
-only when the exchange on its square wins material.
-
-### 2.11 `tactics` — one-ply tactics (width 132)
-
-The same 66-wide block twice: `tactics.us` then `tactics.them`, the second
-computed after a null move. The schema names the two blocks' features
-`us.<feature>` and `them.<feature>`.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `check_available` | 1 | bit | C | P |
-| `check_count` | 1 | count / 8 | C | P |
-| `check_by_piece` | 5 | bit per moving piece type P,N,B,R,Q | C | P |
-| `safe_check_available` | 1 | bit | C | P |
-| `safe_check_count` | 1 | count / 8 | C | P |
-| `safe_check_by_piece` | 5 | bit per moving piece type | C | P |
-| `double_check_available` | 1 | bit: a move giving check from two units at once | C | P |
-| `discovered_check_available` | 1 | bit: a legal move after which a unit that did not move gives check | C | P |
-| `mate_in_1` | 1 | bit | D | B |
-| `stalemate_in_1` | 1 | bit | D | B |
-| `promotion_available` | 1 | bit: some legal move promotes | C | B |
-| `promotion_file` | 8 | 8-bit mask over promoting files | C | B |
-| `promotion_piece` | 4 | bit per obtainable promotion piece Q,R,B,N | C | P |
-| `safe_promotion_available` | 1 | bit: a promotion whose destination is safe | C | B |
-| `safe_promotion_file` | 8 | 8-bit mask | C | B |
-| `capture_available` | 1 | bit | C | P |
-| `capture_count` | 1 | count / 16 | C | P |
-| `winning_capture_available` | 1 | bit: a capture whose SEE is above 0 | C·E | B |
-| `winning_capture_max_gain` | 1 | max SEE over the captures, at least 0, / 9 | C·E | B |
-| `captures_hanging_available` | 1 | bit: a capture of a hanging unit | C | B |
-| `hanging_victim_max_value` | 1 | largest hanging victim capturable now, / 9 | C | B |
-| `equal_capture_count` | 1 | captures whose SEE is 0, / 8 | C·E | P |
-| `losing_capture_count` | 1 | captures whose SEE is below 0, / 8 | C·E | P |
-| `fork_available` | 1 | bit | C | B |
-| `fork_count` | 1 | count / 4 | C | B |
-| `fork_max_value` | 1 | largest single forked value, / 9 | C | B |
-| `knight_fork_available` | 1 | bit: the forking piece is a knight | C | B |
-| `royal_fork_available` | 1 | bit | C | B |
-| `pin_creation_available` | 1 | bit: a move creating an absolute or relative pin | C | P |
-| `pin_creation_count` | 1 | count / 4 | C | P |
-| `skewer_creation_available` | 1 | bit | C | P |
-| `discovered_attack_available` | 1 | bit: a move uncovering a slider's attack on a unit of value ≥ 3 | C | P |
-| `legal_move_count` | 1 | count / 64 | C | V |
-| `only_moves` | 1 | bit: at most 2 legal moves | C | V |
-| `facts_available` | 1 | bit: 0 when the block could not be computed (in check, for the them block) | A | B |
-| `safe_check_capturing` | 1 | bit: a checking move that captures and whose destination is safe | C | B |
-| `discovered_attack_on_queen` | 1 | bit: a move uncovering a slider's attack on the enemy queen | C | B |
-| `back_rank_mate_threat` | 1 | bit: a move after which a rook or queen of the side checks the enemy king from that king's own rank, its back rank being blocked | C | B |
-| `quiet_threat_available` | 1 | bit: a quiet move after which the largest SEE of a unit over their units is greater than it is now | C·B·E | B |
-| `no_safe_moves` | 1 | bit: no legal move has a safe destination | C | V |
-| `promotion_see_positive` | 1 | bit: a promotion whose SEE is above 0 | C·E | B |
-
-Where the last six left a reading open, this is the one taken:
-
-| Feature | Reading |
-|---|---|
-| `back_rank_mate_threat` | The enemy king's back rank being blocked is read before the move, on the same squares `king.back_rank_risk` reads for that side; the checking unit need not be the one that moved, so uncovering a rook that already stood on the rank sets the bit. |
-| `quiet_threat_available` | Both sides of the comparison are the largest *SEE of a unit* over their units — `threats.threat_max_gain` for the other side as the position stands, and the same quantity in the position after the move. |
-| `no_safe_moves` | A side with no legal move has none with a safe destination, so the bit is 1 wherever the side is mated or stalemated. |
-| `promotion_see_positive` | The SEE of a promotion counts the queen it becomes less the pawn, so a push to an unattacked eighth-rank square is positive without capturing anything. |
-
-### 2.12 `endgame` — endgame facts (width 15)
-
-Always emitted; what it says decides games at low `phase` and is merely true
-above it. Every pair is us then them.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `king_centralisation` | 2 | count/3: centralisation distance of the king | A | V |
-| `race_plies` | 2 | count/8: race plies | A | V |
-| `race_plies_diff` | 1 | diff/8: ours less theirs, so below 0 is our promotion first | A | V |
-| `opposition` | 3 | one-hot: direct / distant / none | A | V |
-| `key_square_occupied` | 2 | bit per side: the king stands on a key square of a passer of its own | B | V |
-| `wrong_colour_bishop` | 2 | bit per side | A | V |
-| `drawish_material` | 3 | one-hot: two knights against a bare king / a wrong-colour bishop with its rook pawns against a bare king / one bishop each on opposite colours with no other piece; zeros for any other material | A | V |
-
-A side with no passer has `race_plies` 8: a real race runs 0 to 6 plies, so
-the top of the scale is free to say there is none, and the difference of two
-sides without a passer is 0.
-
-The opposition is held by the side not to move, always, so the one-hot says
-which kind stands rather than who has it; its third slot is "none", and one of
-the three is always set. `drawish_material` is all zeros unless one of its
-three configurations stands, and no two of them can stand at once — each of
-the first two needs a bare king, and the third a bishop on both sides.
-`key_square_occupied` and `wrong_colour_bishop` are 0 for a side whose
-material the definition does not fit, and neither reads the material beyond
-it: a bishop is the wrong colour with a rook still on the board, where
-`drawish_material` names nothing.
-
-### 2.13 `history` — what the plies before say (width 27)
-
-The halfmove clock is the position's own; every other value is 0 with
-`history_known` = 0 unless the caller supplies a game.
-
-| Feature | Width | Encoding | Cost | Head |
-|---|---|---|---|---|
-| `halfmove_bucket` | 8 | one-hot over 0 / 1–3 / 4–9 / 10–19 / 20–39 / 40–69 / 70–89 / 90 and above | A | V |
-| `halfmove_known` | 1 | bit: the position carried a halfmove clock | A | V |
-| `repetition_seen` | 1 | bit: this position occurred before in the supplied history | A | V |
-| `repetition_available_us` | 1 | bit: some legal move reaches a position in the history | C | V |
-| `captures_in_last_8` | 1 | count / 8: captures among the last eight plies | A | V |
-| `checks_in_last_8` | 1 | count / 8: plies among the last eight that gave check | A | V |
-| `quiet_plies` | 1 | count / 16: see glossary | A | V |
-| `material_trend` | 1 | diff / 9: see glossary | A | V |
-| `last_move_victim` | 5 | one-hot P,N,B,R,Q; zeros for a quiet move | A | B |
-| `last_move_mover` | 6 | one-hot P,N,B,R,Q,K; zeros when no move was played | A | B |
-| `history_known` | 1 | bit: the caller supplied a position history | A | V |
-
-A window shorter than the history it is read over is the history itself: a
-game three plies long counts captures over three plies and reads its trend
-from its own start.
-
-The Lichess evaluation dump carries 4-field FENs (no halfmove clock, no move
-number), so the whole group is constant across it — see
-[§5](#5-open-questions).
-
-### 2.14 `planes` — attack and status bitboards (width 576)
-
-Nine 64-square planes, in the mover's view. This group carries most of the
-width and is the natural first ablation target.
-
-| Plane | Definition | Cost | Head |
-|---|---|---|---|
-| `attacked_by_us` | union of our attacks | A | B |
-| `attacked_by_them` | union of their attacks | A | B |
-| `attacked_by_our_pawns` | our pawn attacks only | A | B |
-| `attacked_by_their_pawns` | their pawn attacks only | A | B |
-| `our_hanging` | our units that are hanging | A | B |
-| `their_hanging` | their units that are hanging | A | B |
-| `our_pinned` | our units under an absolute pin | B | B |
-| `their_pinned` | their units under an absolute pin | B | B |
-| `their_threatened` | their threatened units: where the material an exchange wins us stands | B·E | B |
-
-### 2.15 Totals
-
-| Group | Width | Dominant cost |
-|---|---|---|
-| `placement` | 768 | A |
-| `state` | 16 | A |
-| `material` | 28 | A |
-| `pawns` | 195 | A |
-| `pieces` | 44 | A/B/C |
-| `king` | 137 | A/B |
-| `mobility` | 44 | B |
-| `attacks` | 25 | B |
-| `exchange` | 8 | C·E |
-| `threats` | 24 | B·E |
-| `tactics` | 132 | C, plus 2 features at D |
-| `endgame` | 15 | A |
-| `history` | 27 | A |
-| `planes` | 576 | A/B |
-| **total** | **2039** | |
-| total without `placement` and `planes` | 695 | |
-
----
-
-## 3. Per-move annotations (`move` schema, width 40)
-
-One vector per legal move, for the policy head and for move ordering. *Us* is
-the side making the move and *them* its opponent, so a move vector is read the
-same way whichever side is to move. **Before** and **after** mean the position
-before and after the move. The **destination** is the glossary's: for castling
-the king's landing square.
-
-The first twelve features are read from the position's shared scratch. The
-rest read the position after the move, which is made anyway to answer
-`gives_check`; the pawn structure and the attack maps are then rescanned.
-
-The row is a section of the schema of its own, named `move`, with a version of
-its own and the features below as its entries, in this order. `schema_id`
-hashes it together with the position groups, so one id covers both rows
-([§6](#6-schema-versioning)).
-
-| Feature | Width | Encoding | Cost | Definition |
-|---|---|---|---|---|
-| `is_capture` | 1 | bit | A | The move removes a unit of theirs. |
-| `victim_type` | 5 | one-hot | A | P,N,B,R,Q; the pawn for an en-passant capture, zeros for a quiet move. |
-| `mover_type` | 6 | one-hot | A | P,N,B,R,Q,K; for castling the king. |
-| `promotion_piece` | 4 | one-hot | A | Q,R,B,N; zeros when the move is not a promotion. |
-| `gives_check` | 1 | bit | A | Their king is attacked after the move. |
-| `gives_safe_check` | 1 | bit | A | `gives_check` and `is_safe`. |
-| `is_safe` | 1 | bit | A | The destination is a safe destination. |
-| `captures_hanging` | 1 | bit | A | The victim was hanging before the move. |
-| `escapes_attack` | 1 | bit | A | `moves_attacked_unit` and `is_safe`. |
-| `to_attacked_by_pawn` | 1 | bit | A | A pawn of theirs attacks the destination after the move. |
-| `is_castling` | 1 | bit | A | The move is a castling. |
-| `is_en_passant` | 1 | bit | A | The move is an en-passant capture. |
-| `see` | 1 | diff/9 | E | The SEE of the move. Negative for a move that loses material, 0 for castling. |
-| `threat_created_max` | 1 | count/9 | B·E | The largest *SEE of a unit* over their units after the move: the most capturing next would win us. 0 when nothing there wins. |
-| `moves_attacked_unit` | 1 | bit | A | The origin is attacked by them before the move. |
-| `blocks_check` | 1 | bit | A | Exactly one unit gives check and the destination lies strictly between it and our king. |
-| `advances_passer` | 1 | bit | A | The moved unit is a pawn that was passed before the move. |
-| `creates_passer` | 1 | bit | F | We have more passed pawns after the move than before. |
-| `creates_weakness` | 3 | bits | F | Three bits: we have more isolated / doubled / backward pawns after the move than before. |
-| `opens_file_at_enemy_king` | 1 | bit | F | One of their king files carried a pawn of ours before the move and carries none after, so it is open or semi-open for us. |
-| `ring_attack_delta` | 2 | diff/4 | F | Change in our ring attackers of their king ring, then in theirs of ours. |
-| `own_hanging_delta` | 1 | diff/4 | F | Change in the number of our hanging units. |
-| `their_hanging_delta` | 1 | diff/4 | F | Change in the number of theirs. |
-| `leaves_unit_hanging` | 1 | bit | F | Some square carries a hanging unit of ours of value 3 or more after the move and carried none before. |
-| `gives_discovered_attack` | 1 | bit | B | A slider of ours the move leaves standing attacks a unit of theirs of value 3 or more that it did not attack before. |
-
-Where the catalogue left a reading open, this is the one taken:
-
-| Feature | Reading |
-|---|---|
-| `threat_created_max` | The largest *SEE of a unit* over their units, not the largest SEE over a move list we would have to generate; the two agree except where a costlier attacker beats the cheapest one. |
-| `creates_passer`, `creates_weakness` | Counted, not matched square by square: a passer that merely advances leaves the count alone, and a capture that undoubles ours sets no bit. |
-| `leaves_unit_hanging` | Read square by square, so the moved unit landing on an attacked square counts, and a unit that already hung and stayed put does not. |
-
----
-
-## 4. Excluded on purpose
-
-These are part of the contract: callers must not expect them, and the engine
-computes them itself where it needs them.
-
-| Excluded | Why |
-|---|---|
-| Forced mate in 2 or more | Needs search. |
-| Threats after the opponent's best reply | Needs 2 plies plus a choice of "best". |
-| Zugzwang, fortress, corresponding squares | Needs search or endgame theory. The opposition is not among them: `endgame.opposition` reads it off the two king squares. |
-| Tablebase results | External data. |
-| Piece-square tables and any hand-tuned score | The net learns them from the board planes. |
-| Move number / opening classification | Absent from the training source, and phase already covers what it would proxy. |
-| Absolute colour | The mover's-view flip removes it; nothing in chess depends on it. |
-| Chess960 castling geometry | Five features assume the classic starting squares and are defined for classic chess only: `pieces.minors_undeveloped`, `pieces.queen_developed`, `king.king_on_home_square`, `king.king_castled_zone`, `king.castled_side`. Under another variant they are written as zeros, so widths and offsets do not move. Every other feature is 960-safe. |
-| Game history beyond the plies a `Game` holds | The library does not track games; the caller passes what it knows, and `history` reports what the plies it was given say. |
-
----
-
-## 5. Open questions
-
-1. **Clock and history in training.** The Lichess dump has 4-field FENs, so
-   the whole `history` group is constant across the training set. A feature
-   that is always "unknown" during training is unusable at play time. Either
-   omit the group from the trained schema — it is a group of its own so that
-   this costs one name — or find a second source that carries clocks (game
-   PGNs).
-2. **`planes` width.** 576 of 2039 values. Ablation (§7) decides whether it
-   earns its place or shrinks to 4 planes.
-3. **Mate-in-1 in the search loop.** Class D. Cheap enough for a training
-   pass, possibly not for every search node; the sub-group toggle exists so
-   the answer can be measured rather than guessed.
----
-
-## 6. Schema versioning
-
-### Manifest
-
-A schema is the position row's ordered list of groups, then the move row as a
-single group named `move`. Each group has a name, an integer version, a width
-and an ordered list of feature entries; no group of the position row is named
-`move`.
-
-```
-schema_semver = "1.0.0"
-groups = [
-  { name = "placement", version = 1, width = 768, offset =   0 },
-  { name = "state",     version = 2, width =  16, offset = 768 },
-  { name = "material",  version = 2, width =  28, offset = 784 },
-  ...
-]
-moves = { name = "move", version = 1, width = 40 }
-schema_id = "dbe7a74d1478ca3f083be1cb5df36a1d"   # 128-bit, hex
-```
-
-`schema_id` is a BLAKE3 hash over the canonical UTF-8 rendering
-
-```
-<group>:<version>:<width>\n
-  <feature>:<width>:<encoding>\n   (for each feature, in order)
-```
-
-for every group of the position row in order, then for the `move` section,
-which is always last. It changes when any name, order, width or encoding of
-either row changes, and only then, so a checkpoint that stores the id detects
-a move row of another width as surely as a position row of one.
-
-`<encoding>` is the encoding kind and its scale, from a fixed vocabulary:
-`bit`, `bits`, `one-hot`, `mask8`, `plane`, `ratio`, `count/S` and `diff/S`,
-where `S` is the feature's scale; `count/8|4` marks `piece_count`, whose scale
-is 8 for pawns and 4 for the rest. The full text is checked in as
-`tests/data/schema_v1.txt`.
-
-### Contract
-
-| Rule | |
-|---|---|
-| The trained net stores the full manifest it was trained with. | |
-| The engine compares `schema_id` on load and refuses a mismatch, naming both ids and the first differing group. | |
-| The extractor can emit any *subset* of groups, in the order the manifest names, writing only those groups' widths. | |
-| Offsets are derived from the emitted subset, never hard-coded. | |
-
-### Evolution
-
-| Change | Effect | Old nets |
-|---|---|---|
-| Append a new group at the end | New `schema_id`; old groups untouched | keep working — their manifest names a subset the extractor still emits |
-| Add or reorder features inside a group | Bump that group's version; it becomes a distinct group id | keep working while the previous version's implementation is retained |
-| Give a group of width 0 its first features | Bump that group's version; every later group's offset moves | stop working; refused at load |
-| Remove a group | Bump `schema_semver` major | stop working; refused at load |
-| Add or reorder features in the `move` section | Bump its version; new `schema_id` | stop working: the move row is written whole, never as a subset |
-
-At most two versions of any group are kept compiled. Dropping an old version
-is a major release.
-
----
-
-## 7. Evaluation plan
-
-### Runs
-
-| Run | Input |
-|---|---|
-| `B0` baseline | `placement` only |
-| `B1` augmented | every group |
-| `A-<group>` | `B1` minus one group |
-| `S-<group>` | `B0` plus one group only |
-
-Both ablation directions are run: groups are strongly correlated, so leaving
-one out often costs nothing while adding it alone gains a lot.
-
-### Metrics
-
-| Head | Metric |
-|---|---|
-| value | MAE and RMSE on the win-probability scale (`cp` mapped through a logistic whose scale is fitted once on a held-out slice; `mate n` mapped to ±(1 − n/1000)) |
-| value | Spearman correlation with the label, and sign accuracy |
-| policy | top-1 and top-3 agreement with the multi-PV best move |
-| policy | cross-entropy, and mean rank of the labelled best move |
-
-### Slices
-
-Reported per slice, not only in aggregate.
-
-| Slice | Definition |
-|---|---|
-| quiet | top-1 and top-2 multi-PV evals differ by < 50 cp |
-| tactical | they differ by ≥ 200 cp |
-| endgame | `phase` < 0.25 |
-| in check | `state.in_check` = 1 |
-
-Held-out positions are deduplicated by FEN and drawn from games disjoint from
-the training split.
-
-### Cost
-
-Each run reports, from a criterion benchmark on a fixed 10k-position corpus:
-nanoseconds per position for the whole extractor, nanoseconds per group, and
-positions per second in batch mode. A group that costs more than 5 % of
-engine nodes-per-second must show a matching gain, measured as Elo in a
-fixed-node self-play match with error bars, not as validation loss.
+# The facts
+
+`Position::facts()` answers what is true about a position. Every fact belongs
+to a group, and every fact names the colour it is about.
+
+- `ByColour<T>` is one `T` for White and one for Black: `.white`, `.black`, or
+  `.of(colour)`. In Python it is an `esca.ByColour`, read the same way, and
+  `to_dict()` writes it as `{"white": …, "black": …}`.
+- `SquareSet` is a set of squares, `FileSet` a set of files. Both are objects
+  in Python too; `to_dict()` writes them as lists of names.
+- `Option<T>` is a value that may be absent — `None` in Python.
+- `[T; n]` is a fixed run of `n` values, a Python list.
+- `Role` is a piece kind, written as its lower-case letter: `p n b r q k`.
+- The named values are `Opposition` (`direct`, `distant`), `DrawishMaterial`
+  (`two_knights`, `wrong_bishop`, `opposite_bishops`) and `CastledSide`
+  (`short`, `long`). In Python each is that name as text.
+- Where a fact is about the side to move rather than about a colour — that it
+  stands in check, say — it is a plain value, and its meaning says so.
+- A rank "counted from a side's own back rank" is rank 1 at that side's
+  first rank and rank 8 at the promotion rank.
+
+Every group is also a Python attribute of `Facts`, listed by `Facts.groups()`
+and read by `facts.group(name)`; `fields()` and `to_dict()` walk one group in
+the order below. This file is generated from the group definitions themselves:
+`cargo run --example catalogue`.
+
+## `placement`
+
+Where the units stand.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `units` | `ByColour<SquareSet>` | Every unit of the side. |
+| `pawns` | `ByColour<SquareSet>` | The side's pawns. |
+| `knights` | `ByColour<SquareSet>` | The side's knights. |
+| `bishops` | `ByColour<SquareSet>` | The side's bishops. |
+| `rooks` | `ByColour<SquareSet>` | The side's rooks. |
+| `queens` | `ByColour<SquareSet>` | The side's queens. |
+| `kings` | `ByColour<SquareSet>` | The side's king. |
+
+## `state`
+
+Check, castling rights and the en-passant square.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `in_check` | `bool` | The side to move stands in check. |
+| `double_check` | `bool` | Two or more units give check to the side to move. |
+| `can_castle_short` | `ByColour<bool>` | The side may still castle short. |
+| `can_castle_long` | `ByColour<bool>` | The side may still castle long. |
+| `en_passant` | `Option<File>` | The file the position names as the en-passant target, if any. |
+| `en_passant_capture_legal` | `bool` | Some legal move captures en passant. |
+
+## `history`
+
+What the plies before this position say: the clock, repetition, and how forcing the recent play was. Everything but the halfmove clock, which the position itself carries, is zero unless `known` is true.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `known` | `bool` | A position history was supplied. |
+| `halfmove_clock` | `u32` | Plies since the last capture or pawn move. |
+| `halfmove_known` | `bool` | The position carried a halfmove clock. |
+| `repetition_seen` | `bool` | This position occurred before in the supplied history. |
+| `repetition_available` | `bool` | Some legal move reaches a position of the supplied history. |
+| `captures_in_last_8` | `u8` | Captures among the last eight plies of the supplied history. |
+| `checks_in_last_8` | `u8` | Plies among the last eight that gave check. |
+| `quiet_plies` | `u32` | Plies since the last one that captured or gave check; the whole history when it holds none. |
+| `material_trend` | `i32` | The material balance now, less the balance eight plies ago, White less Black. |
+| `last_move_victim` | `Option<Role>` | The role the last move captured, the pawn for an en-passant capture. |
+| `last_move_mover` | `Option<Role>` | The role that made the last move; for castling, the king. |
+
+## `material`
+
+Material and phase.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `pawns` | `ByColour<u8>` | The side's pawns. |
+| `knights` | `ByColour<u8>` | The side's knights. |
+| `bishops` | `ByColour<u8>` | The side's bishops. |
+| `rooks` | `ByColour<u8>` | The side's rooks. |
+| `queens` | `ByColour<u8>` | The side's queens. |
+| `non_pawn_value` | `ByColour<i32>` | The value of the side's knights, bishops, rooks and queens. |
+| `value` | `ByColour<i32>` | The value of every unit of the side but the king. |
+| `phase_points` | `u8` | `4·Q + 2·R + B + N` over both sides: 24 at the full opening array, 0 with nothing but kings and pawns left. |
+| `both_queens` | `bool` | Both sides have at least one queen. |
+| `pawns_only` | `bool` | Neither side has a unit other than kings and pawns. |
+| `insufficient_material` | `ByColour<bool>` | The side's own material could never deliver mate. |
+
+## `pawns`
+
+Pawn structure.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `pawns` | `ByColour<SquareSet>` | The side's pawns. |
+| `passed` | `ByColour<SquareSet>` | The side's pawns with no enemy pawn ahead on their own or an adjacent file. |
+| `candidates` | `ByColour<SquareSet>` | The side's candidate passers: pawns with no enemy pawn ahead on their own file, backed by at least as many friendly pawns behind on the adjacent files as there are enemy pawns ahead on them. |
+| `doubled` | `ByColour<SquareSet>` | The side's pawns sharing a file with another pawn of their own colour. |
+| `isolated` | `ByColour<SquareSet>` | The side's pawns with no friendly pawn on either adjacent file. |
+| `backward` | `ByColour<SquareSet>` | The side's pawns that cannot advance without being taken and cannot be defended by a pawn. |
+| `defended` | `ByColour<SquareSet>` | The side's pawns defended by a pawn of their own colour. |
+| `count_by_file` | `ByColour<[u8; 8]>` | The side's pawns per file, file a first. |
+| `count_by_rank` | `ByColour<[u8; 8]>` | The side's pawns per rank counted from its own back rank, rank 1 first. |
+| `open_files` | `FileSet` | Files carrying no pawn of either colour. |
+| `semi_open_files` | `ByColour<FileSet>` | Files carrying no pawn of the side and at least one of the other. |
+| `islands` | `ByColour<u8>` | The side's maximal runs of adjacent files carrying a pawn. |
+| `levers` | `ByColour<u8>` | The side's pawns that can capture an enemy pawn. |
+| `rams` | `u8` | Pawn pairs blocking each other head on. |
+| `passer_lead_rank` | `ByColour<Option<u8>>` | The rank, counted from the side's own back rank, of its most advanced passer. |
+| `passer_protected` | `ByColour<u8>` | The side's passers defended by a friendly pawn. |
+| `passers_connected` | `ByColour<bool>` | The side has two passers on adjacent files. |
+| `passer_unstoppable` | `ByColour<bool>` | The side has a passer the enemy king cannot catch. |
+| `chain_max_length` | `ByColour<u8>` | The side's longest run of pawns each defending the next. |
+| `chain_base_attacked` | `ByColour<bool>` | An enemy unit attacks the base of one of the side's chains of two or more. |
+| `queenside_majority` | `ByColour<bool>` | The side has more pawns than the enemy on files a to d. |
+| `kingside_majority` | `ByColour<bool>` | The side has more pawns than the enemy on files e to h. |
+| `holes` | `ByColour<SquareSet>` | Squares on the side's ranks 3 to 6 that no pawn of the side can ever attack. |
+| `holes_occupied` | `ByColour<u8>` | Enemy knights and bishops standing on those squares. |
+| `fixed_pawns` | `ByColour<u8>` | The side's pawns whose stop square holds a unit of either colour. |
+| `blocked_passers` | `ByColour<u8>` | The side's passers whose stop square holds an enemy unit. |
+| `passer_distance` | `ByColour<Option<u8>>` | The pushes the side's lead passer still needs. |
+| `passer_own_king_distance` | `ByColour<Option<u8>>` | The distance from the side's own king to its lead passer's promotion square. |
+| `passer_enemy_king_distance` | `ByColour<Option<u8>>` | The distance from the enemy king to that same square. |
+| `passer_in_square` | `ByColour<bool>` | The enemy king stands in the square of the side's lead passer. |
+| `passer_free_path` | `ByColour<u8>` | The side's passers whose whole front span is empty. |
+| `half_open_at_enemy_king` | `ByColour<u8>` | Files semi-open for the side among the enemy king's three shield files. |
+| `backward_on_semi_open` | `ByColour<u8>` | The side's backward pawns on a file semi-open for the enemy. |
+
+## `pieces`
+
+Bishops, rooks, knights and queens.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `bishop_pair` | `ByColour<bool>` | The side holds bishops on both square colours. |
+| `knight_pair` | `ByColour<bool>` | The side holds two or more knights. |
+| `bishops_light` | `ByColour<u8>` | The side's bishops on light squares. |
+| `bishops_dark` | `ByColour<u8>` | The side's bishops on dark squares. |
+| `opposite_coloured_bishops` | `bool` | Exactly one bishop each, on different square colours. |
+| `pawns_on_bishop_colour` | `ByColour<u8>` | The side's pawns standing on a square colour of one of its own bishops. |
+| `rooks_connected_rank` | `ByColour<bool>` | Two of the side's rooks share a rank with nothing between. |
+| `rooks_connected_file` | `ByColour<bool>` | Two of the side's rooks share a file with nothing between. |
+| `rooks_on_open_file` | `ByColour<u8>` | The side's rooks on an open file. |
+| `rooks_on_semi_open_file` | `ByColour<u8>` | The side's rooks on a file semi-open for their own side. |
+| `rooks_on_seventh_rank` | `ByColour<u8>` | The side's rooks on its seventh rank, counted from its own back rank. |
+| `rook_behind_own_passer` | `ByColour<u8>` | The side's rooks behind a passer of their own side. |
+| `rook_behind_enemy_passer` | `ByColour<u8>` | The side's rooks behind an enemy passer. |
+| `trapped_rook` | `ByColour<bool>` | The side has a rook shut in by its own king with no file to leave by. |
+| `outposts` | `ByColour<SquareSet>` | The side's outpost squares: squares on its ranks 4 to 6 that a friendly pawn defends and no enemy pawn can ever attack. |
+| `minors_on_outpost` | `ByColour<u8>` | The side's knights and bishops standing on one of them. |
+| `outpost_squares_free` | `ByColour<u8>` | Its unoccupied outpost squares. |
+| `knights_on_rim` | `ByColour<u8>` | The side's knights on file a or h, or on its rank 1 or 8. |
+| `minors_undeveloped` | `ByColour<u8>` | The side's knights and bishops still on their starting squares. |
+| `queen_developed` | `ByColour<bool>` | A queen of the side stands off its starting square. |
+| `fixed_pawns_on_bishop_colour` | `ByColour<u8>` | The side's fixed pawns standing on a square colour of one of its own bishops. |
+| `rook_on_seventh_with_king_on_eighth` | `ByColour<bool>` | The side has a rook on its seventh rank with the enemy king on its eighth. |
+| `trapped_pieces` | `ByColour<u8>` | The side's units that are neither pawns nor kings and have no safe destination. |
+| `trapped_value` | `ByColour<u8>` | The value sum of those. |
+
+## `king`
+
+King safety and shelter.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `square` | `ByColour<Square>` | Where the side's king stands. |
+| `on_home_square` | `ByColour<bool>` | It stands on its own starting square. |
+| `castled_queenside` | `ByColour<bool>` | It stands on files a to c. |
+| `castled_kingside` | `ByColour<bool>` | It stands on files f to h. |
+| `shield_files` | `ByColour<[File; 3]>` | The three files the king's shelter is read on, in ascending order. |
+| `shield` | `ByColour<[Option<u8>; 3]>` | Ranks to the nearest friendly pawn ahead of the king, per shield file. |
+| `shield_file_open` | `ByColour<[bool; 3]>` | Each shield file carries no pawn of either colour. |
+| `shield_file_semi_open_for_enemy` | `ByColour<[bool; 3]>` | Each shield file is semi-open for the enemy of that king. |
+| `storm` | `ByColour<[Option<u8>; 3]>` | Ranks to the nearest enemy pawn ahead of the king, per shield file. |
+| `ring` | `ByColour<SquareSet>` | The squares adjacent to the king. |
+| `ring_attackers` | `ByColour<u8>` | Enemy knights, bishops, rooks and queens attacking that ring. |
+| `ring_attack_weight` | `ByColour<u8>` | Σ over those attackers of N, B = 1, R = 2, Q = 4. |
+| `ring_defended` | `ByColour<u8>` | Ring squares the king's own side attacks, the king itself apart. |
+| `ring_holes` | `ByColour<u8>` | Ring squares the enemy attacks and `ring_defended` does not count. |
+| `escape_squares` | `ByColour<u8>` | Squares adjacent to the king that are empty or capturable and not attacked. |
+| `back_rank_risk` | `ByColour<bool>` | The king stands on its rank 1 with every forward-adjacent square held by a friendly unit. |
+| `distance` | `u8` | Chebyshev distance between the kings. |
+| `tropism` | `ByColour<f32>` | Mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king. |
+| `virtual_mobility` | `ByColour<u8>` | Squares a queen on this king's square would attack. |
+| `ring_defenders` | `ByColour<u8>` | The king's own knights, bishops, rooks and queens attacking its ring. |
+| `ring_defence_weight` | `ByColour<u8>` | Σ over those defenders of N, B = 1, R = 2, Q = 4. |
+| `open_rays` | `ByColour<u8>` | Directions from the king holding at least one square, all of them empty out to the edge. |
+| `luft` | `ByColour<bool>` | The king stands on its rank 1 with a square ahead of it empty and unattacked. |
+| `castled_side` | `ByColour<Option<CastledSide>>` | The side the king's square and its spent castling rights read as. |
+| `opposite_side_castling` | `bool` | The two kings stand on opposite wings. |
+
+## `mobility`
+
+Mobility and space.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `pawns` | `ByColour<u16>` | Squares the side's pawns attack that its own units do not hold. |
+| `knights` | `ByColour<u16>` | The same for its knights. |
+| `bishops` | `ByColour<u16>` | The same for its bishops. |
+| `rooks` | `ByColour<u16>` | The same for its rooks. |
+| `queens` | `ByColour<u16>` | The same for its queens. |
+| `safe_pawns` | `ByColour<u16>` | Of the pawn squares, those no enemy pawn attacks. |
+| `safe_knights` | `ByColour<u16>` | The same for its knights. |
+| `safe_bishops` | `ByColour<u16>` | The same for its bishops. |
+| `safe_rooks` | `ByColour<u16>` | The same for its rooks. |
+| `safe_queens` | `ByColour<u16>` | The same for its queens. |
+| `total` | `ByColour<u16>` | The five counts added up. |
+| `space` | `ByColour<u16>` | Squares the side attacks in the enemy's half. |
+| `centre_control` | `ByColour<u8>` | The side's attacks on d4, e4, d5 and e5. |
+| `extended_centre_control` | `ByColour<u8>` | The side's attacks on c3 to f6. |
+| `immobile_pieces` | `ByColour<u8>` | The side's units other than pawns and kings with no destination. |
+
+## `attacks`
+
+The attack maps and what they say about the units standing on the board.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `controlled` | `ByColour<SquareSet>` | Every square the side attacks. |
+| `by_pawns` | `ByColour<SquareSet>` | The squares the side's pawns attack. |
+| `by_knights` | `ByColour<SquareSet>` | The squares its knights attack. |
+| `by_bishops` | `ByColour<SquareSet>` | The squares its bishops attack. |
+| `by_rooks` | `ByColour<SquareSet>` | The squares its rooks attack. |
+| `by_queens` | `ByColour<SquareSet>` | The squares its queens attack. |
+| `by_kings` | `ByColour<SquareSet>` | The squares its king attacks. |
+| `attacked` | `ByColour<SquareSet>` | The side's units the enemy attacks, defended or not; never a king. |
+| `hanging` | `ByColour<SquareSet>` | Those of them their own side does not defend. |
+| `en_prise` | `ByColour<SquareSet>` | Those hanging or attacked by a cheaper enemy unit. |
+| `pinned` | `ByColour<SquareSet>` | The side's units under an absolute pin. |
+| `defended` | `ByColour<SquareSet>` | The side's units standing on a square their own side attacks. |
+| `attacked_value` | `ByColour<i32>` | The value sum of the attacked units. |
+| `hanging_value` | `ByColour<i32>` | The value sum of the hanging units. |
+| `en_prise_value` | `ByColour<i32>` | The value sum of the units en prise. |
+| `en_prise_max_value` | `ByColour<i32>` | The largest value en prise. |
+| `pinned_value` | `ByColour<i32>` | The value sum of the absolutely pinned units. |
+| `skewer_candidates` | `ByColour<u8>` | Enemy unit pairs the side's sliders skewer. |
+
+## `exchange`
+
+Each side's captures, judged by the exchange they start. The values for the side not to move are read after a null move; when the side to move is in check that move does not exist and they are zero.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `see_best_capture` | `ByColour<i32>` | The largest static exchange evaluation over the side's captures; 0 when it has none. |
+| `see_positive_capture_count` | `ByColour<u16>` | Its captures whose evaluation is above 0. |
+| `see_equal_capture_count` | `ByColour<u16>` | Its captures whose evaluation is 0. |
+| `see_positive_total` | `ByColour<i32>` | The sum of the evaluations above 0. |
+
+## `threats`
+
+What each side stands to lose, and the slider geometry behind it. Every set is read on the units it is about, and holds no king.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `threatened` | `ByColour<SquareSet>` | The side's units the enemy wins material by taking. |
+| `threatened_value` | `ByColour<i32>` | The value sum of those. |
+| `threat_max_gain` | `ByColour<i32>` | The largest such gain over the side's own units. |
+| `attacked_by_lesser` | `ByColour<SquareSet>` | The side's units an enemy unit of strictly lower value attacks. |
+| `queen_attacked_by_lesser` | `ByColour<bool>` | One of those units is a queen. |
+| `overloaded_defenders` | `ByColour<SquareSet>` | The side's sole defenders of two or more attacked friendly units. |
+| `removable_defenders` | `ByColour<SquareSet>` | Its sole defenders the enemy can capture without loss. |
+| `loose` | `ByColour<SquareSet>` | The side's units no unit of their own side defends. |
+| `attacker_surplus` | `ByColour<SquareSet>` | The side's units more enemy units attack than its own defend. |
+| `xray_through_enemy` | `ByColour<u8>` | The side's x-rays onto an enemy unit through one enemy unit. |
+| `battery_count` | `ByColour<u8>` | The side's batteries: two of its own sliders on one line, agreeing in direction. |
+| `battery_at_king` | `ByColour<bool>` | One of them bears on a square of the enemy king's ring. |
+
+## `tactics`
+
+Each side's one-ply tactical options. The values for the side not to move are read after a null move; when the side to move is in check that move does not exist and they are zero, which `available` reports.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `available` | `ByColour<bool>` | The side's values could be read. |
+| `check_count` | `ByColour<u16>` | Its moves giving check. |
+| `check_by_pawn` | `ByColour<bool>` | A pawn move of the side gives check. |
+| `check_by_knight` | `ByColour<bool>` | A knight move gives check. |
+| `check_by_bishop` | `ByColour<bool>` | A bishop move gives check. |
+| `check_by_rook` | `ByColour<bool>` | A rook move gives check. |
+| `check_by_queen` | `ByColour<bool>` | A queen move gives check. |
+| `safe_check_count` | `ByColour<u16>` | Its checking moves whose destination is safe. |
+| `safe_check_by_pawn` | `ByColour<bool>` | A pawn move of the side gives check from a safe square. |
+| `safe_check_by_knight` | `ByColour<bool>` | A knight move does. |
+| `safe_check_by_bishop` | `ByColour<bool>` | A bishop move does. |
+| `safe_check_by_rook` | `ByColour<bool>` | A rook move does. |
+| `safe_check_by_queen` | `ByColour<bool>` | A queen move does. |
+| `double_check_available` | `ByColour<bool>` | A move gives check from two units at once. |
+| `discovered_check_available` | `ByColour<bool>` | A move gives check with a unit that did not move. |
+| `mate_in_1` | `ByColour<bool>` | A move leaves the opponent checkmated. |
+| `stalemate_in_1` | `ByColour<bool>` | A move leaves the opponent stalemated. |
+| `promotion_files` | `ByColour<FileSet>` | Files a legal move of the side promotes on. |
+| `promotes_to_queen` | `ByColour<bool>` | A promotion to a queen is available. |
+| `promotes_to_rook` | `ByColour<bool>` | One to a rook is. |
+| `promotes_to_bishop` | `ByColour<bool>` | One to a bishop is. |
+| `promotes_to_knight` | `ByColour<bool>` | One to a knight is. |
+| `safe_promotion_files` | `ByColour<FileSet>` | Files a legal promotion with a safe destination lands on. |
+| `capture_count` | `ByColour<u16>` | The side's capturing moves. |
+| `winning_capture_available` | `ByColour<bool>` | One of them takes a unit that outvalues the capturer or is undefended. |
+| `winning_capture_max_gain` | `ByColour<i32>` | The largest `victim − capturer` over the captures, at least 0. |
+| `captures_hanging` | `ByColour<bool>` | A capture takes a hanging unit. |
+| `hanging_victim_max_value` | `ByColour<i32>` | The largest value among the hanging units capturable now. |
+| `equal_capture_count` | `ByColour<u16>` | Captures of a defended unit of equal value. |
+| `losing_capture_count` | `ByColour<u16>` | Captures of a defended unit of lower value. |
+| `fork_count` | `ByColour<u16>` | Moves after which the moved unit forks. |
+| `fork_max_value` | `ByColour<i32>` | The largest single forked value. |
+| `knight_fork_available` | `ByColour<bool>` | A fork by a knight. |
+| `royal_fork_available` | `ByColour<bool>` | A fork one of whose targets is the king. |
+| `pin_creation_count` | `ByColour<u16>` | Moves creating an absolute or a relative pin. |
+| `skewer_creation_available` | `ByColour<bool>` | A move creating a skewer. |
+| `discovered_attack_available` | `ByColour<bool>` | A move uncovering a slider's attack on a unit of value 3 or more. |
+| `legal_move_count` | `ByColour<u16>` | The side's legal moves. |
+| `safe_check_capturing` | `ByColour<bool>` | A checking move that captures and whose destination is safe. |
+| `discovered_attack_on_queen` | `ByColour<bool>` | A move uncovering a slider's attack on the enemy queen. |
+| `back_rank_mate_threat` | `ByColour<bool>` | A move after which a rook or queen of the side checks the enemy king along that king's own rank, its back rank being blocked. |
+| `quiet_threat_available` | `ByColour<bool>` | A quiet move after which the largest gain the side threatens is greater than it is now. |
+| `no_safe_moves` | `ByColour<bool>` | No legal move of the side has a safe destination. |
+| `promotion_see_positive` | `ByColour<bool>` | A promotion of the side wins material. |
+
+## `endgame`
+
+Where the kings stand, how the pawn race runs, and which drawn configuration the material is.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `king_centralisation` | `ByColour<u8>` | Chebyshev distance from the side's king to the nearest central square. |
+| `race_plies` | `ByColour<u8>` | Plies the side's most advanced passer needs to promote unopposed; 8 for a side with no passer. |
+| `opposition` | `Option<Opposition>` | The opposition the kings stand in, if any. |
+| `key_square_occupied` | `ByColour<bool>` | The side's king stands on a key square of one of its own passers. |
+| `wrong_colour_bishop` | `ByColour<bool>` | The side's bishops all stand on the colour none of its pawns promotes on, every one of those pawns being a rook pawn. |
+| `drawish_material` | `Option<DrawishMaterial>` | The drawn configuration the material is, if it is one of the three. |
+
+## `maps`
+
+The square sets a reader most often wants side by side: what each side attacks, and what of it stands hanging, pinned or threatened. Every one of them is also a field of the `attacks` or the `threats` group; this group is where they are read together.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `controlled` | `ByColour<SquareSet>` | Every square the side attacks. |
+| `by_pawns` | `ByColour<SquareSet>` | The squares the side's pawns attack. |
+| `hanging` | `ByColour<SquareSet>` | The side's units the enemy attacks and their own side does not defend. |
+| `pinned` | `ByColour<SquareSet>` | The side's units under an absolute pin. |
+| `threatened` | `ByColour<SquareSet>` | The side's units the enemy wins material by taking. |
+
+## `move`
+
+What one legal move does, beyond what the move itself says. The mover is the
+side to move; the enemy is the other side. Every annotated move of
+`facts.moves` carries these.
+
+| field | type | meaning |
+| --- | --- | --- |
+| `victim` | `Option<Role>` | The role captured, the pawn for an en-passant capture. |
+| `mover` | `Role` | The role that moves. |
+| `promotion` | `Option<Role>` | The role a promoting pawn becomes. |
+| `gives_check` | `bool` | The move gives check. |
+| `gives_safe_check` | `bool` | The move gives check and its destination is safe. |
+| `is_safe` | `bool` | The destination is a safe destination. |
+| `captures_hanging` | `bool` | The move captures a hanging unit. |
+| `escapes_attack` | `bool` | The origin is attacked by the enemy and the destination is safe. |
+| `to_attacked_by_pawn` | `bool` | The destination is attacked by an enemy pawn. |
+| `is_castling` | `bool` | The move is a castling. |
+| `is_en_passant` | `bool` | The move is an en-passant capture. |
+| `see` | `i32` | The static exchange evaluation of the move, signed. |
+| `threat_created_max` | `i32` | The largest static exchange evaluation of one of the enemy's units after the move; 0 when the move threatens nothing. |
+| `moves_attacked_unit` | `bool` | The origin is attacked by the enemy. |
+| `blocks_check` | `bool` | The destination interposes on the ray of the one unit giving check. |
+| `advances_passer` | `bool` | The moved unit is a passed pawn. |
+| `creates_passer` | `bool` | The mover has more passers after the move than before. |
+| `creates_isolated` | `bool` | The mover has more isolated pawns after the move than before. |
+| `creates_doubled` | `bool` | The mover has more doubled pawns after the move than before. |
+| `creates_backward` | `bool` | The mover has more backward pawns after the move than before. |
+| `opens_file_at_enemy_king` | `bool` | One of the enemy king's shield files carried a pawn of the mover's and carries none after. |
+| `enemy_king_attackers_delta` | `i32` | Change in the number of the mover's units attacking the enemy king ring. |
+| `mover_king_attackers_delta` | `i32` | Change in the number of the enemy's units attacking the mover's king ring. |
+| `mover_hanging_delta` | `i32` | Change in the number of the mover's hanging units. |
+| `enemy_hanging_delta` | `i32` | Change in the number of the enemy's hanging units. |
+| `leaves_unit_hanging` | `bool` | A square carries a hanging unit of the mover's worth 3 or more after the move and carried none before. |
+| `gives_discovered_attack` | `bool` | A slider of the mover's that the move leaves standing gains an attack on an enemy unit worth 3 or more. |

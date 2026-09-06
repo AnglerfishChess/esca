@@ -7,7 +7,7 @@
 mod common;
 
 use common::{move_facts, move_facts_under};
-use esca::{CHESS960, CLASSIC, MoveFacts, Role, Variant};
+use esca::{CHESS960, CLASSIC, Role, Variant};
 use rstest::rstest;
 
 /// A knight on e4 reaching an enemy unit of every role; only d6 is undefended.
@@ -535,8 +535,8 @@ fn a_move_states_what_it_does_to_both_king_rings(
     let facts = move_facts(fen, uci);
     assert_eq!(
         (
-            facts.our_ring_attackers_delta,
-            facts.their_ring_attackers_delta
+            facts.enemy_king_attackers_delta,
+            facts.mover_king_attackers_delta
         ),
         deltas
     );
@@ -560,7 +560,10 @@ fn a_move_states_how_many_units_of_each_side_it_leaves_hanging(
     #[case] deltas: (i32, i32),
 ) {
     let facts = move_facts(fen, uci);
-    assert_eq!((facts.own_hanging_delta, facts.their_hanging_delta), deltas);
+    assert_eq!(
+        (facts.mover_hanging_delta, facts.enemy_hanging_delta),
+        deltas
+    );
 }
 
 #[rstest]
@@ -601,100 +604,8 @@ fn a_move_gives_a_discovered_attack_when_a_slider_it_leaves_standing_gains_one(
     assert_eq!(move_facts(fen, uci).gives_discovered_attack, discovers);
 }
 
-#[rstest]
-#[case::promotion_capture_with_check(
-    PROMOTION,
-    "e7d8q",
-    [
-        1.0, // capture
-        0.0, 0.0, 0.0, 1.0, 0.0, // victim: rook
-        1.0, 0.0, 0.0, 0.0, 0.0, 0.0, // mover: pawn
-        1.0, 0.0, 0.0, 0.0, // promotion: queen
-        1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-        // see 13, threat 3, advances a passer, one more ring attacker
-        1.0, 3.0 / 9.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
-    ]
-)]
-#[case::castling(
-    EVERY_ROLE,
-    "e1h1",
-    [
-        0.0, // quiet
-        0.0, 0.0, 0.0, 0.0, 0.0, // victim: none
-        0.0, 0.0, 0.0, 0.0, 0.0, 1.0, // mover: king
-        0.0, 0.0, 0.0, 0.0, // promotion: none
-        0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-        // a symmetric position castling changes nothing about
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    ]
-)]
-#[case::en_passant(
-    EN_PASSANT,
-    "e5d6",
-    [
-        1.0, // capture
-        1.0, 0.0, 0.0, 0.0, 0.0, // victim: pawn
-        1.0, 0.0, 0.0, 0.0, 0.0, 0.0, // mover: pawn
-        0.0, 0.0, 0.0, 0.0, // promotion: none
-        0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0,
-        // see 1, a passer that leaves their king's e-file, one pawn fewer hanging
-        1.0 / 9.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -0.25, 0.0, 0.0,
-    ]
-)]
-#[case::capture_that_hangs(
-    WHEEL,
-    "e4g5",
-    [
-        1.0, // capture
-        0.0, 0.0, 0.0, 0.0, 1.0, // victim: queen
-        0.0, 1.0, 0.0, 0.0, 0.0, 0.0, // mover: knight
-        0.0, 0.0, 0.0, 0.0, // promotion: none
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        // see 6, off an attacked square, and the knight is left hanging
-        6.0 / 9.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.25, 1.0, 0.0,
-    ]
-)]
-#[case::quiet_move_that_hangs_a_rook(
-    THREAT,
-    "a1a4",
-    [
-        0.0, // quiet
-        0.0, 0.0, 0.0, 0.0, 0.0, // victim: none
-        0.0, 0.0, 0.0, 1.0, 0.0, 0.0, // mover: rook
-        0.0, 0.0, 0.0, 0.0, // promotion: none
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        // see −5, threatening a rook, and hanging one of each side's
-        -5.0 / 9.0, 5.0 / 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 1.0,
-        0.0,
-    ]
-)]
-#[case::black_capture(
-    EXCHANGE_BLACK,
-    "g8b3",
-    [
-        1.0, // capture
-        0.0, 1.0, 0.0, 0.0, 0.0, // victim: knight
-        0.0, 0.0, 1.0, 0.0, 0.0, 0.0, // mover: bishop
-        0.0, 0.0, 0.0, 0.0, // promotion: none
-        0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-        // see 3, threatening a rook, one more ring attacker, one fewer hanging
-        3.0 / 9.0, 5.0 / 9.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, -0.25, 0.0,
-        0.0,
-    ]
-)]
-fn a_move_is_forty_values_in_the_order_the_catalogue_lists(
-    #[case] fen: &str,
-    #[case] uci: &str,
-    #[case] row: [f32; 40],
-) {
-    let mut out = [0.0f32; MoveFacts::WIDTH];
-    move_facts(fen, uci).encode_into(&mut out);
-    assert_eq!(out, row);
-}
-
-/// No `move` fact is among the four `features.md` §4 defines for classic chess
-/// only, so a Chess960 position is read the same way — except that castling
-/// starts and ends where its own array puts the king and the rook.
+/// A Chess960 position is read the same way as a classic one, except that
+/// castling starts and ends where its own array puts the king and the rook.
 #[test]
 fn the_move_facts_of_a_chess960_position_follow_its_own_castling_geometry() {
     let short = move_facts_under(&CHESS960, NINE_SIXTY, "b1e1");
@@ -740,12 +651,12 @@ fn a_chess960_move_reads_its_own_castling_geometry(
     #[case] fen: &str,
     #[case] uci: &str,
     #[case] threat: i32,
-    #[case] their_ring_delta: i32,
+    #[case] mover_king_delta: i32,
 ) {
     let facts = move_facts_under(&CHESS960, fen, uci);
     assert_eq!(facts.threat_created_max, threat);
-    assert_eq!(facts.their_ring_attackers_delta, their_ring_delta);
-    assert_eq!(facts.our_ring_attackers_delta, 0);
+    assert_eq!(facts.mover_king_attackers_delta, mover_king_delta);
+    assert_eq!(facts.enemy_king_attackers_delta, 0);
     assert!(!facts.blocks_check);
     assert!(!facts.moves_attacked_unit);
     assert!(!facts.leaves_unit_hanging);
@@ -760,8 +671,8 @@ fn a_chess960_move_reads_its_own_castling_geometry(
 fn a_chess960_capture_states_what_it_leaves_behind(#[case] fen: &str, #[case] uci: &str) {
     let facts = move_facts_under(&CHESS960, fen, uci);
     assert!(facts.moves_attacked_unit);
-    assert_eq!(facts.own_hanging_delta, 1);
+    assert_eq!(facts.mover_hanging_delta, 1);
     assert!(facts.leaves_unit_hanging);
-    assert_eq!(facts.our_ring_attackers_delta, 1);
+    assert_eq!(facts.enemy_king_attackers_delta, 1);
     assert_eq!(facts.threat_created_max, 0);
 }

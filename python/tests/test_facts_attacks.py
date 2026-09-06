@@ -47,16 +47,13 @@ PINNED_QUEEN_BLACK = "k3r3/8/8/8/8/8/4Q3/4K3 b - - 0 1"
 #: A Chess960 middlegame: three loose pawns a side, and a bishop loose on b3.
 NINE_SIXTY = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10"
 
-#: The role order `by_role` is written in.
-PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING = range(6)
-
 #: The helpers `conftest.py` hands over.
 FactsOf = Callable[..., esca.Facts]
 Squares = Callable[[str], set[str]]
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (
             START,
@@ -77,15 +74,15 @@ Squares = Callable[[str], set[str]]
     ids=["start", "rays", "checked"],
 )
 def test_a_side_attacks_every_square_one_of_its_units_could_capture_on(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.by[esca.US]) == squares(us)
-    assert set(attacks.by[esca.THEM]) == squares(them)
+    assert set(attacks.controlled.white) == squares(white)
+    assert set(attacks.controlled.black) == squares(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, 22, 22),
         (RAYS, 9, 16),
@@ -97,14 +94,14 @@ def test_a_side_attacks_every_square_one_of_its_units_could_capture_on(
     ],
     ids=["start", "rays", "loose", "checked", "skewers", "behind", "castled"],
 )
-def test_the_attacked_square_count_is_the_size_of_that_map(fen: str, us: int, them: int, facts_of: FactsOf) -> None:
+def test_the_attacked_square_count_is_the_size_of_that_map(fen: str, white: int, black: int, facts_of: FactsOf) -> None:
     attacks = facts_of(fen).attacks
-    assert len(attacks.by[esca.US]) == us
-    assert len(attacks.by[esca.THEM]) == them
+    assert len(attacks.controlled.white) == white
+    assert len(attacks.controlled.black) == black
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "a3 b3 c3 d3 e3 f3 g3 h3", "a6 b6 c6 d6 e6 f6 g6 h6"),
         (RAYS, "", "a1 c1"),
@@ -114,11 +111,11 @@ def test_the_attacked_square_count_is_the_size_of_that_map(fen: str, us: int, th
     ids=["start", "rays", "loose", "castled"],
 )
 def test_a_pawn_attacks_the_two_squares_diagonally_ahead_of_it_and_no_other(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.by_pawns[esca.US]) == squares(us)
-    assert set(attacks.by_pawns[esca.THEM]) == squares(them)
+    assert set(attacks.by_pawns.white) == squares(white)
+    assert set(attacks.by_pawns.black) == squares(black)
 
 
 def test_the_map_is_kept_per_role_as_well(facts_of: FactsOf, squares: Squares) -> None:
@@ -126,29 +123,28 @@ def test_the_map_is_kept_per_role_as_well(facts_of: FactsOf, squares: Squares) -
     none of contributes nothing."""
     attacks = facts_of(LOOSE).attacks
 
-    assert set(attacks.by_role[esca.US][KNIGHT]) == squares("d4 d6 e3 e7 g3 g7 h4 h6")
-    assert set(attacks.by_role[esca.US][ROOK]) == squares("a1 b1 c1 d2 d3 d4 d5 d6 d7 d8 e1 f1 g1")
-    assert set(attacks.by_role[esca.US][KING]) == squares("f1 f2 g2 h1 h2")
-    assert set(attacks.by_role[esca.THEM][BISHOP]) == squares("a3 a5 c3 c5 d6 e7 f8")
-    assert not attacks.by_role[esca.THEM][QUEEN]
+    assert set(attacks.by_knights.white) == squares("d4 d6 e3 e7 g3 g7 h4 h6")
+    assert set(attacks.by_rooks.white) == squares("a1 b1 c1 d2 d3 d4 d5 d6 d7 d8 e1 f1 g1")
+    assert set(attacks.by_kings.white) == squares("f1 f2 g2 h1 h2")
+    assert set(attacks.by_bishops.black) == squares("a3 a5 c3 c5 d6 e7 f8")
+    assert not attacks.by_queens.black
 
-    for side in (esca.US, esca.THEM):
+    for colour in ("white", "black"):
         union: set[str] = set()
-        for role in (PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING):
-            union |= set(attacks.by_role[side][role])
-        assert union == set(attacks.by[side])
-        assert set(attacks.by_pawns[side]) == set(attacks.by_role[side][PAWN])
+        for name in ("by_pawns", "by_knights", "by_bishops", "by_rooks", "by_queens", "by_kings"):
+            union |= set(getattr(attacks, name).of(colour))
+        assert union == set(attacks.controlled.of(colour))
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (RAYS, "", "a1"),
         (LOOSE, "c3 d1 f5", "b4 d8"),
         (CHECKED, "b1", "e2"),
         (PINS, "b5 c3 e3", "c6"),
-        (PINS_THEIRS, "c6", "b5 c3 e3"),
+        (PINS_THEIRS, "b5 c3 e3", "c6"),
         (SKEWERS, "b5 d1 e5", "d5"),
         (BEHIND, "a7 c1", "a6 b7 c7"),
         (CASTLED, "c3", "f7"),
@@ -156,11 +152,11 @@ def test_the_map_is_kept_per_role_as_well(facts_of: FactsOf, squares: Squares) -
     ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "skewers", "behind", "castled"],
 )
 def test_an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.attacked[esca.US]) == squares(us)
-    assert set(attacks.attacked[esca.THEM]) == squares(them)
+    assert set(attacks.attacked.white) == squares(white)
+    assert set(attacks.attacked.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -171,7 +167,7 @@ def test_an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
         (LOOSE, (9, 8)),
         (CHECKED, (5, 5)),
         (PINS, (9, 3)),
-        (PINS_THEIRS, (3, 9)),
+        (PINS_THEIRS, (9, 3)),
         (SKEWERS, (11, 9)),
         (BEHIND, (14, 13)),
         (CASTLED, (3, 1)),
@@ -181,18 +177,18 @@ def test_an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
 def test_the_attacked_value_adds_up_what_stands_under_attack(
     fen: str, value: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).attacks.attacked_value == value
+    assert facts_of(fen).attacks.attacked_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (RAYS, "", ""),
         (LOOSE, "d1", "d8"),
         (CHECKED, "b1", ""),
         (PINS, "c3", "c6"),
-        (PINS_THEIRS, "c6", "c3"),
+        (PINS_THEIRS, "c3", "c6"),
         (SKEWERS, "b5 d1 e5", ""),
         (BEHIND, "a7", ""),
         (CASTLED, "c3", ""),
@@ -200,11 +196,11 @@ def test_the_attacked_value_adds_up_what_stands_under_attack(
     ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "skewers", "behind", "castled"],
 )
 def test_a_hanging_unit_is_attacked_and_undefended_and_is_never_a_king(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.hanging[esca.US]) == squares(us)
-    assert set(attacks.hanging[esca.THEM]) == squares(them)
+    assert set(attacks.hanging.white) == squares(white)
+    assert set(attacks.hanging.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -224,11 +220,11 @@ def test_a_hanging_unit_is_attacked_and_undefended_and_is_never_a_king(
 def test_the_hanging_value_adds_up_what_the_hanging_units_are_worth(
     fen: str, value: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).attacks.hanging_value == value
+    assert facts_of(fen).attacks.hanging_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (RAYS, "", "a1"),
@@ -242,11 +238,11 @@ def test_the_hanging_value_adds_up_what_the_hanging_units_are_worth(
     ids=["start", "rays", "loose", "checked", "pins", "skewers", "behind", "castled"],
 )
 def test_a_unit_is_en_prise_when_it_hangs_or_a_cheaper_unit_attacks_it(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.en_prise[esca.US]) == squares(us)
-    assert set(attacks.en_prise[esca.THEM]) == squares(them)
+    assert set(attacks.en_prise.white) == squares(white)
+    assert set(attacks.en_prise.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -265,7 +261,7 @@ def test_a_unit_is_en_prise_when_it_hangs_or_a_cheaper_unit_attacks_it(
     ids=["start", "rays", "loose", "checked", "pins", "pins_theirs", "skewers", "behind", "castled"],
 )
 def test_the_en_prise_value_adds_up_what_stands_en_prise(fen: str, value: tuple[int, int], facts_of: FactsOf) -> None:
-    assert facts_of(fen).attacks.en_prise_value == value
+    assert facts_of(fen).attacks.en_prise_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
@@ -285,22 +281,22 @@ def test_the_en_prise_value_adds_up_what_stands_en_prise(fen: str, value: tuple[
 def test_the_en_prise_maximum_is_the_largest_value_standing_en_prise(
     fen: str, value: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).attacks.en_prise_max_value == value
+    assert facts_of(fen).attacks.en_prise_max_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (RAYS, "", ""),
         (LOOSE, "", ""),
         (CHECKED, "", ""),
         (PINS, "c3 e3", "c6"),
-        (PINS_THEIRS, "c6", "c3 e3"),
+        (PINS_THEIRS, "c3 e3", "c6"),
         (BEHIND, "", ""),
         (CASTLED, "", "f7"),
         (PINNED_QUEEN, "e2", ""),
-        (PINNED_QUEEN_BLACK, "", "e2"),
+        (PINNED_QUEEN_BLACK, "e2", ""),
     ],
     ids=[
         "start",
@@ -316,11 +312,11 @@ def test_the_en_prise_maximum_is_the_largest_value_standing_en_prise(
     ],
 )
 def test_a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.pinned[esca.US]) == squares(us)
-    assert set(attacks.pinned[esca.THEM]) == squares(them)
+    assert set(attacks.pinned.white) == squares(white)
+    assert set(attacks.pinned.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -329,15 +325,15 @@ def test_a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
         (START, (0, 0)),
         (LOOSE, (0, 0)),
         (PINS, (6, 3)),
-        (PINS_THEIRS, (3, 6)),
+        (PINS_THEIRS, (6, 3)),
         (CASTLED, (0, 1)),
         (PINNED_QUEEN, (9, 0)),
-        (PINNED_QUEEN_BLACK, (0, 9)),
+        (PINNED_QUEEN_BLACK, (9, 0)),
     ],
     ids=["start", "loose", "pins", "pins_theirs", "castled", "pinned_queen", "pinned_queen_black"],
 )
 def test_the_pinned_value_adds_up_what_may_not_move(fen: str, value: tuple[int, int], facts_of: FactsOf) -> None:
-    assert facts_of(fen).attacks.pinned_value == value
+    assert facts_of(fen).attacks.pinned_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
@@ -356,11 +352,11 @@ def test_the_pinned_value_adds_up_what_may_not_move(fen: str, value: tuple[int, 
 def test_a_skewer_is_counted_once_per_slider_front_unit_and_cheaper_unit_behind(
     fen: str, skewers: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).attacks.skewer_candidates == skewers
+    assert facts_of(fen).attacks.skewer_candidates == esca.ByColour(*skewers)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (
             START,
@@ -378,34 +374,34 @@ def test_a_skewer_is_counted_once_per_slider_front_unit_and_cheaper_unit_behind(
     ids=["start", "rays", "loose", "checked", "pins", "skewers", "behind", "castled"],
 )
 def test_a_defended_unit_stands_on_a_square_its_own_side_attacks(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     attacks = facts_of(fen).attacks
-    assert set(attacks.defended[esca.US]) == squares(us)
-    assert set(attacks.defended[esca.THEM]) == squares(them)
+    assert set(attacks.defended.white) == squares(white)
+    assert set(attacks.defended.black) == squares(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (RAYS, "b3 d1", "a1 b2 e8"),
         (LOOSE, "b2 c3 d1 e4 f5 g1 g2 h2", "a5 b4 d8 g6 g8 h7"),
         (SKEWERS, "b2 b5 d1 e5 g1", "b8 d5 d8 g7 g8"),
         (BEHIND, "a7 c1 d2", "a4 a6 b7 c7 c8 g8 h6"),
-        (PINS_THEIRS, "b4 c6 e5 e8 f7", "b5 c3 e1 e3 h3"),
+        (PINS_THEIRS, "b5 c3 e1 e3 h3", "b4 c6 e5 e8 f7"),
     ],
     ids=["rays", "loose", "skewers", "behind", "pins_theirs"],
 )
-def test_the_units_of_each_side_are_listed_us_first(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+def test_the_units_of_each_side_are_listed(
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
-    attacks = facts_of(fen).attacks
-    assert set(attacks.units(esca.US)) == squares(us)
-    assert set(attacks.units(esca.THEM)) == squares(them)
+    placement = facts_of(fen).placement
+    assert set(placement.units.white) == squares(white)
+    assert set(placement.units.black) == squares(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "square", "us", "them"),
+    ("fen", "square", "white", "black"),
     [
         (LOOSE, "d4", "c3 d1 f5", "d8"),
         (LOOSE, "f5", "e4", "g6"),
@@ -426,11 +422,11 @@ def test_the_units_of_each_side_are_listed_us_first(
     ],
 )
 def test_the_attackers_of_a_square_are_the_units_of_a_side_that_bear_on_it(
-    fen: str, square: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, square: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
-    attacks = facts_of(fen).attacks
-    assert set(attacks.attackers_of(square, esca.US)) == squares(us)
-    assert set(attacks.attackers_of(square, esca.THEM)) == squares(them)
+    position = facts_of(fen).position
+    assert set(position.attackers(square, "white")) == squares(white)
+    assert set(position.attackers(square, "black")) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -448,26 +444,27 @@ def test_the_attackers_of_a_square_are_the_units_of_a_side_that_bear_on_it(
 def test_a_unit_of_either_colour_is_asked_whether_it_hangs(
     fen: str, square: str, hanging: bool, facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).attacks.is_hanging(square) is hanging
+    hanging_units = facts_of(fen).attacks.hanging
+    assert (square in hanging_units.white or square in hanging_units.black) is hanging
 
 
 def test_the_attack_facts_of_a_chess960_position_are_the_classic_ones(facts_of: FactsOf, squares: Squares) -> None:
-    """No `attacks` fact is one of the four `features.md` §4 defines for classic
-    chess only, so a Chess960 position answers as the same placement would."""
+    """No `attacks` fact reads the back rank, so a Chess960 position answers as
+    the same placement would."""
     attacks = facts_of(NINE_SIXTY, esca.CHESS960).attacks
-    assert len(attacks.by[esca.US]) == 28
-    assert len(attacks.by[esca.THEM]) == 36
-    assert set(attacks.hanging[esca.US]) == squares("a4 b4 h4")
-    assert set(attacks.hanging[esca.THEM]) == squares("a5 b3 g5")
-    assert attacks.hanging_value == (3, 5)
-    assert set(attacks.en_prise[esca.THEM]) == squares("a5 b3 g5")
-    assert attacks.en_prise_max_value == (1, 3)
-    assert set(attacks.defended[esca.US]) == squares("a1 c1 c2 d1 d2 e3 f1 f3 g1 g2")
-    assert not attacks.pinned[esca.US]
-    assert not attacks.pinned[esca.THEM]
-    assert attacks.skewer_candidates == (0, 0)
+    assert len(attacks.controlled.white) == 28
+    assert len(attacks.controlled.black) == 36
+    assert set(attacks.hanging.white) == squares("a4 b4 h4")
+    assert set(attacks.hanging.black) == squares("a5 b3 g5")
+    assert attacks.hanging_value == esca.ByColour(3, 5)
+    assert set(attacks.en_prise.black) == squares("a5 b3 g5")
+    assert attacks.en_prise_max_value == esca.ByColour(1, 3)
+    assert set(attacks.defended.white) == squares("a1 c1 c2 d1 d2 e3 f1 f3 g1 g2")
+    assert not attacks.pinned.white
+    assert not attacks.pinned.black
+    assert attacks.skewer_candidates == esca.ByColour(0, 0)
 
     classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10").attacks
-    assert set(classic.by[esca.THEM]) == set(attacks.by[esca.THEM])
-    assert set(classic.hanging[esca.US]) == set(attacks.hanging[esca.US])
+    assert set(classic.controlled.black) == set(attacks.controlled.black)
+    assert set(classic.hanging.white) == set(attacks.hanging.white)
     assert classic.hanging_value == attacks.hanging_value

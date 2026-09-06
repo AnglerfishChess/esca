@@ -913,7 +913,7 @@ def test_every_value_of_the_layer_says_what_it_means(case: str) -> None:
 
 def test_a_castling_names_the_colour_and_the_wing_it_answers_for() -> None:
     castling = position(CLEAR_BACK_RANK).castling("b", "long")
-    assert castling.colour == "b"
+    assert castling.colour == "black"
     assert castling.wing == "long"
     assert castling.describe() == "Black may castle long: nothing stands in its way."
 

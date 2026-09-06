@@ -239,23 +239,22 @@ GROUP_IDS = [
     [
         (START, (0, 0)),
         (CROWD, (1, 0)),
-        (CROWD_BLACK, (0, 1)),
+        (CROWD_BLACK, (1, 0)),
         (QUEEN_FREE, (9, 0)),
         (IN_CHECK, (5, 0)),
         (KNIGHT_TRADE, (0, 3)),
-        (KNIGHT_TRADE_BLACK, (3, 0)),
+        (KNIGHT_TRADE_BLACK, (0, 3)),
         (DEFENDED_PAWN, (-4, 0)),
-        (DEFENDED_PAWN_BLACK, (0, -4)),
+        (DEFENDED_PAWN_BLACK, (-4, 0)),
         (PAWN_CHAINS, (1, 1)),
         (PAWN_CHAINS_BLACK, (1, 1)),
-        (PAWN_TRADE_BLACK, (1, 0)),
+        (PAWN_TRADE_BLACK, (0, 1)),
     ],
     ids=GROUP_IDS,
 )
 def test_the_best_capture_is_the_largest_see_the_side_has(fen: str, best: tuple[int, int], facts_of: FactsOf) -> None:
     exchange = facts_of(fen).exchange
-    assert exchange[esca.US].see_best_capture == best[0]
-    assert exchange[esca.THEM].see_best_capture == best[1]
+    assert exchange.see_best_capture == esca.ByColour(*best)
 
 
 @pytest.mark.parametrize(
@@ -263,16 +262,16 @@ def test_the_best_capture_is_the_largest_see_the_side_has(fen: str, best: tuple[
     [
         (START, (0, 0)),
         (CROWD, (1, 0)),
-        (CROWD_BLACK, (0, 1)),
+        (CROWD_BLACK, (1, 0)),
         (QUEEN_FREE, (1, 0)),
         (IN_CHECK, (1, 0)),
         (KNIGHT_TRADE, (0, 1)),
-        (KNIGHT_TRADE_BLACK, (1, 0)),
+        (KNIGHT_TRADE_BLACK, (0, 1)),
         (DEFENDED_PAWN, (0, 0)),
         (DEFENDED_PAWN_BLACK, (0, 0)),
         (PAWN_CHAINS, (2, 3)),
-        (PAWN_CHAINS_BLACK, (3, 2)),
-        (PAWN_TRADE_BLACK, (1, 0)),
+        (PAWN_CHAINS_BLACK, (2, 3)),
+        (PAWN_TRADE_BLACK, (0, 1)),
     ],
     ids=GROUP_IDS,
 )
@@ -280,8 +279,7 @@ def test_a_positive_capture_is_one_that_wins_material_outright(
     fen: str, count: tuple[int, int], facts_of: FactsOf
 ) -> None:
     exchange = facts_of(fen).exchange
-    assert exchange[esca.US].see_positive_capture_count == count[0]
-    assert exchange[esca.THEM].see_positive_capture_count == count[1]
+    assert exchange.see_positive_capture_count == esca.ByColour(*count)
 
 
 @pytest.mark.parametrize(
@@ -289,23 +287,22 @@ def test_a_positive_capture_is_one_that_wins_material_outright(
     [
         (START, (0, 0)),
         (CROWD, (0, 1)),
-        (CROWD_BLACK, (1, 0)),
+        (CROWD_BLACK, (0, 1)),
         (QUEEN_FREE, (0, 1)),
         (IN_CHECK, (0, 0)),
         (KNIGHT_TRADE, (1, 0)),
-        (KNIGHT_TRADE_BLACK, (0, 1)),
+        (KNIGHT_TRADE_BLACK, (1, 0)),
         (DEFENDED_PAWN, (0, 0)),
         (DEFENDED_PAWN_BLACK, (0, 0)),
         (PAWN_CHAINS, (1, 0)),
-        (PAWN_CHAINS_BLACK, (0, 1)),
-        (PAWN_TRADE_BLACK, (0, 1)),
+        (PAWN_CHAINS_BLACK, (1, 0)),
+        (PAWN_TRADE_BLACK, (1, 0)),
     ],
     ids=GROUP_IDS,
 )
 def test_an_equal_capture_is_one_the_exchange_leaves_level(fen: str, count: tuple[int, int], facts_of: FactsOf) -> None:
     exchange = facts_of(fen).exchange
-    assert exchange[esca.US].see_equal_capture_count == count[0]
-    assert exchange[esca.THEM].see_equal_capture_count == count[1]
+    assert exchange.see_equal_capture_count == esca.ByColour(*count)
 
 
 @pytest.mark.parametrize(
@@ -313,16 +310,16 @@ def test_an_equal_capture_is_one_the_exchange_leaves_level(fen: str, count: tupl
     [
         (START, (0, 0)),
         (CROWD, (1, 0)),
-        (CROWD_BLACK, (0, 1)),
+        (CROWD_BLACK, (1, 0)),
         (QUEEN_FREE, (9, 0)),
         (IN_CHECK, (5, 0)),
         (KNIGHT_TRADE, (0, 3)),
-        (KNIGHT_TRADE_BLACK, (3, 0)),
+        (KNIGHT_TRADE_BLACK, (0, 3)),
         (DEFENDED_PAWN, (0, 0)),
         (DEFENDED_PAWN_BLACK, (0, 0)),
         (PAWN_CHAINS, (2, 3)),
-        (PAWN_CHAINS_BLACK, (3, 2)),
-        (PAWN_TRADE_BLACK, (1, 0)),
+        (PAWN_CHAINS_BLACK, (2, 3)),
+        (PAWN_TRADE_BLACK, (0, 1)),
     ],
     ids=GROUP_IDS,
 )
@@ -330,21 +327,20 @@ def test_the_positive_total_adds_up_the_captures_that_win_material(
     fen: str, total: tuple[int, int], facts_of: FactsOf
 ) -> None:
     exchange = facts_of(fen).exchange
-    assert exchange[esca.US].see_positive_total == total[0]
-    assert exchange[esca.THEM].see_positive_total == total[1]
+    assert exchange.see_positive_total == esca.ByColour(*total)
 
 
-def test_the_them_block_is_empty_when_we_are_in_check(facts_of: FactsOf) -> None:
-    """In check there is no null move, so the `them` block is zero and
-    `tactics.them` says why."""
+def test_the_side_not_to_move_is_left_unread_when_the_mover_is_in_check(facts_of: FactsOf) -> None:
+    """In check there is no null move, so the other side's values are zero and
+    `tactics.available` says why."""
     facts = facts_of(IN_CHECK)
     assert facts.state.in_check
-    assert not facts.tactics[esca.THEM].available
-    theirs = facts.exchange[esca.THEM]
-    assert theirs.see_best_capture == 0
-    assert theirs.see_positive_capture_count == 0
-    assert theirs.see_equal_capture_count == 0
-    assert theirs.see_positive_total == 0
+    assert not facts.tactics.available.black
+    exchange = facts.exchange
+    assert exchange.see_best_capture.black == 0
+    assert exchange.see_positive_capture_count.black == 0
+    assert exchange.see_equal_capture_count.black == 0
+    assert exchange.see_positive_total.black == 0
 
 
 @pytest.mark.parametrize(
@@ -357,10 +353,13 @@ def test_the_three_counts_partition_the_captures(fen: str, facts_of: FactsOf) ->
     exactly one of the three classes."""
     facts = facts_of(fen)
     position = esca.Position.from_fen(fen)
-    ours = facts.exchange[esca.US]
+    mover = facts.side_to_move
+    exchange = facts.exchange
     captures = [position.see_capture(annotated.move) for annotated in facts.moves if annotated.facts.victim is not None]
 
     negative = sum(1 for see in captures if see < 0)
-    assert ours.see_positive_capture_count + ours.see_equal_capture_count + negative == len(captures)
-    assert ours.see_positive_total == sum(see for see in captures if see > 0)
-    assert ours.see_best_capture == max(captures, default=0)
+    assert exchange.see_positive_capture_count.of(mover) + exchange.see_equal_capture_count.of(mover) + negative == len(
+        captures
+    )
+    assert exchange.see_positive_total.of(mover) == sum(see for see in captures if see > 0)
+    assert exchange.see_best_capture.of(mover) == max(captures, default=0)

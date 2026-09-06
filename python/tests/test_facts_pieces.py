@@ -132,7 +132,7 @@ Squares = Callable[[str], set[str]]
 def test_a_bishop_pair_needs_a_bishop_of_each_square_colour(
     fen: str, pair: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.bishop_pair == pair
+    assert facts_of(fen).pieces.bishop_pair == esca.ByColour(*pair)
 
 
 @pytest.mark.parametrize(
@@ -147,12 +147,12 @@ def test_a_bishop_pair_needs_a_bishop_of_each_square_colour(
     ],
     ids=["start", "opposite", "same_colour", "flipped", "boxed", "lined"],
 )
-def test_bishops_are_counted_by_the_square_colour_the_mover_sees(
+def test_bishops_are_counted_by_the_colour_of_the_square_they_stand_on(
     fen: str, light: tuple[int, int], dark: tuple[int, int], facts_of: FactsOf
 ) -> None:
     pieces = facts_of(fen).pieces
-    assert pieces.bishops_light == light
-    assert pieces.bishops_dark == dark
+    assert pieces.bishops_light == esca.ByColour(*light)
+    assert pieces.bishops_dark == esca.ByColour(*dark)
 
 
 @pytest.mark.parametrize(
@@ -188,7 +188,7 @@ def test_bishops_are_opposite_coloured_when_one_each_stands_on_unlike_colours(
 def test_a_pawn_counts_on_the_bishop_colour_when_an_own_bishop_shares_its_colour(
     fen: str, pawns: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.pawns_on_bishop_colour == pawns
+    assert facts_of(fen).pieces.pawns_on_bishop_colour == esca.ByColour(*pawns)
 
 
 @pytest.mark.parametrize(
@@ -205,7 +205,7 @@ def test_a_pawn_counts_on_the_bishop_colour_when_an_own_bishop_shares_its_colour
 def test_rooks_are_connected_on_a_rank_when_nothing_stands_between_them(
     fen: str, connected: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rooks_connected_rank == connected
+    assert facts_of(fen).pieces.rooks_connected_rank == esca.ByColour(*connected)
 
 
 @pytest.mark.parametrize(
@@ -222,7 +222,7 @@ def test_rooks_are_connected_on_a_rank_when_nothing_stands_between_them(
 def test_rooks_are_connected_on_a_file_when_nothing_stands_between_them(
     fen: str, connected: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rooks_connected_file == connected
+    assert facts_of(fen).pieces.rooks_connected_file == esca.ByColour(*connected)
 
 
 @pytest.mark.parametrize(
@@ -240,7 +240,7 @@ def test_rooks_are_connected_on_a_file_when_nothing_stands_between_them(
 def test_a_rook_is_on_an_open_file_when_no_pawn_of_either_colour_holds_it(
     fen: str, rooks: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rooks_on_open_file == rooks
+    assert facts_of(fen).pieces.rooks_on_open_file == esca.ByColour(*rooks)
 
 
 @pytest.mark.parametrize(
@@ -257,7 +257,7 @@ def test_a_rook_is_on_an_open_file_when_no_pawn_of_either_colour_holds_it(
 def test_a_rook_is_on_a_semi_open_file_when_only_its_own_side_has_left_it(
     fen: str, rooks: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rooks_on_semi_open_file == rooks
+    assert facts_of(fen).pieces.rooks_on_semi_open_file == esca.ByColour(*rooks)
 
 
 @pytest.mark.parametrize(
@@ -274,7 +274,7 @@ def test_a_rook_is_on_a_semi_open_file_when_only_its_own_side_has_left_it(
 def test_the_relative_seventh_is_counted_from_the_rooks_own_back_rank(
     fen: str, rooks: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rooks_on_relative_7th == rooks
+    assert facts_of(fen).pieces.rooks_on_seventh_rank == esca.ByColour(*rooks)
 
 
 @pytest.mark.parametrize(
@@ -291,7 +291,7 @@ def test_the_relative_seventh_is_counted_from_the_rooks_own_back_rank(
 def test_a_rook_behind_an_own_passer_shares_its_file_at_a_lower_relative_rank(
     fen: str, rooks: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rook_behind_own_passer == rooks
+    assert facts_of(fen).pieces.rook_behind_own_passer == esca.ByColour(*rooks)
 
 
 @pytest.mark.parametrize(
@@ -308,7 +308,7 @@ def test_a_rook_behind_an_own_passer_shares_its_file_at_a_lower_relative_rank(
 def test_behind_an_enemy_passer_is_read_in_the_passer_owners_frame(
     fen: str, rooks: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rook_behind_enemy_passer == rooks
+    assert facts_of(fen).pieces.rook_behind_enemy_passer == esca.ByColour(*rooks)
 
 
 @pytest.mark.parametrize(
@@ -325,16 +325,16 @@ def test_behind_an_enemy_passer_is_read_in_the_passer_owners_frame(
 def test_a_trapped_rook_is_boxed_in_beyond_its_own_king_with_the_castling_rights_gone(
     fen: str, trapped: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.trapped_rook == trapped
+    assert facts_of(fen).pieces.trapped_rook == esca.ByColour(*trapped)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (OUTPOSTS, "b5 d5 f5", "c5 e5 g5"),
         (SAME_COLOUR, "a5 c5", "b5 d4 d5 f4"),
         (HOLES, "d5 f5", ""),
-        (FLIPPED, "d5 f5", ""),
+        (FLIPPED, "", "d5 f5"),
         (BATTERY, "b6 d6", ""),
         (PASSER_ROOKS, "", "e3 g3"),
         (LINED, "e4", ""),
@@ -343,11 +343,11 @@ def test_a_trapped_rook_is_boxed_in_beyond_its_own_king_with_the_castling_rights
     ids=["outposts", "same_colour", "holes", "flipped", "battery", "passer_rooks", "lined", "start"],
 )
 def test_an_outpost_square_is_pawn_held_ground_on_ranks_four_to_six(
-    fen: str, us: str, them: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     pieces = facts_of(fen).pieces
-    assert set(pieces.outposts[esca.US]) == squares(us)
-    assert set(pieces.outposts[esca.THEM]) == squares(them)
+    assert set(pieces.outposts.white) == squares(white)
+    assert set(pieces.outposts.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -355,9 +355,9 @@ def test_an_outpost_square_is_pawn_held_ground_on_ranks_four_to_six(
     [
         (OUTPOSTS, (2, 1)),
         (MINOR_OUTPOSTS, (2, 0)),
-        (MINOR_OUTPOSTS_BLACK, (0, 2)),
+        (MINOR_OUTPOSTS_BLACK, (2, 0)),
         (MINOR_OUTPOSTS_MIRROR, (0, 2)),
-        (FLIPPED, (1, 0)),
+        (FLIPPED, (0, 1)),
         (HOLES, (0, 0)),
         (RIM, (0, 0)),
         (START, (0, 0)),
@@ -376,7 +376,7 @@ def test_an_outpost_square_is_pawn_held_ground_on_ranks_four_to_six(
 def test_a_minor_on_an_outpost_is_a_knight_or_a_bishop_on_an_own_outpost_square(
     fen: str, minors: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.minors_on_outpost == minors
+    assert facts_of(fen).pieces.minors_on_outpost == esca.ByColour(*minors)
 
 
 @pytest.mark.parametrize(
@@ -386,7 +386,7 @@ def test_a_minor_on_an_outpost_is_a_knight_or_a_bishop_on_an_own_outpost_square(
         (OUTPOSTS, (1, 2)),
         (HOLES, (2, 0)),
         (PASSER_ROOKS, (0, 2)),
-        (FLIPPED, (1, 0)),
+        (FLIPPED, (0, 1)),
         (START, (0, 0)),
     ],
     ids=["same_colour", "outposts", "holes", "passer_rooks", "flipped", "start"],
@@ -394,7 +394,7 @@ def test_a_minor_on_an_outpost_is_a_knight_or_a_bishop_on_an_own_outpost_square(
 def test_a_free_outpost_square_is_one_no_unit_of_either_colour_occupies(
     fen: str, free: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.outpost_squares_free == free
+    assert facts_of(fen).pieces.outpost_squares_free == esca.ByColour(*free)
 
 
 @pytest.mark.parametrize(
@@ -411,7 +411,7 @@ def test_a_free_outpost_square_is_one_no_unit_of_either_colour_occupies(
 def test_a_knight_is_on_the_rim_on_file_a_or_h_or_on_relative_rank_one_or_eight(
     fen: str, knights: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.knights_on_rim == knights
+    assert facts_of(fen).pieces.knights_on_rim == esca.ByColour(*knights)
 
 
 @pytest.mark.parametrize(
@@ -428,7 +428,7 @@ def test_a_knight_is_on_the_rim_on_file_a_or_h_or_on_relative_rank_one_or_eight(
 def test_an_undeveloped_minor_still_stands_on_a_classic_starting_square(
     fen: str, minors: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.minors_undeveloped == minors
+    assert facts_of(fen).pieces.minors_undeveloped == esca.ByColour(*minors)
 
 
 @pytest.mark.parametrize(
@@ -445,7 +445,7 @@ def test_an_undeveloped_minor_still_stands_on_a_classic_starting_square(
 def test_a_queen_is_developed_once_it_stands_off_its_classic_starting_square(
     fen: str, developed: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.queen_developed == developed
+    assert facts_of(fen).pieces.queen_developed == esca.ByColour(*developed)
 
 
 @pytest.mark.parametrize(
@@ -454,7 +454,7 @@ def test_a_queen_is_developed_once_it_stands_off_its_classic_starting_square(
         (ITALIAN, (2, 3)),
         (FIXED_CENTRE, (2, 2)),
         (FIXED_ONE_BISHOP, (2, 0)),
-        (FIXED_ONE_BISHOP_BLACK, (0, 2)),
+        (FIXED_ONE_BISHOP_BLACK, (2, 0)),
         (OPPOSITE, (0, 0)),
         (START, (0, 0)),
     ],
@@ -464,28 +464,36 @@ def test_a_fixed_pawn_on_the_bishop_colour_is_one_whose_stop_square_is_held(
     fen: str, pawns: tuple[int, int], facts_of: FactsOf
 ) -> None:
     pieces = facts_of(fen).pieces
-    assert pieces.fixed_pawns_on_bishop_colour == pawns
-    for fixed, on_colour in zip(pieces.fixed_pawns_on_bishop_colour, pieces.pawns_on_bishop_colour, strict=True):
-        assert fixed <= on_colour, "the fixed pawns are a subset of the pawns on the colour"
+    assert pieces.fixed_pawns_on_bishop_colour == esca.ByColour(*pawns)
+    for colour in ("white", "black"):
+        assert pieces.fixed_pawns_on_bishop_colour.of(colour) <= pieces.pawns_on_bishop_colour.of(colour), (
+            "the fixed pawns are a subset of the pawns on the colour"
+        )
 
 
 @pytest.mark.parametrize(
-    ("fen", "imbalance"),
+    ("fen", "pair"),
     [
-        (PAIR_VS_KNIGHTS, 1),
-        (PAIR_VS_KNIGHTS_BLACK, -1),
-        (KNIGHTS_VS_PAIR, -1),
-        (START, 0),
-        (ITALIAN, 0),
-        (ONE_BISHOP_EACH, 0),
-        (LINED, 0),
+        (PAIR_VS_KNIGHTS, (False, True)),
+        (PAIR_VS_KNIGHTS_BLACK, (False, True)),
+        (KNIGHTS_VS_PAIR, (True, False)),
+        (START, (True, True)),
+        (ITALIAN, (True, True)),
+        (ONE_BISHOP_EACH, (False, True)),
+        (LINED, (False, False)),
     ],
-    ids=["pair_vs_knights", "pair_vs_knights_black", "knights_vs_pair", "start", "italian", "one_bishop_each", "lined"],
+    ids=[
+        "pair_vs_knights",
+        "pair_vs_knights_black",
+        "knights_vs_pair",
+        "start",
+        "italian",
+        "one_bishop_each",
+        "lined",
+    ],
 )
-def test_the_bishop_pair_counts_against_a_knight_pair_and_cancels_with_the_reverse(
-    fen: str, imbalance: int, facts_of: FactsOf
-) -> None:
-    assert facts_of(fen).pieces.bishop_pair_vs_knight_pair == imbalance
+def test_a_knight_pair_is_two_knights_or_more(fen: str, pair: tuple[bool, bool], facts_of: FactsOf) -> None:
+    assert facts_of(fen).pieces.knight_pair == esca.ByColour(*pair)
 
 
 @pytest.mark.parametrize(
@@ -493,9 +501,9 @@ def test_the_bishop_pair_counts_against_a_knight_pair_and_cancels_with_the_rever
     [
         (SEVENTH, (True, True)),
         (PASSER_ROOKS, (True, False)),
-        (SEVENTH_KING_OFF_BLACK, (True, False)),
+        (SEVENTH_KING_OFF_BLACK, (False, True)),
         (SEVENTH_KING_OFF, (False, True)),
-        (PASSER_ROOKS_BLACK, (False, True)),
+        (PASSER_ROOKS_BLACK, (True, False)),
         (LINED, (False, False)),
         (START, (False, False)),
     ],
@@ -512,7 +520,7 @@ def test_the_bishop_pair_counts_against_a_knight_pair_and_cancels_with_the_rever
 def test_a_rook_on_the_seventh_pays_when_the_enemy_king_stands_on_the_eighth(
     fen: str, cut_off: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.rook_on_7th_with_king_on_8th == cut_off
+    assert facts_of(fen).pieces.rook_on_seventh_with_king_on_eighth == esca.ByColour(*cut_off)
 
 
 @pytest.mark.parametrize(
@@ -532,7 +540,7 @@ def test_a_rook_on_the_seventh_pays_when_the_enemy_king_stands_on_the_eighth(
 def test_a_trapped_unit_has_no_safe_destination_among_the_squares_it_reaches(
     fen: str, trapped: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.trapped_pieces == trapped
+    assert facts_of(fen).pieces.trapped_pieces == esca.ByColour(*trapped)
 
 
 @pytest.mark.parametrize(
@@ -552,7 +560,7 @@ def test_a_trapped_unit_has_no_safe_destination_among_the_squares_it_reaches(
 def test_the_trapped_value_is_the_value_sum_of_the_trapped_units(
     fen: str, value: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).pieces.trapped_value == value
+    assert facts_of(fen).pieces.trapped_value == esca.ByColour(*value)
 
 
 def test_the_piece_facts_of_a_chess960_position_read_the_placement_as_they_find_it(
@@ -561,26 +569,14 @@ def test_the_piece_facts_of_a_chess960_position_read_the_placement_as_they_find_
     """Only `minors_undeveloped` and `queen_developed` read the starting squares,
     so the rest of the group answers for a Chess960 placement as for any other."""
     pieces = facts_of(NINE_SIXTY, esca.CHESS960).pieces
-    assert pieces.bishop_pair == (True, True)
-    assert pieces.bishops_light == (1, 1)
-    assert pieces.bishops_dark == (1, 1)
-    assert pieces.pawns_on_bishop_colour == (8, 8)
-    assert pieces.rooks_connected_rank == (True, False)
-    assert pieces.rooks_connected_file == (False, False)
-    assert pieces.rooks_on_relative_7th == (0, 0)
-    assert pieces.trapped_rook == (True, False)
-    assert pieces.knights_on_rim == (1, 2)
-    assert set(pieces.outposts[esca.US]) == set()
-    assert set(pieces.outposts[esca.THEM]) == set()
-
-
-def test_chess960_writes_the_two_facts_that_assume_the_starting_squares_as_zeros() -> None:
-    """`features.md` §4 defines `minors_undeveloped` and `queen_developed` for
-    classic chess only; they are the group's values 31 to 34."""
-    classic = esca.encode([NINE_SIXTY_CLASSIC], groups=["pieces"])[0]
-    nine_sixty = esca.encode([NINE_SIXTY_CLASSIC], variant=esca.CHESS960, groups=["pieces"])[0]
-
-    assert list(classic[31:35]) == [0.25, 0.25, 1.0, 1.0]
-    assert list(nine_sixty[31:35]) == [0.0, 0.0, 0.0, 0.0]
-    assert list(classic[:31]) == list(nine_sixty[:31])
-    assert list(classic[35:]) == list(nine_sixty[35:])
+    assert pieces.bishop_pair == esca.ByColour(True, True)
+    assert pieces.bishops_light == esca.ByColour(1, 1)
+    assert pieces.bishops_dark == esca.ByColour(1, 1)
+    assert pieces.pawns_on_bishop_colour == esca.ByColour(8, 8)
+    assert pieces.rooks_connected_rank == esca.ByColour(True, False)
+    assert pieces.rooks_connected_file == esca.ByColour(False, False)
+    assert pieces.rooks_on_seventh_rank == esca.ByColour(0, 0)
+    assert pieces.trapped_rook == esca.ByColour(True, False)
+    assert pieces.knights_on_rim == esca.ByColour(1, 2)
+    assert set(pieces.outposts.white) == set()
+    assert set(pieces.outposts.black) == set()

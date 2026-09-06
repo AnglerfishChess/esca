@@ -1,12 +1,12 @@
 //! The `endgame` group, fact by fact.
 //!
 //! Every expectation is worked out from the definitions in `docs/features.md`
-//! §1 and §2.12 for the named position above it.
+//! for the named position above it. A per-side case writes White first.
 
 mod common;
 
-use common::facts_of;
-use esca::{DrawishMaterial, Opposition, Schema, Side};
+use common::{by_colour, facts_of};
+use esca::{DrawishMaterial, Opposition};
 use rstest::rstest;
 
 /// The untouched array: no passer, no opposition, no ending.
@@ -95,22 +95,15 @@ const SAME_COLOUR_BISHOPS: &str = "8/3k4/2b1p3/8/8/3B4/8/3K4 w - - 0 1";
 /// The opposite bishops with a knight still on: a piece too many.
 const OPPOSITE_BISHOPS_AND_KNIGHT: &str = "8/3k4/4p3/4b3/3P4/3B4/5N2/3K4 w - - 0 1";
 
-/// The 15 values of the `endgame` row of `fen`.
-fn endgame_row(fen: &str) -> Vec<f32> {
-    let schema = Schema::v1();
-    let groups = schema.group_set(&["endgame"]).expect("the endgame group");
-    facts_of(fen).encode(schema, groups)
-}
-
 #[rstest]
 #[case::start(START, [3, 3])]
 #[case::bare_kings(BARE_KINGS, [1, 0])]
-#[case::bare_kings_black(BARE_KINGS_BLACK, [0, 1])]
+#[case::bare_kings_black(BARE_KINGS_BLACK, [1, 0])]
 #[case::distant(DISTANT, [2, 3])]
 #[case::no_opposition(NO_OPPOSITION, [2, 2])]
 #[case::blocked_file(BLOCKED_FILE, [0, 1])]
 #[case::key_square(KEY_SQUARE, [1, 3])]
-#[case::key_square_black(KEY_SQUARE_BLACK, [3, 1])]
+#[case::key_square_black(KEY_SQUARE_BLACK, [1, 3])]
 #[case::two_knights(TWO_KNIGHTS, [3, 0])]
 #[case::opposite_bishops(OPPOSITE_BISHOPS, [3, 2])]
 fn the_king_centralisation_is_the_distance_to_the_nearest_central_square(
@@ -118,37 +111,23 @@ fn the_king_centralisation_is_the_distance_to_the_nearest_central_square(
     #[case] distance: [u8; 2],
 ) {
     let endgame = facts_of(fen).endgame;
-    assert_eq!(endgame.king_centralisation[Side::Us.index()], distance[0]);
-    assert_eq!(endgame.king_centralisation[Side::Them.index()], distance[1]);
+    assert_eq!(endgame.king_centralisation, by_colour(distance));
 }
 
 #[rstest]
 #[case::start(START, [8, 8])]
 #[case::blocked_pawns(BLOCKED_PAWNS, [8, 8])]
 #[case::pawn_race(PAWN_RACE, [2, 1])]
-#[case::pawn_race_black(PAWN_RACE_BLACK, [0, 3])]
+#[case::pawn_race_black(PAWN_RACE_BLACK, [3, 0])]
 #[case::blocked_file(BLOCKED_FILE, [8, 4])]
 #[case::key_square(KEY_SQUARE, [3, 8])]
-#[case::key_square_black(KEY_SQUARE_BLACK, [8, 4])]
+#[case::key_square_black(KEY_SQUARE_BLACK, [4, 8])]
 #[case::key_square_high(KEY_SQUARE_HIGH, [2, 8])]
 #[case::wrong_bishop(WRONG_BISHOP, [4, 8])]
 #[case::wrong_bishop_them(WRONG_BISHOP_THEM, [8, 5])]
 fn race_plies_are_what_the_leading_passer_still_needs(#[case] fen: &str, #[case] plies: [u8; 2]) {
     let endgame = facts_of(fen).endgame;
-    assert_eq!(endgame.race_plies[Side::Us.index()], plies[0]);
-    assert_eq!(endgame.race_plies[Side::Them.index()], plies[1]);
-}
-
-#[rstest]
-#[case::start(START, 0)]
-#[case::pawn_race(PAWN_RACE, 1)]
-#[case::pawn_race_black(PAWN_RACE_BLACK, -3)]
-#[case::blocked_file(BLOCKED_FILE, 4)]
-#[case::key_square(KEY_SQUARE, -5)]
-#[case::key_square_high(KEY_SQUARE_HIGH, -6)]
-#[case::wrong_bishop_them(WRONG_BISHOP_THEM, 3)]
-fn the_race_difference_is_ours_less_theirs(#[case] fen: &str, #[case] difference: i32) {
-    assert_eq!(facts_of(fen).endgame.race_plies_diff(), difference);
+    assert_eq!(endgame.race_plies, by_colour(plies));
 }
 
 #[rstest]
@@ -171,10 +150,10 @@ fn the_opposition_needs_an_odd_number_of_empty_squares_between_the_kings(
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::key_square(KEY_SQUARE, [true, false])]
-#[case::key_square_black(KEY_SQUARE_BLACK, [false, true])]
+#[case::key_square_black(KEY_SQUARE_BLACK, [true, false])]
 #[case::key_square_high(KEY_SQUARE_HIGH, [true, false])]
 #[case::pawn_race(PAWN_RACE, [false, true])]
-#[case::pawn_race_black(PAWN_RACE_BLACK, [true, false])]
+#[case::pawn_race_black(PAWN_RACE_BLACK, [false, true])]
 #[case::rook_pawn_king(ROOK_PAWN_KING, [false, false])]
 #[case::short_of_key(SHORT_OF_KEY, [false, false])]
 #[case::not_passed(KEY_SQUARE_NOT_PASSED, [false, false])]
@@ -183,14 +162,13 @@ fn the_king_stands_on_a_key_square_of_a_passer_of_its_own(
     #[case] occupied: [bool; 2],
 ) {
     let endgame = facts_of(fen).endgame;
-    assert_eq!(endgame.key_square_occupied[Side::Us.index()], occupied[0]);
-    assert_eq!(endgame.key_square_occupied[Side::Them.index()], occupied[1]);
+    assert_eq!(endgame.key_square_occupied, by_colour(occupied));
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::wrong_bishop(WRONG_BISHOP, [true, false])]
-#[case::wrong_bishop_black(WRONG_BISHOP_BLACK, [false, true])]
+#[case::wrong_bishop_black(WRONG_BISHOP_BLACK, [true, false])]
 #[case::wrong_bishop_them(WRONG_BISHOP_THEM, [false, true])]
 #[case::right_bishop(RIGHT_BISHOP, [false, false])]
 #[case::both_rook_pawns(BOTH_ROOK_PAWNS, [false, false])]
@@ -201,8 +179,7 @@ fn a_bishop_is_the_wrong_colour_for_rook_pawns_promoting_on_the_other(
     #[case] wrong: [bool; 2],
 ) {
     let endgame = facts_of(fen).endgame;
-    assert_eq!(endgame.wrong_colour_bishop[Side::Us.index()], wrong[0]);
-    assert_eq!(endgame.wrong_colour_bishop[Side::Them.index()], wrong[1]);
+    assert_eq!(endgame.wrong_colour_bishop, by_colour(wrong));
 }
 
 #[rstest]
@@ -222,42 +199,4 @@ fn drawish_material_names_the_three_configurations_that_still_draw(
     #[case] drawn: Option<DrawishMaterial>,
 ) {
     assert_eq!(facts_of(fen).endgame.drawish_material, drawn);
-}
-
-/// The row is the seven features in schema order: two centralisations, two
-/// race counts, their difference, the opposition one-hot with its third slot
-/// for none, the two bit pairs, and the drawn-material one-hot.
-#[rstest]
-#[case::bare_kings(BARE_KINGS, [
-    1.0 / 3.0, 0.0,
-    1.0, 1.0,
-    0.0,
-    1.0, 0.0, 0.0,
-    0.0, 0.0,
-    0.0, 0.0,
-    0.0, 0.0, 0.0,
-])]
-#[case::pawn_race(PAWN_RACE, [
-    1.0, 1.0,
-    0.25, 0.125,
-    0.125,
-    0.0, 0.0, 1.0,
-    0.0, 1.0,
-    0.0, 0.0,
-    0.0, 0.0, 0.0,
-])]
-#[case::wrong_bishop(WRONG_BISHOP, [
-    1.0, 1.0,
-    0.5, 1.0,
-    -0.5,
-    0.0, 0.0, 1.0,
-    0.0, 0.0,
-    1.0, 0.0,
-    0.0, 1.0, 0.0,
-])]
-fn the_encoded_row_carries_the_group_in_the_schemas_order(
-    #[case] fen: &str,
-    #[case] row: [f32; 15],
-) {
-    assert_eq!(endgame_row(fen), row);
 }

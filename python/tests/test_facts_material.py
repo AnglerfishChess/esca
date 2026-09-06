@@ -1,9 +1,8 @@
 """The `material` group, fact by fact.
 
-Every expectation is worked out from the definitions in `docs/features.md` §1
-and §2.2 for the named position above it. `piece_count_diff`,
-`material_balance` and `phase_bucket` are derived at encoding time and are read
-off the group's own values. The cases mirror `tests/facts_material.rs`.
+Every expectation is worked out from the definitions in `docs/features.md` for
+the named position above it; a per-side case writes White first. The cases
+mirror `tests/facts_material.rs`.
 """
 
 from __future__ import annotations
@@ -70,40 +69,15 @@ NINE_SIXTY = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10
 FactsOf = Callable[..., esca.Facts]
 
 
-def material_layout() -> dict[str, slice]:
-    """Where each `material` feature sits inside its group, per the schema's own text."""
-    layout: dict[str, slice] = {}
-    at = 0
-    inside = False
-    for line in esca.SCHEMA.canonical().splitlines():
-        if not line.startswith(" "):
-            inside = line.startswith("material:")
-        elif inside:
-            name, width, _encoding = line.split(":")
-            layout[name.strip()] = slice(at, at + int(width))
-            at += int(width)
-    return layout
-
-
-#: The offset and width of every `material` feature.
-MATERIAL = material_layout()
-
-
-def encoded(fen: str, feature: str) -> list[float]:
-    """The values `material.<feature>` encodes to for `fen`."""
-    row = esca.encode([fen], groups=["material"])[0]
-    return [float(value) for value in row[MATERIAL[feature]]]
-
-
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, [8, 2, 2, 2, 1], [8, 2, 2, 2, 1]),
         (TWO_QUEENS_EACH, [6, 1, 1, 2, 2], [6, 1, 1, 2, 2]),
         (HEAVY, [6, 0, 1, 2, 1], [6, 1, 0, 2, 1]),
         (ARMY_AGAINST_A_KING, [8, 2, 2, 2, 1], [0, 0, 0, 0, 0]),
         (QUEEN_FOR_A_ROOK, [5, 0, 0, 0, 1], [3, 0, 0, 1, 0]),
-        (QUEEN_FOR_A_ROOK_THEIRS, [3, 0, 0, 1, 0], [5, 0, 0, 0, 1]),
+        (QUEEN_FOR_A_ROOK_THEIRS, [5, 0, 0, 0, 1], [3, 0, 0, 1, 0]),
         (ROOK_AND_KNIGHT, [6, 1, 0, 1, 0], [5, 0, 0, 1, 0]),
         (PAWN_ENDING, [4, 0, 0, 0, 0], [3, 0, 0, 0, 0]),
         (BARE_KINGS, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]),
@@ -120,41 +94,15 @@ def encoded(fen: str, feature: str) -> list[float]:
         "bare_kings",
     ],
 )
-def test_the_units_of_a_side_are_counted_by_role(fen: str, us: list[int], them: list[int], facts_of: FactsOf) -> None:
+def test_the_units_of_a_side_are_counted_by_role(
+    fen: str, white: list[int], black: list[int], facts_of: FactsOf
+) -> None:
     material = facts_of(fen).material
-    assert material.count[esca.US] == us
-    assert material.count[esca.THEM] == them
-
-
-@pytest.mark.parametrize(
-    ("fen", "diff"),
-    [
-        (START, [0.0, 0.0, 0.0, 0.0, 0.0]),
-        (HEAVY_AND_A_KNIGHT, [0.0, 0.0, 0.25, 0.0, 0.0]),
-        (HEAVY, [0.0, -0.25, 0.25, 0.0, 0.0]),
-        (ARMY_AGAINST_A_KING, [1.0, 0.5, 0.5, 0.5, 0.25]),
-        (QUEEN_FOR_A_ROOK, [0.5, 0.0, 0.0, -0.25, 0.25]),
-        (QUEEN_FOR_A_ROOK_THEIRS, [-0.5, 0.0, 0.0, 0.25, -0.25]),
-        (ROOK_AND_KNIGHT, [0.25, 0.25, 0.0, 0.0, 0.0]),
-        (SAME_COLOUR_BISHOPS, [0.0, -0.5, 0.5, 0.0, 0.0]),
-        (LONE_KNIGHT, [-0.25, 0.25, 0.0, -0.25, 0.0]),
-        (PAWN_ENDING, [0.25, 0.0, 0.0, 0.0, 0.0]),
-    ],
-    ids=[
-        "start",
-        "heavy_and_a_knight",
-        "heavy",
-        "army_against_a_king",
-        "queen_for_a_rook",
-        "queen_for_a_rook_theirs",
-        "rook_and_knight",
-        "same_colour_bishops",
-        "lone_knight",
-        "pawn_ending",
-    ],
-)
-def test_the_count_difference_is_ours_less_theirs_by_role(fen: str, diff: list[float]) -> None:
-    assert encoded(fen, "piece_count_diff") == pytest.approx(diff)
+    assert material.pawns == esca.ByColour(white[0], black[0])
+    assert material.knights == esca.ByColour(white[1], black[1])
+    assert material.bishops == esca.ByColour(white[2], black[2])
+    assert material.rooks == esca.ByColour(white[3], black[3])
+    assert material.queens == esca.ByColour(white[4], black[4])
 
 
 @pytest.mark.parametrize(
@@ -166,7 +114,7 @@ def test_the_count_difference_is_ours_less_theirs_by_role(fen: str, diff: list[f
         (QUEENLESS, (22, 22)),
         (ARMY_AGAINST_A_KING, (31, 0)),
         (QUEEN_FOR_A_ROOK, (9, 5)),
-        (QUEEN_FOR_A_ROOK_THEIRS, (5, 9)),
+        (QUEEN_FOR_A_ROOK_THEIRS, (9, 5)),
         (ROOK_AND_KNIGHT, (8, 5)),
         (PAWN_ENDING, (0, 0)),
     ],
@@ -185,22 +133,22 @@ def test_the_count_difference_is_ours_less_theirs_by_role(fen: str, diff: list[f
 def test_non_pawn_material_leaves_out_the_pawns_and_the_king(
     fen: str, non_pawn_value: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).material.non_pawn_value == non_pawn_value
+    assert facts_of(fen).material.non_pawn_value == esca.ByColour(*non_pawn_value)
 
 
 @pytest.mark.parametrize(
-    ("fen", "value", "balance"),
+    ("fen", "value"),
     [
-        (START, (39, 39), 0.0),
-        (TWO_QUEENS_EACH, (40, 40), 0.0),
-        (HEAVY_AND_A_KNIGHT, (31, 28), 0.15),
-        (ARMY_AGAINST_A_KING, (39, 0), 1.0),
-        (QUEEN_FOR_A_ROOK, (14, 8), 0.3),
-        (QUEEN_FOR_A_ROOK_THEIRS, (8, 14), -0.3),
-        (ROOK_AND_KNIGHT, (14, 10), 0.2),
-        (LONE_KNIGHT, (3, 6), -0.15),
-        (PAWN_ENDING, (4, 3), 0.05),
-        (BARE_KINGS, (0, 0), 0.0),
+        (START, (39, 39)),
+        (TWO_QUEENS_EACH, (40, 40)),
+        (HEAVY_AND_A_KNIGHT, (31, 28)),
+        (ARMY_AGAINST_A_KING, (39, 0)),
+        (QUEEN_FOR_A_ROOK, (14, 8)),
+        (QUEEN_FOR_A_ROOK_THEIRS, (14, 8)),
+        (ROOK_AND_KNIGHT, (14, 10)),
+        (LONE_KNIGHT, (3, 6)),
+        (PAWN_ENDING, (4, 3)),
+        (BARE_KINGS, (0, 0)),
     ],
     ids=[
         "start",
@@ -215,27 +163,26 @@ def test_non_pawn_material_leaves_out_the_pawns_and_the_king(
         "bare_kings",
     ],
 )
-def test_the_balance_is_our_value_sum_less_theirs(
-    fen: str, value: tuple[int, int], balance: float, facts_of: FactsOf
+def test_the_value_of_a_side_is_the_sum_of_its_units_but_the_king(
+    fen: str, value: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).material.value == value
-    assert encoded(fen, "material_balance") == pytest.approx([balance])
+    assert facts_of(fen).material.value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
-    ("fen", "phase"),
+    ("fen", "phase_points"),
     [
-        (START, 1.0),
-        (TWO_QUEENS_EACH, 1.0),
-        (HEAVY_AND_A_KNIGHT, 19 / 24),
-        (HEAVY, 0.75),
-        (QUEENLESS, 16 / 24),
-        (ARMY_AGAINST_A_KING, 0.5),
-        (QUEEN_FOR_A_ROOK, 0.25),
-        (ROOK_AND_KNIGHT, 5 / 24),
-        (SAME_COLOUR_BISHOPS, 4 / 24),
-        (BISHOP_PAIR, 0.125),
-        (PAWN_ENDING, 0.0),
+        (START, 24),
+        (TWO_QUEENS_EACH, 28),
+        (HEAVY_AND_A_KNIGHT, 19),
+        (HEAVY, 18),
+        (QUEENLESS, 16),
+        (ARMY_AGAINST_A_KING, 12),
+        (QUEEN_FOR_A_ROOK, 6),
+        (ROOK_AND_KNIGHT, 5),
+        (SAME_COLOUR_BISHOPS, 4),
+        (BISHOP_PAIR, 3),
+        (PAWN_ENDING, 0),
     ],
     ids=[
         "start",
@@ -251,39 +198,10 @@ def test_the_balance_is_our_value_sum_less_theirs(
         "pawn_ending",
     ],
 )
-def test_phase_weighs_what_is_left_against_a_full_opening_set(fen: str, phase: float, facts_of: FactsOf) -> None:
-    assert facts_of(fen).material.phase == pytest.approx(phase)
-
-
-@pytest.mark.parametrize(
-    ("fen", "bucket"),
-    [
-        (START, [1.0, 0.0, 0.0]),
-        (TWO_QUEENS_EACH, [1.0, 0.0, 0.0]),
-        (HEAVY_AND_A_KNIGHT, [1.0, 0.0, 0.0]),
-        (HEAVY, [0.0, 1.0, 0.0]),
-        (QUEENLESS, [0.0, 1.0, 0.0]),
-        (ARMY_AGAINST_A_KING, [0.0, 1.0, 0.0]),
-        (QUEEN_FOR_A_ROOK, [0.0, 1.0, 0.0]),
-        (ROOK_AND_KNIGHT, [0.0, 0.0, 1.0]),
-        (BISHOP_PAIR, [0.0, 0.0, 1.0]),
-        (PAWN_ENDING, [0.0, 0.0, 1.0]),
-    ],
-    ids=[
-        "start",
-        "two_queens_each",
-        "heavy_and_a_knight",
-        "heavy",
-        "queenless",
-        "army_against_a_king",
-        "queen_for_a_rook",
-        "rook_and_knight",
-        "bishop_pair",
-        "pawn_ending",
-    ],
-)
-def test_the_phase_bucket_keeps_both_its_boundaries_in_the_middlegame(fen: str, bucket: list[float]) -> None:
-    assert encoded(fen, "phase_bucket") == pytest.approx(bucket)
+def test_the_phase_points_count_what_is_left_of_a_full_opening_set(
+    fen: str, phase_points: int, facts_of: FactsOf
+) -> None:
+    assert facts_of(fen).material.phase_points == phase_points
 
 
 @pytest.mark.parametrize(
@@ -364,86 +282,23 @@ def test_pawns_only_leaves_the_board_to_the_kings_and_the_pawns(fen: str, pawns_
 def test_a_side_holding_at_most_a_minor_or_bishops_of_one_colour_cannot_mate(
     fen: str, insufficient: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).material.insufficient == insufficient
-
-
-@pytest.mark.parametrize(
-    ("fen", "imbalance"),
-    [
-        (START, 0),
-        (QUEENLESS, 0),
-        (SAME_COLOUR_BISHOPS, 0),
-        (ARMY_AGAINST_A_KING, 1),
-        (BISHOP_PAIR, 1),
-        (BISHOP_PAIR_THEIRS, -1),
-        (ONE_BISHOP_AGAINST_TWO, -1),
-        (LONE_KNIGHT, 0),
-        (BARE_KINGS, 0),
-    ],
-    ids=[
-        "start",
-        "queenless",
-        "same_colour_bishops",
-        "army_against_a_king",
-        "bishop_pair",
-        "bishop_pair_theirs",
-        "one_bishop_against_two",
-        "lone_knight",
-        "bare_kings",
-    ],
-)
-def test_only_bishops_of_both_colours_are_a_pair(fen: str, imbalance: int, facts_of: FactsOf) -> None:
-    assert facts_of(fen).material.bishop_pair_imbalance == imbalance
-    assert encoded(fen, "bishop_pair_imbalance") == pytest.approx([imbalance])
-
-
-@pytest.mark.parametrize(
-    ("fen", "difference"),
-    [
-        (START, 0.0),
-        (TWO_QUEENS_EACH, 0.0),
-        (HEAVY_AND_A_KNIGHT, 3 / 20),
-        (ARMY_AGAINST_A_KING, 1.0),
-        (QUEEN_FOR_A_ROOK, 4 / 20),
-        (QUEEN_FOR_A_ROOK_THEIRS, -4 / 20),
-        (ROOK_AND_KNIGHT, 3 / 20),
-        (ONE_BISHOP_AGAINST_TWO, 0.0),
-        (LONE_KNIGHT, -2 / 20),
-        (PAWN_ENDING, 0.0),
-    ],
-    ids=[
-        "start",
-        "two_queens_each",
-        "heavy_and_a_knight",
-        "army_against_a_king",
-        "queen_for_a_rook",
-        "queen_for_a_rook_theirs",
-        "rook_and_knight",
-        "one_bishop_against_two",
-        "lone_knight",
-        "pawn_ending",
-    ],
-)
-def test_the_piece_value_difference_runs_past_its_scale_only_with_a_whole_army(fen: str, difference: float) -> None:
-    assert encoded(fen, "non_pawn_material_diff") == pytest.approx([difference])
+    assert facts_of(fen).material.insufficient_material == esca.ByColour(*insufficient)
 
 
 def test_the_material_facts_of_a_chess960_position_are_the_classic_ones(facts_of: FactsOf) -> None:
-    """No `material` fact is one of the four `features.md` §4 defines for
-    classic chess only, so a Chess960 position answers as the same placement
-    would."""
+    """No `material` fact reads the back rank, so a Chess960 position answers
+    as the same placement would."""
     material = facts_of(NINE_SIXTY, esca.CHESS960).material
-    assert material.count[esca.US] == [8, 1, 2, 2, 1]
-    assert material.count[esca.THEM] == [8, 2, 2, 2, 1]
-    assert material.non_pawn_value == (28, 31)
-    assert material.value == (36, 39)
-    assert material.phase == pytest.approx(23 / 24)
+    assert material.pawns == esca.ByColour(8, 8)
+    assert material.knights == esca.ByColour(1, 2)
+    assert material.non_pawn_value == esca.ByColour(28, 31)
+    assert material.value == esca.ByColour(36, 39)
+    assert material.phase_points == 23
     assert material.both_queens
     assert not material.pawns_only
-    assert material.insufficient == (False, False)
-    assert material.bishop_pair_imbalance == 0
+    assert material.insufficient_material == esca.ByColour(False, False)
 
     classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10").material
-    assert classic.count == material.count
+    assert classic.pawns == material.pawns
     assert classic.value == material.value
-    assert classic.phase == material.phase
+    assert classic.phase_points == material.phase_points

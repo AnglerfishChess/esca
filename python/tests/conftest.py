@@ -16,6 +16,10 @@ def _squares(names: str) -> set[str]:
     return set(names.split())
 
 
+def _files(letters: str) -> esca.FileSet:
+    return esca.FileSet(list(letters))
+
+
 @pytest.fixture(scope="session")
 def facts_of() -> Callable[..., esca.Facts]:
     """`facts_of(fen)`, or `facts_of(fen, variant)`: the facts of a FEN, classic by default."""
@@ -26,6 +30,12 @@ def facts_of() -> Callable[..., esca.Facts]:
 def squares() -> Callable[[str], set[str]]:
     """`squares("e4 d5")`: the squares a space-separated list names."""
     return _squares
+
+
+@pytest.fixture(scope="session")
+def files() -> Callable[[str], esca.FileSet]:
+    """`files("bcg")`: the files their letters name."""
+    return _files
 
 
 def _move_facts(fen: str, uci: str, variant: esca.Variant | None = None) -> esca.MoveFacts:

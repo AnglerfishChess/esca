@@ -46,6 +46,7 @@ jobs:
       - run: cargo test --features openings
       - run: cargo test --features pgn
       - run: cargo test --features polyglot
+      - run: cargo test --features serde
       - run: cargo test --features uci
       - run: cargo test --features tokio
       - run: cargo test --all-features

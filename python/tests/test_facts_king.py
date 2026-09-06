@@ -68,45 +68,45 @@ FactsOf = Callable[..., esca.Facts]
 def relative_rank(square: str, colour: str) -> int:
     """The rank of `square` counted from `colour`'s own back rank."""
     rank = int(square[1])
-    return rank if colour == "w" else 9 - rank
+    return rank if colour == "white" else 9 - rank
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "e", "e"),
         (CORNERS, "h", "a"),
         (HOLES, "g", "b"),
         (BOXED, "g", "g"),
-        (BARE_KINGS, "d", "g"),
+        (BARE_KINGS, "g", "d"),
         (ENDGAME, "e", "d"),
     ],
     ids=["start", "corners", "holes", "boxed", "bare_kings", "endgame"],
 )
-def test_a_kings_file_is_the_file_of_the_square_it_stands_on(fen: str, us: str, them: str, facts_of: FactsOf) -> None:
+def test_a_kings_file_is_the_file_of_the_square_it_stands_on(
+    fen: str, white: str, black: str, facts_of: FactsOf
+) -> None:
     square = facts_of(fen).king.square
-    assert square[esca.US][0] == us
-    assert square[esca.THEM][0] == them
+    assert square.white[0] == white
+    assert square.black[0] == black
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, 1, 1),
         (UNCASTLED, 1, 1),
         (HOLES, 1, 3),
         (BOXED, 1, 1),
-        (BARE_KINGS, 4, 1),
+        (BARE_KINGS, 1, 4),
         (ENDGAME, 3, 4),
     ],
     ids=["start", "uncastled", "holes", "boxed", "bare_kings", "endgame"],
 )
-def test_a_kings_rank_is_counted_from_its_own_back_rank(fen: str, us: int, them: int, facts_of: FactsOf) -> None:
-    facts = facts_of(fen)
-    ours = facts.side_to_move
-    theirs = "b" if ours == "w" else "w"
-    assert relative_rank(facts.king.square[esca.US], ours) == us
-    assert relative_rank(facts.king.square[esca.THEM], theirs) == them
+def test_a_kings_rank_is_counted_from_its_own_back_rank(fen: str, white: int, black: int, facts_of: FactsOf) -> None:
+    square = facts_of(fen).king.square
+    assert relative_rank(square.white, "white") == white
+    assert relative_rank(square.black, "black") == black
 
 
 @pytest.mark.parametrize(
@@ -124,7 +124,7 @@ def test_a_kings_rank_is_counted_from_its_own_back_rank(fen: str, us: int, them:
 def test_a_king_is_home_on_the_e_file_of_its_own_first_rank(
     fen: str, home: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.on_home_square == home
+    assert facts_of(fen).king.on_home_square == esca.ByColour(*home)
 
 
 @pytest.mark.parametrize(
@@ -143,36 +143,36 @@ def test_a_castled_zone_is_the_wing_of_the_board_the_king_stands_on(
     fen: str, queenside: tuple[bool, bool], kingside: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
     king = facts_of(fen).king
-    assert king.castled_queenside == queenside
-    assert king.castled_kingside == kingside
+    assert king.castled_queenside == esca.ByColour(*queenside)
+    assert king.castled_kingside == esca.ByColour(*kingside)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "def", "def"),
         (CORNERS, "fgh", "abc"),
         (STORM, "fgh", "abc"),
         (OPEN_FILES, "fgh", "bcd"),
-        (BARE_KINGS, "cde", "fgh"),
+        (BARE_KINGS, "fgh", "cde"),
         (ENDGAME, "def", "cde"),
     ],
     ids=["start", "corners", "storm", "open_files", "bare_kings", "endgame"],
 )
 def test_the_king_files_are_the_kings_own_clamped_to_b_to_g_and_its_neighbours(
-    fen: str, us: str, them: str, facts_of: FactsOf
+    fen: str, white: str, black: str, facts_of: FactsOf
 ) -> None:
     king_files = facts_of(fen).king.shield_files
-    assert king_files[esca.US] == us
-    assert king_files[esca.THEM] == them
+    assert "".join(king_files.white) == white
+    assert "".join(king_files.black) == black
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, [1, 1, 1], [1, 1, 1]),
         (STORM, [1, None, 3], [1, 2, 3]),
-        (BOXED, [1, 2, 1], [1, 1, 1]),
+        (BOXED, [1, 1, 1], [1, 2, 1]),
         (CORNERS, [None, 1, None], [None, 1, None]),
         (UNCASTLED, [None, None, 1], [1, 1, 1]),
         (ENDGAME, [1, None, None], [None, None, None]),
@@ -181,15 +181,15 @@ def test_the_king_files_are_the_kings_own_clamped_to_b_to_g_and_its_neighbours(
     ids=["start", "storm", "boxed", "corners", "uncastled", "endgame", "bare_kings"],
 )
 def test_a_pawn_shield_is_how_far_ahead_the_nearest_friendly_pawn_of_a_king_file_is(
-    fen: str, us: list[int | None], them: list[int | None], facts_of: FactsOf
+    fen: str, white: list[int | None], black: list[int | None], facts_of: FactsOf
 ) -> None:
     shield = facts_of(fen).king.shield
-    assert shield[esca.US] == us
-    assert shield[esca.THEM] == them
+    assert shield.white == white
+    assert shield.black == black
 
 
 @pytest.mark.parametrize(
-    ("fen", "us_open", "us_semi_open", "them_open", "them_semi_open"),
+    ("fen", "white_open", "white_semi_open", "black_open", "black_semi_open"),
     [
         (START, [False] * 3, [False] * 3, [False] * 3, [False] * 3),
         (
@@ -221,38 +221,38 @@ def test_a_pawn_shield_is_how_far_ahead_the_nearest_friendly_pawn_of_a_king_file
 )
 def test_a_king_file_is_open_when_bare_and_semi_open_when_only_the_enemy_has_left_it(
     fen: str,
-    us_open: list[bool],
-    us_semi_open: list[bool],
-    them_open: list[bool],
-    them_semi_open: list[bool],
+    white_open: list[bool],
+    white_semi_open: list[bool],
+    black_open: list[bool],
+    black_semi_open: list[bool],
     facts_of: FactsOf,
 ) -> None:
     king = facts_of(fen).king
-    assert king.file_open[esca.US] == us_open
-    assert king.file_open[esca.THEM] == them_open
-    assert king.file_semi_open_for_enemy[esca.US] == us_semi_open
-    assert king.file_semi_open_for_enemy[esca.THEM] == them_semi_open
+    assert king.shield_file_open.white == white_open
+    assert king.shield_file_open.black == black_open
+    assert king.shield_file_semi_open_for_enemy.white == white_semi_open
+    assert king.shield_file_semi_open_for_enemy.black == black_semi_open
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, [6, 6, 6], [6, 6, 6]),
         (STORM, [2, 3, 4], [5, 4, None]),
         (OPEN_FILES, [None, None, 6], [None, 4, None]),
         (ENDGAME, [None, 2, None], [None, 1, None]),
-        (BOXED, [6, 6, 6], [6, 5, 6]),
+        (BOXED, [6, 5, 6], [6, 6, 6]),
         (UNCASTLED, [None, None, 6], [6, 6, 6]),
         (CORNERS, [None, None, None], [None, None, None]),
     ],
     ids=["start", "storm", "open_files", "endgame", "boxed", "uncastled", "corners"],
 )
 def test_a_pawn_storm_is_how_far_ahead_the_nearest_enemy_pawn_of_a_king_file_is(
-    fen: str, us: list[int | None], them: list[int | None], facts_of: FactsOf
+    fen: str, white: list[int | None], black: list[int | None], facts_of: FactsOf
 ) -> None:
     storm = facts_of(fen).king.storm
-    assert storm[esca.US] == us
-    assert storm[esca.THEM] == them
+    assert storm.white == white
+    assert storm.black == black
 
 
 @pytest.mark.parametrize(
@@ -270,7 +270,7 @@ def test_a_pawn_storm_is_how_far_ahead_the_nearest_enemy_pawn_of_a_king_file_is(
 def test_a_ring_attacker_is_an_enemy_piece_bearing_on_a_square_next_to_the_king(
     fen: str, attackers: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_attackers == attackers
+    assert facts_of(fen).king.ring_attackers == esca.ByColour(*attackers)
 
 
 @pytest.mark.parametrize(
@@ -288,7 +288,7 @@ def test_a_ring_attacker_is_an_enemy_piece_bearing_on_a_square_next_to_the_king(
 def test_ring_attack_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
     fen: str, weight: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_attack_weight == weight
+    assert facts_of(fen).king.ring_attack_weight == esca.ByColour(*weight)
 
 
 @pytest.mark.parametrize(
@@ -307,7 +307,7 @@ def test_ring_attack_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
 def test_a_ring_square_is_defended_by_the_kings_own_side_but_never_by_the_king(
     fen: str, defended: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_defended == defended
+    assert facts_of(fen).king.ring_defended == esca.ByColour(*defended)
 
 
 @pytest.mark.parametrize(
@@ -326,7 +326,7 @@ def test_a_ring_square_is_defended_by_the_kings_own_side_but_never_by_the_king(
 def test_a_ring_hole_is_a_ring_square_the_enemy_attacks_and_nothing_of_ours_covers(
     fen: str, holes: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_holes == holes
+    assert facts_of(fen).king.ring_holes == esca.ByColour(*holes)
 
 
 @pytest.mark.parametrize(
@@ -335,17 +335,17 @@ def test_a_ring_hole_is_a_ring_square_the_enemy_attacks_and_nothing_of_ours_cove
         (START, (0, 0)),
         (SIEGE, (1, 2)),
         (CORNERS, (2, 2)),
-        (BOXED, (3, 2)),
+        (BOXED, (2, 3)),
         (UNCASTLED, (4, 1)),
         (ENDGAME, (5, 4)),
-        (BARE_KINGS, (8, 5)),
+        (BARE_KINGS, (5, 8)),
     ],
     ids=["start", "siege", "corners", "boxed", "uncastled", "endgame", "bare_kings"],
 )
 def test_an_escape_square_is_next_to_the_king_free_of_our_own_and_unattacked(
     fen: str, escapes: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.escape_squares == escapes
+    assert facts_of(fen).king.escape_squares == esca.ByColour(*escapes)
 
 
 @pytest.mark.parametrize(
@@ -355,7 +355,7 @@ def test_an_escape_square_is_next_to_the_king_free_of_our_own_and_unattacked(
         (SIEGE, (True, True)),
         (UNCASTLED, (False, True)),
         (UNCASTLED_THEIRS, (True, False)),
-        (BOXED, (False, True)),
+        (BOXED, (True, False)),
         (ENDGAME, (False, False)),
     ],
     ids=["start", "siege", "uncastled", "uncastled_theirs", "boxed", "endgame"],
@@ -363,7 +363,7 @@ def test_an_escape_square_is_next_to_the_king_free_of_our_own_and_unattacked(
 def test_back_rank_risk_is_a_first_rank_king_with_its_own_units_on_every_square_ahead(
     fen: str, risk: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.back_rank_risk == risk
+    assert facts_of(fen).king.back_rank_risk == esca.ByColour(*risk)
 
 
 @pytest.mark.parametrize(
@@ -390,7 +390,7 @@ def test_the_kings_stand_a_chebyshev_distance_apart(fen: str, distance: int, fac
 def test_tropism_is_the_mean_distance_of_the_enemy_pieces_to_the_king(
     fen: str, tropism: tuple[float, float], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.tropism == tropism
+    assert facts_of(fen).king.tropism == esca.ByColour(*tropism)
 
 
 @pytest.mark.parametrize(
@@ -401,32 +401,29 @@ def test_tropism_is_the_mean_distance_of_the_enemy_pieces_to_the_king(
         (STORM, (12, 16)),
         (HOLES, (16, 22)),
         (ENDGAME, (19, 21)),
-        (BARE_KINGS, (27, 21)),
+        (BARE_KINGS, (21, 27)),
     ],
     ids=["start", "siege", "storm", "holes", "endgame", "bare_kings"],
 )
 def test_virtual_mobility_is_what_a_queen_on_the_kings_square_would_attack(
     fen: str, mobility: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.virtual_mobility == mobility
+    assert facts_of(fen).king.virtual_mobility == esca.ByColour(*mobility)
 
 
-def test_the_home_square_bit_is_left_out_of_a_chess960_vector(facts_of: FactsOf) -> None:
-    """`features.md` §4 keeps `king_on_home_square` to classic chess: a Chess960
-    array can start a king on e1 that has never moved, so the vector drops the
-    bit the facts still read off the geometry."""
-    facts = facts_of(NINE_SIXTY_HOME, esca.CHESS960)
-    assert facts.king.on_home_square == (True, True)
-    assert ("king", "king_on_home_square") not in esca.features_for(esca.CHESS960)
+def test_a_chess960_king_reads_its_geometry_like_any_other(facts_of: FactsOf) -> None:
+    """A Chess960 array can start a king on e1 that has never moved, and can
+    spend its rights with both kings still at home: the facts read the
+    geometry, and say so."""
+    home = facts_of(NINE_SIXTY_HOME, esca.CHESS960).king
+    assert home.on_home_square == esca.ByColour(True, True)
 
+    wing = facts_of(NINE_SIXTY_WING, esca.CHESS960).king
+    assert wing.castled_kingside == esca.ByColour(True, True)
+    assert wing.castled_queenside == esca.ByColour(False, False)
 
-def test_the_castled_zone_bits_are_left_out_of_a_chess960_vector(facts_of: FactsOf) -> None:
-    """The same for `king_castled_zone`: a Chess960 array can start both kings in
-    the kingside zone with no castling having happened."""
-    facts = facts_of(NINE_SIXTY_WING, esca.CHESS960)
-    assert facts.king.castled_kingside == (True, True)
-    assert facts.king.castled_queenside == (False, False)
-    assert ("king", "king_castled_zone") not in esca.features_for(esca.CHESS960)
+    spent = facts_of(NINE_SIXTY_SPENT, esca.CHESS960).king
+    assert spent.castled_side == esca.ByColour("short", "short")
 
 
 @pytest.mark.parametrize(
@@ -445,7 +442,7 @@ def test_the_castled_zone_bits_are_left_out_of_a_chess960_vector(facts_of: Facts
 def test_a_ring_defender_is_a_friendly_piece_bearing_on_a_square_next_to_the_king(
     fen: str, defenders: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_defenders == defenders
+    assert facts_of(fen).king.ring_defenders == esca.ByColour(*defenders)
 
 
 @pytest.mark.parametrize(
@@ -464,7 +461,7 @@ def test_a_ring_defender_is_a_friendly_piece_bearing_on_a_square_next_to_the_kin
 def test_ring_defence_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
     fen: str, weight: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_defence_weight == weight
+    assert facts_of(fen).king.ring_defence_weight == esca.ByColour(*weight)
 
 
 @pytest.mark.parametrize(
@@ -483,7 +480,7 @@ def test_ring_defence_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
 def test_the_ring_attacker_surplus_is_the_besieging_weight_less_the_defending_one(
     fen: str, surplus: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.ring_attacker_surplus == surplus
+    assert facts_of(fen).king.ring_attacker_surplus == esca.ByColour(*surplus)
 
 
 @pytest.mark.parametrize(
@@ -495,14 +492,14 @@ def test_the_ring_attacker_surplus_is_the_besieging_weight_less_the_defending_on
         (CORNERS, (2, 2)),
         (HOLES, (3, 7)),
         (ENDGAME, (6, 6)),
-        (BARE_KINGS, (8, 5)),
+        (BARE_KINGS, (5, 8)),
     ],
     ids=["start", "developed", "siege", "corners", "holes", "endgame", "bare_kings"],
 )
 def test_an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
     fen: str, rays: tuple[int, int], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.open_rays == rays
+    assert facts_of(fen).king.open_rays == esca.ByColour(*rays)
 
 
 @pytest.mark.parametrize(
@@ -514,8 +511,8 @@ def test_an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
         (UNCASTLED, (True, False)),
         (UNCASTLED_THEIRS, (False, True)),
         (CORNERS, (True, True)),
-        (BOXED, (True, False)),
-        (BARE_KINGS, (False, True)),
+        (BOXED, (False, True)),
+        (BARE_KINGS, (True, False)),
     ],
     ids=[
         "start",
@@ -531,7 +528,7 @@ def test_an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
 def test_luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_rank(
     fen: str, luft: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.luft == luft
+    assert facts_of(fen).king.luft == esca.ByColour(*luft)
 
 
 @pytest.mark.parametrize(
@@ -544,7 +541,7 @@ def test_luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_ran
         (UNCASTLED_THEIRS, ("short", None)),
         (CORNERS, ("short", "long")),
         (SIEGE, ("short", "long")),
-        (BARE_KINGS, (None, "short")),
+        (BARE_KINGS, ("short", None)),
         (STALE_RIGHT, (None, "short")),
     ],
     ids=[
@@ -562,7 +559,7 @@ def test_luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_ran
 def test_a_castled_side_is_the_kings_own_file_once_its_rights_are_spent(
     fen: str, castled: tuple[str | None, str | None], facts_of: FactsOf
 ) -> None:
-    assert facts_of(fen).king.castled_side == castled
+    assert facts_of(fen).king.castled_side == esca.ByColour(*castled)
 
 
 @pytest.mark.parametrize(
@@ -583,11 +580,3 @@ def test_opposite_side_castling_is_the_two_kings_standing_on_different_wings(
     fen: str, opposite: bool, facts_of: FactsOf
 ) -> None:
     assert facts_of(fen).king.opposite_side_castling is opposite
-
-
-def test_the_castled_side_is_left_out_of_a_chess960_vector(facts_of: FactsOf) -> None:
-    """The same for `castled_side`: a Chess960 array can spend its rights with the
-    kings still on the squares they started on, and no castling ever played."""
-    facts = facts_of(NINE_SIXTY_SPENT, esca.CHESS960)
-    assert facts.king.castled_side == ("short", "short")
-    assert ("king", "castled_side") not in esca.features_for(esca.CHESS960)

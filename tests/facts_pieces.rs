@@ -5,8 +5,8 @@
 
 mod common;
 
-use common::{facts_of, facts_under, squares};
-use esca::{CHESS960, Schema, Side};
+use common::{by_colour, facts_of, facts_under, squares};
+use esca::{CHESS960, Colour};
 use rstest::rstest;
 
 /// The untouched array: a bishop of each colour a side, every minor at home.
@@ -119,7 +119,7 @@ const NINE_SIXTY_CLASSIC: &str =
 #[case::flipped(FLIPPED, [false, false])]
 #[case::lined(LINED, [false, false])]
 fn a_bishop_pair_needs_a_bishop_of_each_square_colour(#[case] fen: &str, #[case] pair: [bool; 2]) {
-    assert_eq!(facts_of(fen).pieces.bishop_pair, pair);
+    assert_eq!(facts_of(fen).pieces.bishop_pair, by_colour(pair));
 }
 
 #[rstest]
@@ -129,14 +129,14 @@ fn a_bishop_pair_needs_a_bishop_of_each_square_colour(#[case] fen: &str, #[case]
 #[case::flipped(FLIPPED, [0, 1], [1, 0])]
 #[case::boxed(BOXED, [0, 1], [1, 0])]
 #[case::lined(LINED, [0, 0], [0, 0])]
-fn bishops_are_counted_by_the_square_colour_the_mover_sees(
+fn bishops_are_counted_by_the_colour_of_the_square_they_stand_on(
     #[case] fen: &str,
     #[case] light: [u8; 2],
     #[case] dark: [u8; 2],
 ) {
     let pieces = facts_of(fen).pieces;
-    assert_eq!(pieces.bishops_light, light);
-    assert_eq!(pieces.bishops_dark, dark);
+    assert_eq!(pieces.bishops_light, by_colour(light));
+    assert_eq!(pieces.bishops_dark, by_colour(dark));
 }
 
 #[rstest]
@@ -164,7 +164,10 @@ fn a_pawn_counts_on_the_bishop_colour_when_an_own_bishop_shares_its_colour(
     #[case] fen: &str,
     #[case] pawns: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.pawns_on_bishop_colour, pawns);
+    assert_eq!(
+        facts_of(fen).pieces.pawns_on_bishop_colour,
+        by_colour(pawns)
+    );
 }
 
 #[rstest]
@@ -177,7 +180,10 @@ fn rooks_are_connected_on_a_rank_when_nothing_stands_between_them(
     #[case] fen: &str,
     #[case] connected: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rooks_connected_rank, connected);
+    assert_eq!(
+        facts_of(fen).pieces.rooks_connected_rank,
+        by_colour(connected)
+    );
 }
 
 #[rstest]
@@ -190,7 +196,10 @@ fn rooks_are_connected_on_a_file_when_nothing_stands_between_them(
     #[case] fen: &str,
     #[case] connected: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rooks_connected_file, connected);
+    assert_eq!(
+        facts_of(fen).pieces.rooks_connected_file,
+        by_colour(connected)
+    );
 }
 
 #[rstest]
@@ -204,7 +213,7 @@ fn a_rook_is_on_an_open_file_when_no_pawn_of_either_colour_holds_it(
     #[case] fen: &str,
     #[case] rooks: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rooks_on_open_file, rooks);
+    assert_eq!(facts_of(fen).pieces.rooks_on_open_file, by_colour(rooks));
 }
 
 #[rstest]
@@ -217,7 +226,10 @@ fn a_rook_is_on_a_semi_open_file_when_only_its_own_side_has_left_it(
     #[case] fen: &str,
     #[case] rooks: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rooks_on_semi_open_file, rooks);
+    assert_eq!(
+        facts_of(fen).pieces.rooks_on_semi_open_file,
+        by_colour(rooks)
+    );
 }
 
 #[rstest]
@@ -230,7 +242,7 @@ fn the_relative_seventh_is_counted_from_the_rooks_own_back_rank(
     #[case] fen: &str,
     #[case] rooks: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rooks_on_relative_7th, rooks);
+    assert_eq!(facts_of(fen).pieces.rooks_on_seventh_rank, by_colour(rooks));
 }
 
 #[rstest]
@@ -243,7 +255,10 @@ fn a_rook_behind_an_own_passer_shares_its_file_at_a_lower_relative_rank(
     #[case] fen: &str,
     #[case] rooks: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rook_behind_own_passer, rooks);
+    assert_eq!(
+        facts_of(fen).pieces.rook_behind_own_passer,
+        by_colour(rooks)
+    );
 }
 
 #[rstest]
@@ -256,7 +271,10 @@ fn behind_an_enemy_passer_is_read_in_the_passer_owners_frame(
     #[case] fen: &str,
     #[case] rooks: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rook_behind_enemy_passer, rooks);
+    assert_eq!(
+        facts_of(fen).pieces.rook_behind_enemy_passer,
+        by_colour(rooks)
+    );
 }
 
 #[rstest]
@@ -269,34 +287,34 @@ fn a_trapped_rook_is_boxed_in_beyond_its_own_king_with_the_castling_rights_gone(
     #[case] fen: &str,
     #[case] trapped: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.trapped_rook, trapped);
+    assert_eq!(facts_of(fen).pieces.trapped_rook, by_colour(trapped));
 }
 
 #[rstest]
 #[case::outposts(OUTPOSTS, "b5 d5 f5", "c5 e5 g5")]
 #[case::same_colour(SAME_COLOUR, "a5 c5", "b5 d4 d5 f4")]
 #[case::holes(HOLES, "d5 f5", "")]
-#[case::flipped(FLIPPED, "d5 f5", "")]
+#[case::flipped(FLIPPED, "", "d5 f5")]
 #[case::battery(BATTERY, "b6 d6", "")]
 #[case::passer_rooks(PASSER_ROOKS, "", "e3 g3")]
 #[case::lined(LINED, "e4", "")]
 #[case::start(START, "", "")]
 fn an_outpost_square_is_pawn_held_ground_on_ranks_four_to_six(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let pieces = facts_of(fen).pieces;
-    assert_eq!(pieces.outposts[Side::Us.index()], squares(us));
-    assert_eq!(pieces.outposts[Side::Them.index()], squares(them));
+    assert_eq!(pieces.outposts.white, squares(white));
+    assert_eq!(pieces.outposts.black, squares(black));
 }
 
 #[rstest]
 #[case::outposts(OUTPOSTS, [2, 1])]
 #[case::minor_outposts(MINOR_OUTPOSTS, [2, 0])]
-#[case::minor_outposts_black(MINOR_OUTPOSTS_BLACK, [0, 2])]
+#[case::minor_outposts_black(MINOR_OUTPOSTS_BLACK, [2, 0])]
 #[case::minor_outposts_mirror(MINOR_OUTPOSTS_MIRROR, [0, 2])]
-#[case::flipped(FLIPPED, [1, 0])]
+#[case::flipped(FLIPPED, [0, 1])]
 #[case::holes(HOLES, [0, 0])]
 #[case::rim(RIM, [0, 0])]
 #[case::start(START, [0, 0])]
@@ -304,7 +322,7 @@ fn a_minor_on_an_outpost_is_a_knight_or_a_bishop_on_an_own_outpost_square(
     #[case] fen: &str,
     #[case] minors: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.minors_on_outpost, minors);
+    assert_eq!(facts_of(fen).pieces.minors_on_outpost, by_colour(minors));
 }
 
 #[rstest]
@@ -312,13 +330,13 @@ fn a_minor_on_an_outpost_is_a_knight_or_a_bishop_on_an_own_outpost_square(
 #[case::outposts(OUTPOSTS, [1, 2])]
 #[case::holes(HOLES, [2, 0])]
 #[case::passer_rooks(PASSER_ROOKS, [0, 2])]
-#[case::flipped(FLIPPED, [1, 0])]
+#[case::flipped(FLIPPED, [0, 1])]
 #[case::start(START, [0, 0])]
 fn a_free_outpost_square_is_one_no_unit_of_either_colour_occupies(
     #[case] fen: &str,
     #[case] free: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.outpost_squares_free, free);
+    assert_eq!(facts_of(fen).pieces.outpost_squares_free, by_colour(free));
 }
 
 #[rstest]
@@ -331,7 +349,7 @@ fn a_knight_is_on_the_rim_on_file_a_or_h_or_on_relative_rank_one_or_eight(
     #[case] fen: &str,
     #[case] knights: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.knights_on_rim, knights);
+    assert_eq!(facts_of(fen).pieces.knights_on_rim, by_colour(knights));
 }
 
 #[rstest]
@@ -344,7 +362,7 @@ fn an_undeveloped_minor_still_stands_on_a_classic_starting_square(
     #[case] fen: &str,
     #[case] minors: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.minors_undeveloped, minors);
+    assert_eq!(facts_of(fen).pieces.minors_undeveloped, by_colour(minors));
 }
 
 #[rstest]
@@ -357,14 +375,14 @@ fn a_queen_is_developed_once_it_stands_off_its_classic_starting_square(
     #[case] fen: &str,
     #[case] developed: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.queen_developed, developed);
+    assert_eq!(facts_of(fen).pieces.queen_developed, by_colour(developed));
 }
 
 #[rstest]
 #[case::italian(ITALIAN, [2, 3])]
 #[case::fixed_centre(FIXED_CENTRE, [2, 2])]
 #[case::fixed_one_bishop(FIXED_ONE_BISHOP, [2, 0])]
-#[case::fixed_one_bishop_black(FIXED_ONE_BISHOP_BLACK, [0, 2])]
+#[case::fixed_one_bishop_black(FIXED_ONE_BISHOP_BLACK, [2, 0])]
 #[case::opposite(OPPOSITE, [0, 0])]
 #[case::start(START, [0, 0])]
 fn a_fixed_pawn_on_the_bishop_colour_is_one_whose_stop_square_is_held(
@@ -372,44 +390,44 @@ fn a_fixed_pawn_on_the_bishop_colour_is_one_whose_stop_square_is_held(
     #[case] pawns: [u8; 2],
 ) {
     let pieces = facts_of(fen).pieces;
-    assert_eq!(pieces.fixed_pawns_on_bishop_colour, pawns);
-    for side in [Side::Us, Side::Them] {
-        let i = side.index();
+    assert_eq!(pieces.fixed_pawns_on_bishop_colour, by_colour(pawns));
+    for colour in Colour::ALL {
         assert!(
-            pieces.fixed_pawns_on_bishop_colour[i] <= pieces.pawns_on_bishop_colour[i],
+            pieces.fixed_pawns_on_bishop_colour.of(colour)
+                <= pieces.pawns_on_bishop_colour.of(colour),
             "the fixed pawns are a subset of the pawns on the colour"
         );
     }
 }
 
 #[rstest]
-#[case::pair_vs_knights(PAIR_VS_KNIGHTS, 1)]
-#[case::pair_vs_knights_black(PAIR_VS_KNIGHTS_BLACK, -1)]
-#[case::knights_vs_pair(KNIGHTS_VS_PAIR, -1)]
-#[case::start(START, 0)]
-#[case::italian(ITALIAN, 0)]
-#[case::one_bishop_each(ONE_BISHOP_EACH, 0)]
-#[case::lined(LINED, 0)]
-fn the_bishop_pair_counts_against_a_knight_pair_and_cancels_with_the_reverse(
-    #[case] fen: &str,
-    #[case] imbalance: i8,
-) {
-    assert_eq!(facts_of(fen).pieces.bishop_pair_vs_knight_pair, imbalance);
+#[case::pair_vs_knights(PAIR_VS_KNIGHTS, [false, true])]
+#[case::pair_vs_knights_black(PAIR_VS_KNIGHTS_BLACK, [false, true])]
+#[case::knights_vs_pair(KNIGHTS_VS_PAIR, [true, false])]
+#[case::start(START, [true, true])]
+#[case::italian(ITALIAN, [true, true])]
+#[case::one_bishop_each(ONE_BISHOP_EACH, [false, true])]
+#[case::lined(LINED, [false, false])]
+fn a_knight_pair_is_two_knights_or_more(#[case] fen: &str, #[case] pair: [bool; 2]) {
+    assert_eq!(facts_of(fen).pieces.knight_pair, by_colour(pair));
 }
 
 #[rstest]
 #[case::seventh(SEVENTH, [true, true])]
 #[case::passer_rooks(PASSER_ROOKS, [true, false])]
-#[case::seventh_king_off_black(SEVENTH_KING_OFF_BLACK, [true, false])]
+#[case::seventh_king_off_black(SEVENTH_KING_OFF_BLACK, [false, true])]
 #[case::seventh_king_off(SEVENTH_KING_OFF, [false, true])]
-#[case::passer_rooks_black(PASSER_ROOKS_BLACK, [false, true])]
+#[case::passer_rooks_black(PASSER_ROOKS_BLACK, [true, false])]
 #[case::lined(LINED, [false, false])]
 #[case::start(START, [false, false])]
 fn a_rook_on_the_seventh_pays_when_the_enemy_king_stands_on_the_eighth(
     #[case] fen: &str,
     #[case] cut_off: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.rook_on_7th_with_king_on_8th, cut_off);
+    assert_eq!(
+        facts_of(fen).pieces.rook_on_seventh_with_king_on_eighth,
+        by_colour(cut_off)
+    );
 }
 
 #[rstest]
@@ -425,7 +443,7 @@ fn a_trapped_unit_has_no_safe_destination_among_the_squares_it_reaches(
     #[case] fen: &str,
     #[case] trapped: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.trapped_pieces, trapped);
+    assert_eq!(facts_of(fen).pieces.trapped_pieces, by_colour(trapped));
 }
 
 #[rstest]
@@ -441,7 +459,7 @@ fn the_trapped_value_is_the_value_sum_of_the_trapped_units(
     #[case] fen: &str,
     #[case] value: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).pieces.trapped_value, value);
+    assert_eq!(facts_of(fen).pieces.trapped_value, by_colour(value));
 }
 
 /// Only `minors_undeveloped` and `queen_developed` read the starting squares, so
@@ -449,30 +467,15 @@ fn the_trapped_value_is_the_value_sum_of_the_trapped_units(
 #[test]
 fn the_piece_facts_of_a_chess960_position_read_the_placement_as_they_find_it() {
     let pieces = facts_under(&CHESS960, NINE_SIXTY).pieces;
-    assert_eq!(pieces.bishop_pair, [true, true]);
-    assert_eq!(pieces.bishops_light, [1, 1]);
-    assert_eq!(pieces.bishops_dark, [1, 1]);
-    assert_eq!(pieces.pawns_on_bishop_colour, [8, 8]);
-    assert_eq!(pieces.rooks_connected_rank, [true, false]);
-    assert_eq!(pieces.rooks_connected_file, [false, false]);
-    assert_eq!(pieces.rooks_on_relative_7th, [0, 0]);
-    assert_eq!(pieces.trapped_rook, [true, false]);
-    assert_eq!(pieces.knights_on_rim, [1, 2]);
-    assert!(pieces.outposts[Side::Us.index()].is_empty());
-    assert!(pieces.outposts[Side::Them.index()].is_empty());
-}
-
-/// `features.md` §4 defines `minors_undeveloped` and `queen_developed` for
-/// classic chess only; they are the group's values 31 to 34.
-#[test]
-fn chess960_writes_the_two_facts_that_assume_the_starting_squares_as_zeros() {
-    let schema = Schema::v1();
-    let group = schema.group_set(&["pieces"]).expect("pieces is a group");
-    let classic = facts_of(NINE_SIXTY_CLASSIC).encode(schema, group);
-    let nine_sixty = facts_under(&CHESS960, NINE_SIXTY_CLASSIC).encode(schema, group);
-
-    assert_eq!(classic[31..35], [0.25f32, 0.25, 1.0, 1.0]);
-    assert_eq!(nine_sixty[31..35], [0.0f32; 4]);
-    assert_eq!(classic[..31], nine_sixty[..31]);
-    assert_eq!(classic[35..], nine_sixty[35..]);
+    assert_eq!(pieces.bishop_pair, by_colour([true, true]));
+    assert_eq!(pieces.bishops_light, by_colour([1, 1]));
+    assert_eq!(pieces.bishops_dark, by_colour([1, 1]));
+    assert_eq!(pieces.pawns_on_bishop_colour, by_colour([8, 8]));
+    assert_eq!(pieces.rooks_connected_rank, by_colour([true, false]));
+    assert_eq!(pieces.rooks_connected_file, by_colour([false, false]));
+    assert_eq!(pieces.rooks_on_seventh_rank, by_colour([0, 0]));
+    assert_eq!(pieces.trapped_rook, by_colour([true, false]));
+    assert_eq!(pieces.knights_on_rim, by_colour([1, 2]));
+    assert!(pieces.outposts.white.is_empty());
+    assert!(pieces.outposts.black.is_empty());
 }

@@ -107,11 +107,11 @@ def test_two_checkers_at_once_make_the_check_a_double_one(fen: str, double_check
     [
         (esca.CLASSIC, START, (True, True), (True, True)),
         (esca.CLASSIC, RIGHTS_SPLIT, (True, False), (False, True)),
-        (esca.CLASSIC, RIGHTS_BLACK_TO_MOVE, (True, True), (False, True)),
+        (esca.CLASSIC, RIGHTS_BLACK_TO_MOVE, (True, True), (True, False)),
         (esca.CLASSIC, RIGHTS_NONE, (False, False), (False, False)),
         (esca.CHESS960, NINE_SIXTY, (True, True), (True, True)),
         (esca.CHESS960, NINE_SIXTY_OUTERMOST, (True, True), (True, True)),
-        (esca.CHESS960, NINE_SIXTY_SPLIT, (False, True), (True, False)),
+        (esca.CHESS960, NINE_SIXTY_SPLIT, (True, False), (False, True)),
         (esca.CHESS960, NINE_SIXTY_INNER, (True, True), (False, False)),
     ],
     ids=[
@@ -129,8 +129,8 @@ def test_a_castling_right_survives_for_the_side_and_wing_the_fen_still_names(
     variant: esca.Variant, fen: str, short: tuple[bool, bool], long: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
     state = facts_of(fen, variant).state
-    assert state.castle_short == short
-    assert state.castle_long == long
+    assert state.can_castle_short == esca.ByColour(*short)
+    assert state.can_castle_long == esca.ByColour(*long)
 
 
 @pytest.mark.parametrize(
@@ -179,7 +179,7 @@ def test_the_en_passant_file_is_the_one_the_target_square_stands_on(
     ids=["start", "ep_unreached", "ep_pinned", "ep_takeable", "ep_two_takers"],
 )
 def test_an_en_passant_capture_counts_only_when_a_legal_move_makes_it(fen: str, legal: bool, facts_of: FactsOf) -> None:
-    assert facts_of(fen).state.ep_capture_legal == legal
+    assert facts_of(fen).state.en_passant_capture_legal == legal
 
 
 def test_the_state_facts_of_a_chess960_position_read_the_rooks_the_rights_name(facts_of: FactsOf) -> None:
@@ -189,12 +189,12 @@ def test_the_state_facts_of_a_chess960_position_read_the_rooks_the_rights_name(f
     state = facts_of(NINE_SIXTY, esca.CHESS960).state
     assert not state.in_check
     assert not state.double_check
-    assert state.castle_short == (True, True)
-    assert state.castle_long == (True, True)
+    assert state.can_castle_short == esca.ByColour(True, True)
+    assert state.can_castle_long == esca.ByColour(True, True)
     assert state.en_passant == "c"
-    assert state.ep_capture_legal, "b5 takes c6 en passant"
+    assert state.en_passant_capture_legal, "b5 takes c6 en passant"
 
     outermost = facts_of(NINE_SIXTY_OUTERMOST, esca.CHESS960).state
-    assert outermost.castle_short == state.castle_short, "`KQkq` names the same two rooks"
-    assert outermost.castle_long == state.castle_long
+    assert outermost.can_castle_short == state.can_castle_short, "`KQkq` names the same two rooks"
+    assert outermost.can_castle_long == state.can_castle_long
     assert outermost.en_passant == state.en_passant

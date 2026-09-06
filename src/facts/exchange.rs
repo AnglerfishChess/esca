@@ -157,10 +157,14 @@ impl Position {
     }
 }
 
-/// The `exchange` block of the side to move in `position`, over its `legal`
-/// moves.
-pub(super) fn exchange_facts(position: &Position, legal: &MoveList) -> ExchangeFacts {
-    let mut facts = ExchangeFacts::default();
+/// Writes the `exchange` values of `colour`, the side to move in `position`,
+/// over its `legal` moves.
+pub(super) fn exchange_facts(
+    position: &Position,
+    legal: &MoveList,
+    colour: Colour,
+    facts: &mut ExchangeFacts,
+) {
     let mut best: Option<i32> = None;
     for &mv in legal.as_slice() {
         if !mv.is_capture() {
@@ -170,13 +174,12 @@ pub(super) fn exchange_facts(position: &Position, legal: &MoveList) -> ExchangeF
         best = Some(best.map_or(see, |value: i32| value.max(see)));
         match see.cmp(&0) {
             Ordering::Greater => {
-                facts.see_positive_capture_count += 1;
-                facts.see_positive_total += see;
+                facts.see_positive_capture_count[colour] += 1;
+                facts.see_positive_total[colour] += see;
             }
-            Ordering::Equal => facts.see_equal_capture_count += 1,
+            Ordering::Equal => facts.see_equal_capture_count[colour] += 1,
             Ordering::Less => {}
         }
     }
-    facts.see_best_capture = best.unwrap_or(0);
-    facts
+    facts.see_best_capture[colour] = best.unwrap_or(0);
 }

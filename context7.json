@@ -18,8 +18,8 @@
   "rules": [
     "esca is one Rust crate and the Python package built from it: `esca = \"0.3\"` in Cargo.toml or `pip install esca`. The two surfaces mirror each other name for name; Python names are snake_case.",
     "Position is placement and state only; the rules are a Variant (CLASSIC, CHESS960); Game holds a Variant, a Position and the history, and answers repetition and claims. Castling is stored king-takes-rook; both UCI spellings are read.",
-    "Facts answers what is true about a position in fourteen versioned groups (placement, state, material, pawns, pieces, king, mobility, attacks, exchange, threats, tactics, endgame, history, planes), plus 40 values per legal move.",
-    "Schema::v1 (esca.SCHEMA) is the versioned contract between the extractor and the net: 2039 f32 per position, 40 per move, identified by schema_id. Encode with esca.encode(fens) / encode_into(fens, out).",
+    "Facts answers what is true about a position in fourteen groups (placement, state, history, material, pawns, pieces, king, mobility, attacks, exchange, threats, tactics, endgame, maps), plus MoveFacts for every legal move. Every value that differs between the two sides is a ByColour: .white, .black, .of(colour).",
+    "The facts describe themselves: esca::catalogue() / esca.facts_catalogue() give every group, field, type and meaning, docs/features.md is generated from it, and Python walks a group with Facts.groups(), facts.group(name), fields() and to_dict().",
     "explain answers rules questions with evidence, every reason its own field: Position.castling(colour, wing), en_passant_status, pins, skewers, checkers, attackers, between; Game.repetition_status, fifty_move_status, draw_status, claims_after.",
     "Cargo features, off by default: lichess (evaluation-dump reader), pgn, uci (blocking Engine), tokio (async Engine), polyglot (opening books), openings (ECO names).",
     "The Python wheel carries every feature: esca.lichess, esca.pgn, esca.uci (Engine, AsyncEngine, protocol), esca.polyglot, esca.openings. Position.polyglot_key() needs no feature.",

@@ -1,13 +1,13 @@
 //! The `history` group, fact by fact.
 //!
 //! Every expectation is worked out from the definitions in `docs/features.md`
-//! §2.13 for the named position above it. Everything but the halfmove clock is
-//! a fact of a game, so those cases play the moves that make them true.
+//! for the named position above it. Everything but the halfmove clock is a
+//! fact of a game, so those cases play the moves that make them true.
 
 mod common;
 
 use common::{facts_of, facts_under};
-use esca::{CHESS960, Game, Role, Schema, classic};
+use esca::{CHESS960, Game, Role, classic};
 use rstest::rstest;
 
 /// The untouched array: a fresh clock and nothing to repeat.
@@ -34,9 +34,6 @@ const SHUFFLE: &str = "k6r/8/8/8/8/8/8/K7 w - - 0 1";
 /// Chess960: kings on g between rooks on f and h, and a pawn just past b5.
 const NINE_SIXTY: &str = "bqnb1rkr/pp1ppppp/8/1Pp5/8/8/P1PPPPPP/BQNB1RKR w HFhf c6 0 3";
 
-/// The `halfmove_bucket` one-hot opens the `history` row (`features.md` §2.13).
-const HALFMOVE_BUCKET_AT: usize = 0;
-
 /// The classic game `fen` starts, after the UCI `moves`.
 fn game_of(fen: &str, moves: &[&str]) -> Game {
     let mut game = Game::from_fen(classic(), fen).expect("a test FEN is a legal position");
@@ -44,42 +41,6 @@ fn game_of(fen: &str, moves: &[&str]) -> Game {
         game.play_uci(uci).expect("a case names only legal moves");
     }
     game
-}
-
-/// The bucket the encoded `history` row's one-hot sets for `fen`.
-fn halfmove_bucket(fen: &str) -> usize {
-    let schema = Schema::v1();
-    let groups = schema.group_set(&["history"]).expect("the history group");
-    let row = facts_of(fen).encode(schema, groups);
-    row[HALFMOVE_BUCKET_AT..HALFMOVE_BUCKET_AT + 8]
-        .iter()
-        .position(|&value| value == 1.0)
-        .expect("a one-hot sets exactly one value")
-}
-
-#[rstest]
-#[case::clock_0(0, 0)]
-#[case::clock_1(1, 1)]
-#[case::clock_3(3, 1)]
-#[case::clock_4(4, 2)]
-#[case::clock_9(9, 2)]
-#[case::clock_10(10, 3)]
-#[case::clock_19(19, 3)]
-#[case::clock_20(20, 4)]
-#[case::clock_39(39, 4)]
-#[case::clock_40(40, 5)]
-#[case::clock_69(69, 5)]
-#[case::clock_70(70, 6)]
-#[case::clock_89(89, 6)]
-#[case::clock_90(90, 7)]
-#[case::clock_100(100, 7)]
-fn the_halfmove_clock_falls_in_the_bucket_whose_range_holds_it(
-    #[case] clock: u32,
-    #[case] bucket: usize,
-) {
-    let fen = format!("{NO_CLOCKS} {clock} 60");
-    assert_eq!(facts_of(&fen).history.halfmove_clock, clock);
-    assert_eq!(halfmove_bucket(&fen), bucket);
 }
 
 #[rstest]
@@ -268,12 +229,12 @@ fn the_quiet_plies_are_those_since_the_last_capture_or_check(
 #[rstest]
 #[case::fresh(START, &[], 0)]
 #[case::quiet(START, &QUIET, 0)]
-#[case::scandi3(START, &SCANDI3, -1)]
+#[case::scandi3(START, &SCANDI3, 1)]
 #[case::scandi4(START, &SCANDI4, 0)]
 #[case::scandi8(START, &SCANDI8, 1)]
 #[case::scandi12(START, &SCANDI12, 0)]
-#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, -5)]
-fn the_material_trend_is_what_the_last_eight_plies_have_won_or_lost(
+#[case::rook_takes(ROOK_TAKES, &ROOK_TAKES_MOVES, 5)]
+fn the_material_trend_is_what_the_last_eight_plies_have_won_or_lost_white_less_black(
     #[case] fen: &str,
     #[case] moves: &[&str],
     #[case] trend: i32,

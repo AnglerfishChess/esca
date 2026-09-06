@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- The typed facts are the API. `Position::facts()` answers 221 named facts in
+  14 groups, and 27 more about every legal move, each with its own type: a
+  `bool`, a count, a `SquareSet`, a `FileSet`, an `Option` or a named enum.
+  Nothing is scaled, capped or one-hot, and nothing has to be looked up in a
+  manifest to be read.
+- Every fact names the colour it is about. A value that differs between the
+  two sides is a `ByColour<T>` — `.white`, `.black`, `.of(colour)`, `[colour]`
+  — so the same placement reads the same whoever is to move. `Side`, `Us`,
+  `Them`, `esca.US`, `esca.THEM` and every side-to-move-relative index are
+  gone; a fact that really is about the side to move, such as `state.in_check`,
+  is a plain value that says so.
+- The facts describe themselves. A catalogue carries every group, field, type
+  and meaning as data, `docs/features.md` is generated from it, and Python
+  walks a group without knowing it: `Facts.groups()`, `facts.group(name)`,
+  `fields()` and `to_dict()`. Rust serialises the same shape behind the new
+  `serde` feature.
+- Python gains `esca.ByColour` and a first-class `esca.FileSet`, and
+  `SquareSet.files` says which files a set of squares stands on. A colour is
+  written `"white"` or `"black"` everywhere it is answered, and read from
+  either name, or from `"w"` or `"b"`, in any case.
+- The `f32` machinery is gone: `Schema`, `SchemaId`, `GroupSet`, `FeatureSet`,
+  the feature manifests, `Facts::encode`, `encode_positions`, `encode_fens`,
+  `MoveFacts::encode_into`, the Python `encode`, `encode_into`, `encode_moves`,
+  `features_for`, `SCHEMA`, `WIDTH` and `esca.lichess.batches`, with `numpy`
+  off the dependency list. A chess library answers what is true about a
+  position; turning those answers into rows is the trainer's business, and the
+  encoder it needs is in this repository's history at `v0.3.0`. The Rust
+  `lichess` reader, which hands over typed records, stays.
+- `bishops_light` and `bishops_dark` now count the square colours they name.
+  They were read in the mover's view, so with Black to move they answered the
+  other way round.
+- Renames the same audit made: `state.can_castle_short` and `can_castle_long`,
+  `state.en_passant_capture_legal`, `material.phase_points` (the count, not a
+  fraction), `material.insufficient_material`, `pawns.queenside_majority` and
+  `kingside_majority`, `pawns.passer_own_king_distance` and
+  `passer_enemy_king_distance`, `pieces.rooks_on_seventh_rank`,
+  `pieces.rook_on_seventh_with_king_on_eighth`, `pieces.knight_pair`,
+  `king.shield_file_open` and `shield_file_semi_open_for_enemy`,
+  `attacks.controlled` with `by_pawns` … `by_kings` beside it, and the
+  per-role fields of `placement`, `material` and `mobility`. A move's deltas
+  are named for the side they are about: `mover_hanging_delta`,
+  `enemy_hanging_delta`, `mover_king_attackers_delta`,
+  `enemy_king_attackers_delta`.
 - `endings` names the ending a position is, needing no feature: a canonical
   material signature (`KRPvKR`, stronger side first), a catalogue of 32 named
   classes from `KvK` to the pawn endings, what theory says the result is, and

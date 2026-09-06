@@ -2,7 +2,8 @@
 
 use core::fmt;
 use core::ops::{
-    BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Sub, SubAssign,
+    BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Index, IndexMut, Not, Sub,
+    SubAssign,
 };
 use core::str::FromStr;
 
@@ -753,6 +754,12 @@ impl SquareSet {
         }
     }
 
+    /// The files the members stand on.
+    #[inline]
+    pub fn files(self) -> FileSet {
+        self.into_iter().map(Square::file).collect()
+    }
+
     #[inline]
     pub(crate) const fn from_cozy(b: cc::BitBoard) -> SquareSet {
         SquareSet(b.0)
@@ -889,5 +896,154 @@ impl IntoIterator for SquareSet {
     #[inline]
     fn into_iter(self) -> SquareSetIter {
         SquareSetIter(self.0)
+    }
+}
+
+/// One value for White and one for Black.
+///
+/// Read a side's value by name — `.white`, `.black` — or by colour, with
+/// [`ByColour::of`] or `[colour]`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct ByColour<T> {
+    /// White's value.
+    pub white: T,
+    /// Black's value.
+    pub black: T,
+}
+
+impl<T> ByColour<T> {
+    /// The pair `white`, `black`.
+    #[inline]
+    pub const fn new(white: T, black: T) -> ByColour<T> {
+        ByColour { white, black }
+    }
+
+    /// `f` applied to both values.
+    #[inline]
+    pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> ByColour<U> {
+        ByColour {
+            white: f(self.white),
+            black: f(self.black),
+        }
+    }
+}
+
+impl<T: Copy> ByColour<T> {
+    /// The value of `colour`.
+    #[inline]
+    pub const fn of(&self, colour: Colour) -> T {
+        match colour {
+            Colour::White => self.white,
+            Colour::Black => self.black,
+        }
+    }
+
+    /// The pair with `f(colour)` for each colour.
+    #[inline]
+    pub fn from_fn(mut f: impl FnMut(Colour) -> T) -> ByColour<T> {
+        ByColour {
+            white: f(Colour::White),
+            black: f(Colour::Black),
+        }
+    }
+}
+
+impl<T> Index<Colour> for ByColour<T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, colour: Colour) -> &T {
+        match colour {
+            Colour::White => &self.white,
+            Colour::Black => &self.black,
+        }
+    }
+}
+
+impl<T> IndexMut<Colour> for ByColour<T> {
+    #[inline]
+    fn index_mut(&mut self, colour: Colour) -> &mut T {
+        match colour {
+            Colour::White => &mut self.white,
+            Colour::Black => &mut self.black,
+        }
+    }
+}
+
+/// Serialisation shapes: a square, a file, a role and a colour are their names,
+/// a set is the list of its members' names, and a [`ByColour`] is an object
+/// keyed by colour.
+#[cfg(feature = "serde")]
+mod serde_impls {
+    use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
+
+    use super::{ByColour, Colour, File, FileSet, Piece, Rank, Role, Square, SquareSet};
+
+    impl Serialize for Colour {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            out.serialize_str(match self {
+                Colour::White => "white",
+                Colour::Black => "black",
+            })
+        }
+    }
+
+    impl Serialize for Role {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            out.serialize_str(&self.to_char().to_string())
+        }
+    }
+
+    impl Serialize for Piece {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            out.serialize_str(&self.to_char().to_string())
+        }
+    }
+
+    impl Serialize for File {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            out.serialize_str(&self.to_char().to_string())
+        }
+    }
+
+    impl Serialize for Rank {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            out.serialize_str(&self.to_char().to_string())
+        }
+    }
+
+    impl Serialize for Square {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            out.serialize_str(&self.to_string())
+        }
+    }
+
+    impl Serialize for SquareSet {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            let mut seq = out.serialize_seq(Some(self.len() as usize))?;
+            for square in *self {
+                seq.serialize_element(&square)?;
+            }
+            seq.end()
+        }
+    }
+
+    impl Serialize for FileSet {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            let mut seq = out.serialize_seq(Some(self.len() as usize))?;
+            for file in *self {
+                seq.serialize_element(&file)?;
+            }
+            seq.end()
+        }
+    }
+
+    impl<T: Serialize> Serialize for ByColour<T> {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            let mut object = out.serialize_struct("ByColour", 2)?;
+            object.serialize_field("white", &self.white)?;
+            object.serialize_field("black", &self.black)?;
+            object.end()
+        }
     }
 }

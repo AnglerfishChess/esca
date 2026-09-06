@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use esca::{CLASSIC, Facts, FileSet, MoveFacts, Position, Square, SquareSet, Variant};
+use esca::{ByColour, CLASSIC, Facts, FileSet, MoveFacts, Position, Square, SquareSet, Variant};
 
 /// The facts of `fen` under classic chess.
 pub fn facts_of(fen: &str) -> Facts {
@@ -15,6 +15,12 @@ pub fn facts_under(variant: &dyn Variant, fen: &str) -> Facts {
     Position::from_fen(fen)
         .expect("a test FEN is a legal position")
         .facts(variant)
+}
+
+/// The pair `[white, black]`, the order every case writes a per-side fact in.
+pub fn by_colour<T>(pair: [T; 2]) -> ByColour<T> {
+    let [white, black] = pair;
+    ByColour::new(white, black)
 }
 
 /// The squares named by a space-separated list: `squares("e4 d5")`.

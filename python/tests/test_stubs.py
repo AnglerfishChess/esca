@@ -50,10 +50,6 @@ def test_the_package_exports_what_the_stub_declares() -> None:
     assert esca.__all__ == stub_all("__init__.pyi")
 
 
-def test_the_lichess_module_exports_what_its_stub_declares() -> None:
-    assert esca.lichess.__all__ == stub_all("lichess.pyi")
-
-
 def test_the_pgn_module_exports_what_its_stub_declares() -> None:
     assert esca.pgn.__all__ == stub_all("pgn.pyi")
 

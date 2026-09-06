@@ -1,8 +1,8 @@
 //! Invariants over randomly played legal games.
 
 use esca::{
-    CastlingOutput, Game, MAX_MOVES, MoveFacts, MoveList, Outcome, Position, Schema, Scratch, Side,
-    Variant, chess960, classic,
+    CastlingOutput, Colour, Game, MAX_MOVES, MoveList, Outcome, Position, Scratch, Square,
+    SquareSet, Variant, chess960, classic,
 };
 use proptest::prelude::*;
 
@@ -95,10 +95,14 @@ proptest! {
     }
 }
 
-/// Everything the v1 facts of any position must satisfy.
+/// The same set on the board turned upside down.
+fn mirrored(set: SquareSet) -> SquareSet {
+    set.into_iter().map(Square::flip_rank).collect()
+}
+
+/// Everything the facts of any position must satisfy.
 fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCaseError> {
     let fen = position.fen();
-    let schema = Schema::v1();
     let facts = position.facts(variant);
     let mut scratch = Scratch::new();
 
@@ -106,58 +110,76 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
     prop_assert_eq!(&facts, &position.facts(variant), "{}", fen);
     prop_assert_eq!(&facts, &position.facts_in(variant, &mut scratch), "{}", fen);
 
-    let values = facts.encode(schema, schema.all());
-    prop_assert_eq!(values.len(), schema.width_of(schema.all()));
-    for (index, value) in values.iter().enumerate() {
-        prop_assert!(
-            value.is_finite() && (-1.0..=1.0).contains(value),
-            "value {} is {} in {}",
-            index,
-            value,
-            fen
-        );
-    }
+    // Colour-and-rank mirroring exchanges the two sides and nothing else.
+    let flipped = position.mirrored().facts(variant);
+    prop_assert_eq!(
+        flipped.material.value.white,
+        facts.material.value.black,
+        "mirror of {}",
+        fen
+    );
+    prop_assert_eq!(
+        flipped.pawns.passed.white,
+        mirrored(facts.pawns.passed.black),
+        "mirror of {}",
+        fen
+    );
+    prop_assert_eq!(
+        flipped.king.square.white,
+        facts.king.square.black.flip_rank(),
+        "mirror of {}",
+        fen
+    );
 
-    // Writing into a caller's buffer writes exactly the declared width.
-    let mut buffer = vec![f32::NAN; schema.width() + 8];
-    let written = facts.encode_into(schema, schema.all(), &mut buffer);
-    prop_assert_eq!(written, schema.width());
-    prop_assert_eq!(&buffer[..written], &values[..]);
-    prop_assert!(buffer[written..].iter().all(|v| v.is_nan()));
-
-    // Colour-and-rank mirroring exchanges the sides and nothing else.
-    let mirrored = position
-        .mirrored()
-        .facts(variant)
-        .encode(schema, schema.all());
-    prop_assert_eq!(&mirrored, &values, "mirror of {}", fen);
-
-    for side in Side::ALL {
-        let i = side.index();
-        let pawns = facts.pawns.pawns[i];
+    for colour in Colour::ALL {
+        let pawns = facts.pawns.pawns.of(colour);
         for derived in [
-            facts.pawns.passed[i],
-            facts.pawns.candidates[i],
-            facts.pawns.doubled[i],
-            facts.pawns.isolated[i],
-            facts.pawns.backward[i],
-            facts.pawns.defended[i],
+            facts.pawns.passed.of(colour),
+            facts.pawns.candidates.of(colour),
+            facts.pawns.doubled.of(colour),
+            facts.pawns.isolated.of(colour),
+            facts.pawns.backward.of(colour),
+            facts.pawns.defended.of(colour),
         ] {
             prop_assert!(derived.is_subset(pawns), "{}", fen);
         }
-        let units = facts.attacks.units(side);
+        let units = facts.placement.units.of(colour);
         for derived in [
-            facts.attacks.hanging[i],
-            facts.attacks.en_prise[i],
-            facts.attacks.pinned[i],
-            facts.attacks.defended[i],
+            facts.attacks.hanging.of(colour),
+            facts.attacks.en_prise.of(colour),
+            facts.attacks.pinned.of(colour),
+            facts.attacks.defended.of(colour),
         ] {
             prop_assert!(derived.is_subset(units), "{}", fen);
         }
-        prop_assert!(facts.attacks.hanging[i].is_subset(facts.attacks.en_prise[i]));
-        prop_assert!(facts.attacks.by_pawns[i].is_subset(facts.attacks.by[i]));
-        prop_assert!(facts.pieces.outposts[i].is_subset(facts.attacks.by_pawns[i]));
-        prop_assert!(facts.king.ring[i].is_subset(!facts.king.square[i].to_set()));
+        prop_assert!(
+            facts
+                .attacks
+                .hanging
+                .of(colour)
+                .is_subset(facts.attacks.en_prise.of(colour))
+        );
+        prop_assert!(
+            facts
+                .attacks
+                .by_pawns
+                .of(colour)
+                .is_subset(facts.attacks.controlled.of(colour))
+        );
+        prop_assert!(
+            facts
+                .pieces
+                .outposts
+                .of(colour)
+                .is_subset(facts.attacks.by_pawns.of(colour))
+        );
+        prop_assert!(
+            facts
+                .king
+                .ring
+                .of(colour)
+                .is_subset(!facts.king.square.of(colour).to_set())
+        );
     }
 
     // Every annotated move is one of the legal moves, once.
@@ -165,19 +187,13 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
     variant.legal_moves(position, &mut legal);
     prop_assert_eq!(facts.moves.len(), legal.len(), "{}", fen);
     prop_assert_eq!(
-        facts.tactics[0].legal_move_count as usize,
+        facts.tactics.legal_move_count.of(facts.side_to_move()) as usize,
         legal.len(),
         "{}",
         fen
     );
     for annotated in facts.moves.iter() {
         prop_assert!(legal.contains(&annotated.mv), "{}", fen);
-        let mut row = vec![0.0f32; MoveFacts::WIDTH];
-        annotated.facts.encode_into(&mut row);
-        prop_assert!(
-            row.iter()
-                .all(|v| v.is_finite() && (-1.0..=1.0).contains(v))
-        );
     }
     Ok(())
 }

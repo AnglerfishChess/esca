@@ -1,14 +1,12 @@
 //! The `material` group, fact by fact.
 //!
 //! Every expectation is worked out from the definitions in `docs/features.md`
-//! §1 and §2.2 for the named position above it. `piece_count_diff`,
-//! `material_balance` and `phase_bucket` are derived at encoding time and are
-//! read off the group's own values.
+//! for the named position above it. A per-side case writes White first.
 
 mod common;
 
-use common::{facts_of, facts_under};
-use esca::{CHESS960, Schema, Side};
+use common::{by_colour, facts_of, facts_under};
+use esca::CHESS960;
 use rstest::rstest;
 
 /// The untouched array: a full set a side, and a phase of exactly 1.
@@ -45,13 +43,6 @@ const SAME_COLOUR_BISHOPS: &str = "4k3/8/8/1n1n4/8/2B1B3/8/4K3 w - - 0 1";
 /// Bishops of both colours against a lone knight: only the knight cannot mate.
 const BISHOP_PAIR: &str = "4k3/6n1/8/8/8/8/8/2B1KB2 w - - 0 1";
 
-/// The same placement read from the other side: the pair is theirs.
-const BISHOP_PAIR_THEIRS: &str = "4k3/6n1/8/8/8/8/8/2B1KB2 b - - 0 1";
-
-/// A bishop and a knight against two bishops: the same piece value, the pair
-/// on one side only.
-const ONE_BISHOP_AGAINST_TWO: &str = "2b1kb2/8/8/8/8/8/6N1/4K1B1 w - - 0 1";
-
 /// A bare knight against a rook and a pawn.
 const LONE_KNIGHT: &str = "r3k3/5p2/8/8/8/5N2/8/4K3 w - - 0 1";
 
@@ -64,54 +55,27 @@ const BARE_KINGS: &str = "8/8/4k3/8/8/4K3/8/8 w - - 0 1";
 /// A Chess960 middlegame; no material fact reads the back rank.
 const NINE_SIXTY: &str = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w fd - 0 10";
 
-/// The values `material.<feature>` encodes to for `fen`, taken from the group's
-/// own row at the offset and width the schema gives the feature.
-fn encoded(fen: &str, feature: &str) -> Vec<f32> {
-    let schema = Schema::v1();
-    let spec = schema
-        .group("material")
-        .and_then(|group| group.features.iter().find(|spec| spec.name == feature))
-        .unwrap_or_else(|| panic!("the material group names {feature}"));
-    let group = schema
-        .group_set(&["material"])
-        .expect("the schema has a material group");
-    let values = facts_of(fen).encode(schema, group);
-    values[spec.offset..spec.offset + spec.width].to_vec()
-}
-
 #[rstest]
 #[case::start(START, [8, 2, 2, 2, 1], [8, 2, 2, 2, 1])]
 #[case::two_queens_each(TWO_QUEENS_EACH, [6, 1, 1, 2, 2], [6, 1, 1, 2, 2])]
 #[case::heavy(HEAVY, [6, 0, 1, 2, 1], [6, 1, 0, 2, 1])]
 #[case::army_against_a_king(ARMY_AGAINST_A_KING, [8, 2, 2, 2, 1], [0; 5])]
 #[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, [5, 0, 0, 0, 1], [3, 0, 0, 1, 0])]
-#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [3, 0, 0, 1, 0], [5, 0, 0, 0, 1])]
+#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [5, 0, 0, 0, 1], [3, 0, 0, 1, 0])]
 #[case::rook_and_knight(ROOK_AND_KNIGHT, [6, 1, 0, 1, 0], [5, 0, 0, 1, 0])]
 #[case::pawn_ending(PAWN_ENDING, [4, 0, 0, 0, 0], [3, 0, 0, 0, 0])]
 #[case::bare_kings(BARE_KINGS, [0; 5], [0; 5])]
 fn the_units_of_a_side_are_counted_by_role(
     #[case] fen: &str,
-    #[case] us: [u8; 5],
-    #[case] them: [u8; 5],
+    #[case] white: [u8; 5],
+    #[case] black: [u8; 5],
 ) {
     let material = facts_of(fen).material;
-    assert_eq!(material.count[Side::Us.index()], us);
-    assert_eq!(material.count[Side::Them.index()], them);
-}
-
-#[rstest]
-#[case::start(START, [0.0; 5])]
-#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, [0.0, 0.0, 0.25, 0.0, 0.0])]
-#[case::heavy(HEAVY, [0.0, -0.25, 0.25, 0.0, 0.0])]
-#[case::army_against_a_king(ARMY_AGAINST_A_KING, [1.0, 0.5, 0.5, 0.5, 0.25])]
-#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, [0.5, 0.0, 0.0, -0.25, 0.25])]
-#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [-0.5, 0.0, 0.0, 0.25, -0.25])]
-#[case::rook_and_knight(ROOK_AND_KNIGHT, [0.25, 0.25, 0.0, 0.0, 0.0])]
-#[case::same_colour_bishops(SAME_COLOUR_BISHOPS, [0.0, -0.5, 0.5, 0.0, 0.0])]
-#[case::lone_knight(LONE_KNIGHT, [-0.25, 0.25, 0.0, -0.25, 0.0])]
-#[case::pawn_ending(PAWN_ENDING, [0.25, 0.0, 0.0, 0.0, 0.0])]
-fn the_count_difference_is_ours_less_theirs_by_role(#[case] fen: &str, #[case] diff: [f32; 5]) {
-    assert_eq!(encoded(fen, "piece_count_diff"), diff);
+    assert_eq!(material.pawns, by_colour([white[0], black[0]]));
+    assert_eq!(material.knights, by_colour([white[1], black[1]]));
+    assert_eq!(material.bishops, by_colour([white[2], black[2]]));
+    assert_eq!(material.rooks, by_colour([white[3], black[3]]));
+    assert_eq!(material.queens, by_colour([white[4], black[4]]));
 }
 
 #[rstest]
@@ -121,68 +85,54 @@ fn the_count_difference_is_ours_less_theirs_by_role(#[case] fen: &str, #[case] d
 #[case::queenless(QUEENLESS, [22, 22])]
 #[case::army_against_a_king(ARMY_AGAINST_A_KING, [31, 0])]
 #[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, [9, 5])]
-#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [5, 9])]
+#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [9, 5])]
 #[case::rook_and_knight(ROOK_AND_KNIGHT, [8, 5])]
 #[case::pawn_ending(PAWN_ENDING, [0, 0])]
 fn non_pawn_material_leaves_out_the_pawns_and_the_king(
     #[case] fen: &str,
     #[case] non_pawn_value: [i32; 2],
 ) {
-    assert_eq!(facts_of(fen).material.non_pawn_value, non_pawn_value);
+    assert_eq!(
+        facts_of(fen).material.non_pawn_value,
+        by_colour(non_pawn_value)
+    );
 }
 
 #[rstest]
-#[case::start(START, [39, 39], 0.0)]
-#[case::two_queens_each(TWO_QUEENS_EACH, [40, 40], 0.0)]
-#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, [31, 28], 0.15)]
-#[case::army_against_a_king(ARMY_AGAINST_A_KING, [39, 0], 1.0)]
-#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, [14, 8], 0.3)]
-#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [8, 14], -0.3)]
-#[case::rook_and_knight(ROOK_AND_KNIGHT, [14, 10], 0.2)]
-#[case::lone_knight(LONE_KNIGHT, [3, 6], -0.15)]
-#[case::pawn_ending(PAWN_ENDING, [4, 3], 0.05)]
-#[case::bare_kings(BARE_KINGS, [0, 0], 0.0)]
-fn the_balance_is_our_value_sum_less_theirs(
+#[case::start(START, [39, 39])]
+#[case::two_queens_each(TWO_QUEENS_EACH, [40, 40])]
+#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, [31, 28])]
+#[case::army_against_a_king(ARMY_AGAINST_A_KING, [39, 0])]
+#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, [14, 8])]
+#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, [14, 8])]
+#[case::rook_and_knight(ROOK_AND_KNIGHT, [14, 10])]
+#[case::lone_knight(LONE_KNIGHT, [3, 6])]
+#[case::pawn_ending(PAWN_ENDING, [4, 3])]
+#[case::bare_kings(BARE_KINGS, [0, 0])]
+fn the_value_of_a_side_is_the_sum_of_its_units_but_the_king(
     #[case] fen: &str,
     #[case] value: [i32; 2],
-    #[case] balance: f32,
 ) {
-    assert_eq!(facts_of(fen).material.value, value);
-    assert_eq!(encoded(fen, "material_balance"), [balance]);
+    assert_eq!(facts_of(fen).material.value, by_colour(value));
 }
 
 #[rstest]
-#[case::start(START, 1.0)]
-#[case::two_queens_each(TWO_QUEENS_EACH, 1.0)]
-#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, 19.0 / 24.0)]
-#[case::heavy(HEAVY, 0.75)]
-#[case::queenless(QUEENLESS, 16.0 / 24.0)]
-#[case::army_against_a_king(ARMY_AGAINST_A_KING, 0.5)]
-#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, 0.25)]
-#[case::rook_and_knight(ROOK_AND_KNIGHT, 5.0 / 24.0)]
-#[case::same_colour_bishops(SAME_COLOUR_BISHOPS, 4.0 / 24.0)]
-#[case::bishop_pair(BISHOP_PAIR, 0.125)]
-#[case::pawn_ending(PAWN_ENDING, 0.0)]
-fn phase_weighs_what_is_left_against_a_full_opening_set(#[case] fen: &str, #[case] phase: f32) {
-    assert_eq!(facts_of(fen).material.phase, phase);
-}
-
-#[rstest]
-#[case::start(START, [1.0, 0.0, 0.0])]
-#[case::two_queens_each(TWO_QUEENS_EACH, [1.0, 0.0, 0.0])]
-#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, [1.0, 0.0, 0.0])]
-#[case::heavy(HEAVY, [0.0, 1.0, 0.0])]
-#[case::queenless(QUEENLESS, [0.0, 1.0, 0.0])]
-#[case::army_against_a_king(ARMY_AGAINST_A_KING, [0.0, 1.0, 0.0])]
-#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, [0.0, 1.0, 0.0])]
-#[case::rook_and_knight(ROOK_AND_KNIGHT, [0.0, 0.0, 1.0])]
-#[case::bishop_pair(BISHOP_PAIR, [0.0, 0.0, 1.0])]
-#[case::pawn_ending(PAWN_ENDING, [0.0, 0.0, 1.0])]
-fn the_phase_bucket_keeps_both_its_boundaries_in_the_middlegame(
+#[case::start(START, 24)]
+#[case::two_queens_each(TWO_QUEENS_EACH, 28)]
+#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, 19)]
+#[case::heavy(HEAVY, 18)]
+#[case::queenless(QUEENLESS, 16)]
+#[case::army_against_a_king(ARMY_AGAINST_A_KING, 12)]
+#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, 6)]
+#[case::rook_and_knight(ROOK_AND_KNIGHT, 5)]
+#[case::same_colour_bishops(SAME_COLOUR_BISHOPS, 4)]
+#[case::bishop_pair(BISHOP_PAIR, 3)]
+#[case::pawn_ending(PAWN_ENDING, 0)]
+fn the_phase_points_count_what_is_left_of_a_full_opening_set(
     #[case] fen: &str,
-    #[case] bucket: [f32; 3],
+    #[case] phase_points: u8,
 ) {
-    assert_eq!(encoded(fen, "phase_bucket"), bucket);
+    assert_eq!(facts_of(fen).material.phase_points, phase_points);
 }
 
 #[rstest]
@@ -226,58 +176,29 @@ fn a_side_holding_at_most_a_minor_or_bishops_of_one_colour_cannot_mate(
     #[case] fen: &str,
     #[case] insufficient: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).material.insufficient, insufficient);
+    assert_eq!(
+        facts_of(fen).material.insufficient_material,
+        by_colour(insufficient)
+    );
 }
 
-#[rstest]
-#[case::start(START, 0)]
-#[case::queenless(QUEENLESS, 0)]
-#[case::same_colour_bishops(SAME_COLOUR_BISHOPS, 0)]
-#[case::army_against_a_king(ARMY_AGAINST_A_KING, 1)]
-#[case::bishop_pair(BISHOP_PAIR, 1)]
-#[case::bishop_pair_theirs(BISHOP_PAIR_THEIRS, -1)]
-#[case::one_bishop_against_two(ONE_BISHOP_AGAINST_TWO, -1)]
-#[case::lone_knight(LONE_KNIGHT, 0)]
-#[case::bare_kings(BARE_KINGS, 0)]
-fn only_bishops_of_both_colours_are_a_pair(#[case] fen: &str, #[case] imbalance: i32) {
-    assert_eq!(facts_of(fen).material.bishop_pair_imbalance, imbalance);
-    assert_eq!(encoded(fen, "bishop_pair_imbalance"), [imbalance as f32]);
-}
-
-#[rstest]
-#[case::start(START, 0.0)]
-#[case::two_queens_each(TWO_QUEENS_EACH, 0.0)]
-#[case::heavy_and_a_knight(HEAVY_AND_A_KNIGHT, 3.0 / 20.0)]
-#[case::army_against_a_king(ARMY_AGAINST_A_KING, 1.0)]
-#[case::queen_for_a_rook(QUEEN_FOR_A_ROOK, 4.0 / 20.0)]
-#[case::queen_for_a_rook_theirs(QUEEN_FOR_A_ROOK_THEIRS, -4.0 / 20.0)]
-#[case::rook_and_knight(ROOK_AND_KNIGHT, 3.0 / 20.0)]
-#[case::one_bishop_against_two(ONE_BISHOP_AGAINST_TWO, 0.0)]
-#[case::lone_knight(LONE_KNIGHT, -2.0 / 20.0)]
-#[case::pawn_ending(PAWN_ENDING, 0.0)]
-fn the_piece_value_difference_runs_past_its_scale_only_with_a_whole_army(
-    #[case] fen: &str,
-    #[case] difference: f32,
-) {
-    assert_eq!(encoded(fen, "non_pawn_material_diff"), [difference]);
-}
-
-/// No `material` fact is among the four `features.md` §4 defines for classic
-/// chess only, so a Chess960 position answers exactly as the same placement
-/// would.
+/// No `material` fact reads the back rank, so a Chess960 position answers
+/// exactly as the same placement would.
 #[test]
 fn the_material_facts_of_a_chess960_position_are_the_classic_ones() {
     let facts = facts_under(&CHESS960, NINE_SIXTY);
     let material = facts.material;
-    assert_eq!(material.count[Side::Us.index()], [8, 1, 2, 2, 1]);
-    assert_eq!(material.count[Side::Them.index()], [8, 2, 2, 2, 1]);
-    assert_eq!(material.non_pawn_value, [28, 31]);
-    assert_eq!(material.value, [36, 39]);
-    assert_eq!(material.phase, 23.0 / 24.0);
+    assert_eq!(material.pawns, by_colour([8, 8]));
+    assert_eq!(material.knights, by_colour([1, 2]));
+    assert_eq!(material.bishops, by_colour([2, 2]));
+    assert_eq!(material.rooks, by_colour([2, 2]));
+    assert_eq!(material.queens, by_colour([1, 1]));
+    assert_eq!(material.non_pawn_value, by_colour([28, 31]));
+    assert_eq!(material.value, by_colour([36, 39]));
+    assert_eq!(material.phase_points, 23);
     assert!(material.both_queens);
     assert!(!material.pawns_only);
-    assert_eq!(material.insufficient, [false, false]);
-    assert_eq!(material.bishop_pair_imbalance, 0);
+    assert_eq!(material.insufficient_material, by_colour([false, false]));
 
     let classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10");
     assert_eq!(classic.material, material);

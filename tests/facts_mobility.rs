@@ -1,14 +1,12 @@
 //! The `mobility` group, fact by fact.
 //!
 //! Every expectation is worked out from the definitions in `docs/features.md`
-//! §1 and §2.6 for the named position above it. `mobility_ratio`,
-//! `mobility_diff_by_type` and the control difference are derived at encoding
-//! time and are read off the group's own row.
+//! for the named position above it. A per-side case writes White first.
 
 mod common;
 
-use common::{facts_of, facts_under};
-use esca::{CHESS960, Schema, Side};
+use common::{by_colour, facts_of, facts_under};
+use esca::CHESS960;
 use rstest::rstest;
 
 /// The untouched array: pawn attacks and two knight leaps a side, the rest of
@@ -61,121 +59,65 @@ const BARE_KINGS: &str = "8/8/4k3/8/8/4K3/8/8 w - - 0 1";
 /// one, reached from other homes.
 const NINE_SIXTY: &str = "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w HFhf - 0 1";
 
-/// The values `mobility.<feature>` encodes to for `fen`, taken from the group's
-/// own row at the offset and width the schema gives the feature.
-fn encoded(fen: &str, feature: &str) -> Vec<f32> {
-    let schema = Schema::v1();
-    let spec = schema
-        .group("mobility")
-        .and_then(|group| group.features.iter().find(|spec| spec.name == feature))
-        .unwrap_or_else(|| panic!("the mobility group names {feature}"));
-    let group = schema
-        .group_set(&["mobility"])
-        .expect("the schema has a mobility group");
-    let values = facts_of(fen).encode(schema, group);
-    values[spec.offset..spec.offset + spec.width].to_vec()
-}
-
-#[rstest]
-#[case::start(START, 0.5)]
-#[case::one_knight_out(ONE_KNIGHT_OUT, 12.0 / 27.0)]
-#[case::queen_duel(QUEEN_DUEL, 23.0 / 47.0)]
-#[case::open_rooks(OPEN_ROOKS, 1.0)]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, 0.0)]
-#[case::pawn_screen(PAWN_SCREEN, 13.0 / 16.0)]
-#[case::crossfire(CROSSFIRE, 17.0 / 27.0)]
-#[case::space_grab(SPACE_GRAB, 1.0)]
-#[case::bare_kings(BARE_KINGS, 0.0)]
-fn the_ratio_is_our_share_of_the_mobility_on_the_board(#[case] fen: &str, #[case] ratio: f32) {
-    assert_eq!(encoded(fen, "mobility_ratio"), [ratio]);
-}
-
 #[rstest]
 #[case::start(START, [8, 4, 0, 0, 0], [8, 4, 0, 0, 0])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [8, 4, 0, 0, 0], [7, 7, 0, 1, 0])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [7, 7, 0, 1, 0], [8, 4, 0, 0, 0])]
 #[case::queen_duel(QUEEN_DUEL, [0, 0, 0, 0, 23], [0, 0, 0, 0, 24])]
 #[case::open_rooks(OPEN_ROOKS, [0, 0, 0, 19, 0], [0; 5])]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0; 5], [0, 0, 0, 19, 0])]
+#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0, 0, 0, 19, 0], [0; 5])]
 #[case::pawn_screen(PAWN_SCREEN, [0, 0, 0, 13, 0], [3, 0, 0, 0, 0])]
-#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [3, 0, 0, 0, 0], [0, 0, 0, 13, 0])]
+#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [0, 0, 0, 13, 0], [3, 0, 0, 0, 0])]
 #[case::crossfire(CROSSFIRE, [5, 0, 0, 12, 0], [4, 0, 0, 6, 0])]
 #[case::boxed_in(BOXED_IN, [5, 0, 0, 0, 0], [3, 0, 0, 0, 0])]
 #[case::centre_grip(CENTRE_GRIP, [0, 15, 11, 0, 0], [5, 0, 0, 0, 0])]
 #[case::space_grab(SPACE_GRAB, [4, 8, 0, 0, 0], [0; 5])]
 #[case::pinned_knight(PINNED_KNIGHT, [0, 6, 0, 0, 0], [0, 0, 0, 12, 0])]
 #[case::bare_kings(BARE_KINGS, [0; 5], [0; 5])]
-fn a_types_mobility_is_what_its_attacks_cover_beyond_its_own_units(
+fn a_roles_mobility_is_what_its_attacks_cover_beyond_its_own_units(
     #[case] fen: &str,
-    #[case] us: [u16; 5],
-    #[case] them: [u16; 5],
+    #[case] white: [u16; 5],
+    #[case] black: [u16; 5],
 ) {
     let mobility = facts_of(fen).mobility;
-    assert_eq!(mobility.by_role[Side::Us.index()], us);
-    assert_eq!(mobility.by_role[Side::Them.index()], them);
+    assert_eq!(mobility.pawns, by_colour([white[0], black[0]]));
+    assert_eq!(mobility.knights, by_colour([white[1], black[1]]));
+    assert_eq!(mobility.bishops, by_colour([white[2], black[2]]));
+    assert_eq!(mobility.rooks, by_colour([white[3], black[3]]));
+    assert_eq!(mobility.queens, by_colour([white[4], black[4]]));
 }
 
 #[rstest]
 #[case::start(START, [8, 4, 0, 0, 0], [8, 4, 0, 0, 0])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [8, 4, 0, 0, 0], [7, 7, 0, 1, 0])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [7, 7, 0, 1, 0], [8, 4, 0, 0, 0])]
 #[case::pawn_screen(PAWN_SCREEN, [0, 0, 0, 11, 0], [3, 0, 0, 0, 0])]
-#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [3, 0, 0, 0, 0], [0, 0, 0, 11, 0])]
+#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [0, 0, 0, 11, 0], [3, 0, 0, 0, 0])]
 #[case::crossfire(CROSSFIRE, [5, 0, 0, 9, 0], [4, 0, 0, 5, 0])]
 #[case::trenches(TRENCHES, [2, 0, 0, 9, 0], [3, 0, 0, 9, 0])]
 #[case::boxed_in(BOXED_IN, [5, 0, 0, 0, 0], [3, 0, 0, 0, 0])]
 #[case::centre_grip(CENTRE_GRIP, [0, 13, 9, 0, 0], [5, 0, 0, 0, 0])]
 fn safe_mobility_drops_the_squares_an_enemy_pawn_attacks(
     #[case] fen: &str,
-    #[case] us: [u16; 5],
-    #[case] them: [u16; 5],
+    #[case] white: [u16; 5],
+    #[case] black: [u16; 5],
 ) {
     let mobility = facts_of(fen).mobility;
-    assert_eq!(mobility.safe_by_role[Side::Us.index()], us);
-    assert_eq!(mobility.safe_by_role[Side::Them.index()], them);
-}
-
-#[rstest]
-#[case::start(START, [0.0; 5])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [1.0 / 16.0, -3.0 / 16.0, 0.0, -1.0 / 16.0, 0.0])]
-#[case::queen_duel(QUEEN_DUEL, [0.0, 0.0, 0.0, 0.0, -1.0 / 16.0])]
-#[case::open_rooks(OPEN_ROOKS, [0.0, 0.0, 0.0, 1.0, 0.0])]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0.0, 0.0, 0.0, -1.0, 0.0])]
-#[case::pawn_screen(PAWN_SCREEN, [-3.0 / 16.0, 0.0, 0.0, 13.0 / 16.0, 0.0])]
-#[case::crossfire(CROSSFIRE, [1.0 / 16.0, 0.0, 0.0, 6.0 / 16.0, 0.0])]
-#[case::centre_grip(CENTRE_GRIP, [-5.0 / 16.0, 15.0 / 16.0, 11.0 / 16.0, 0.0, 0.0])]
-#[case::space_grab(SPACE_GRAB, [4.0 / 16.0, 8.0 / 16.0, 0.0, 0.0, 0.0])]
-fn the_mobility_difference_is_ours_less_theirs_by_type(#[case] fen: &str, #[case] diff: [f32; 5]) {
-    assert_eq!(encoded(fen, "mobility_diff_by_type"), diff);
+    assert_eq!(mobility.safe_pawns, by_colour([white[0], black[0]]));
+    assert_eq!(mobility.safe_knights, by_colour([white[1], black[1]]));
+    assert_eq!(mobility.safe_bishops, by_colour([white[2], black[2]]));
+    assert_eq!(mobility.safe_rooks, by_colour([white[3], black[3]]));
+    assert_eq!(mobility.safe_queens, by_colour([white[4], black[4]]));
 }
 
 /// Neither side's pawns cover a square the other's pieces reach in
 /// `QUEEN_DUEL`, `OPEN_ROOKS` or `BARE_KINGS`, so there the safe difference is
 /// the whole difference.
-#[rstest]
-#[case::start(START, [0.0; 5])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [1.0 / 16.0, -3.0 / 16.0, 0.0, -1.0 / 16.0, 0.0])]
-#[case::queen_duel(QUEEN_DUEL, [0.0, 0.0, 0.0, 0.0, -1.0 / 16.0])]
-#[case::open_rooks(OPEN_ROOKS, [0.0, 0.0, 0.0, 1.0, 0.0])]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0.0, 0.0, 0.0, -1.0, 0.0])]
-#[case::pawn_screen(PAWN_SCREEN, [-3.0 / 16.0, 0.0, 0.0, 11.0 / 16.0, 0.0])]
-#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [3.0 / 16.0, 0.0, 0.0, -11.0 / 16.0, 0.0])]
-#[case::crossfire(CROSSFIRE, [1.0 / 16.0, 0.0, 0.0, 4.0 / 16.0, 0.0])]
-#[case::trenches(TRENCHES, [-1.0 / 16.0, 0.0, 0.0, 0.0, 0.0])]
-#[case::boxed_in(BOXED_IN, [2.0 / 16.0, 0.0, 0.0, 0.0, 0.0])]
-#[case::centre_grip(CENTRE_GRIP, [-5.0 / 16.0, 13.0 / 16.0, 9.0 / 16.0, 0.0, 0.0])]
-#[case::bare_kings(BARE_KINGS, [0.0; 5])]
-fn the_safe_difference_is_our_safe_mobility_less_theirs_by_type(
-    #[case] fen: &str,
-    #[case] diff: [f32; 5],
-) {
-    assert_eq!(encoded(fen, "safe_mobility_diff_by_type"), diff);
-}
 
 #[rstest]
 #[case::start(START, [0, 0])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [0, 2])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [2, 0])]
 #[case::queen_duel(QUEEN_DUEL, [8, 8])]
 #[case::open_rooks(OPEN_ROOKS, [8, 0])]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0, 8])]
+#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [8, 0])]
 #[case::pawn_screen(PAWN_SCREEN, [4, 3])]
 #[case::crossfire(CROSSFIRE, [4, 8])]
 #[case::trenches(TRENCHES, [1, 1])]
@@ -185,41 +127,34 @@ fn space_is_what_a_side_attacks_in_the_half_the_other_starts_on(
     #[case] fen: &str,
     #[case] space: [u16; 2],
 ) {
-    assert_eq!(facts_of(fen).mobility.space, space);
+    assert_eq!(facts_of(fen).mobility.space, by_colour(space));
 }
 
 #[rstest]
-#[case::start(START, [22, 22], 0.0)]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [22, 26], -4.0 / 48.0)]
-#[case::queen_duel(QUEEN_DUEL, [28, 26], 2.0 / 48.0)]
-#[case::open_rooks(OPEN_ROOKS, [23, 5], 18.0 / 48.0)]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [5, 23], -18.0 / 48.0)]
-#[case::pawn_screen(PAWN_SCREEN, [18, 8], 10.0 / 48.0)]
-#[case::crossfire(CROSSFIRE, [19, 14], 5.0 / 48.0)]
-#[case::boxed_in(BOXED_IN, [13, 10], 3.0 / 48.0)]
-#[case::bare_kings(BARE_KINGS, [8, 8], 0.0)]
+#[case::start(START, [22, 22])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [26, 22])]
+#[case::queen_duel(QUEEN_DUEL, [28, 26])]
+#[case::open_rooks(OPEN_ROOKS, [23, 5])]
+#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [23, 5])]
+#[case::pawn_screen(PAWN_SCREEN, [18, 8])]
+#[case::crossfire(CROSSFIRE, [19, 14])]
+#[case::boxed_in(BOXED_IN, [13, 10])]
+#[case::bare_kings(BARE_KINGS, [8, 8])]
 fn the_controlled_squares_are_a_sides_whole_attack_map_kings_included(
     #[case] fen: &str,
     #[case] controlled: [u16; 2],
-    #[case] difference: f32,
 ) {
-    assert_eq!(facts_of(fen).mobility.controlled, controlled);
-    assert_eq!(
-        encoded(fen, "controlled_squares"),
-        [
-            f32::from(controlled[0]) / 48.0,
-            f32::from(controlled[1]) / 48.0,
-            difference,
-        ]
-    );
+    let attacks = facts_of(fen).attacks;
+    assert_eq!(attacks.controlled.white.len(), u32::from(controlled[0]));
+    assert_eq!(attacks.controlled.black.len(), u32::from(controlled[1]));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [0, 2])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [2, 0])]
 #[case::queen_duel(QUEEN_DUEL, [3, 3])]
 #[case::pawn_screen(PAWN_SCREEN, [2, 1])]
-#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [1, 2])]
+#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [2, 1])]
 #[case::crossfire(CROSSFIRE, [2, 2])]
 #[case::trenches(TRENCHES, [3, 3])]
 #[case::centre_grip(CENTRE_GRIP, [4, 2])]
@@ -229,16 +164,16 @@ fn centre_control_counts_the_attacks_on_d4_e4_d5_and_e5(
     #[case] fen: &str,
     #[case] centre: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).mobility.centre_control, centre);
+    assert_eq!(facts_of(fen).mobility.centre_control, by_colour(centre));
 }
 
 #[rstest]
 #[case::start(START, [4, 4])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [4, 6])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [6, 4])]
 #[case::queen_duel(QUEEN_DUEL, [10, 10])]
 #[case::open_rooks(OPEN_ROOKS, [0, 0])]
 #[case::pawn_screen(PAWN_SCREEN, [6, 2])]
-#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [2, 6])]
+#[case::pawn_screen_theirs(PAWN_SCREEN_THEIRS, [6, 2])]
 #[case::crossfire(CROSSFIRE, [8, 5])]
 #[case::boxed_in(BOXED_IN, [3, 2])]
 #[case::centre_grip(CENTRE_GRIP, [6, 4])]
@@ -248,12 +183,15 @@ fn the_extended_centre_is_the_sixteen_squares_from_c3_to_f6(
     #[case] fen: &str,
     #[case] extended: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).mobility.extended_centre_control, extended);
+    assert_eq!(
+        facts_of(fen).mobility.extended_centre_control,
+        by_colour(extended)
+    );
 }
 
 #[rstest]
 #[case::start(START, [5, 5])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [5, 4])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [4, 5])]
 #[case::boxed_in(BOXED_IN, [2, 1])]
 #[case::queen_duel(QUEEN_DUEL, [0, 0])]
 #[case::open_rooks(OPEN_ROOKS, [0, 0])]
@@ -264,42 +202,43 @@ fn an_immobile_piece_reaches_nothing_its_own_side_has_left_free(
     #[case] fen: &str,
     #[case] immobile: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).mobility.immobile_pieces, immobile);
+    assert_eq!(facts_of(fen).mobility.immobile_pieces, by_colour(immobile));
 }
 
 #[rstest]
 #[case::start(START, [12, 12])]
-#[case::one_knight_out(ONE_KNIGHT_OUT, [12, 15])]
+#[case::one_knight_out(ONE_KNIGHT_OUT, [15, 12])]
 #[case::queen_duel(QUEEN_DUEL, [23, 24])]
 #[case::open_rooks(OPEN_ROOKS, [19, 0])]
-#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [0, 19])]
+#[case::open_rooks_theirs(OPEN_ROOKS_THEIRS, [19, 0])]
 #[case::pawn_screen(PAWN_SCREEN, [13, 3])]
 #[case::crossfire(CROSSFIRE, [17, 10])]
 #[case::trenches(TRENCHES, [12, 13])]
 #[case::centre_grip(CENTRE_GRIP, [26, 5])]
 #[case::bare_kings(BARE_KINGS, [0, 0])]
 fn the_total_mobility_adds_the_five_types_up(#[case] fen: &str, #[case] total: [u16; 2]) {
-    assert_eq!(facts_of(fen).mobility.total, total);
+    assert_eq!(facts_of(fen).mobility.total, by_colour(total));
 }
 
-/// No `mobility` fact is among the four `features.md` §4 defines for classic
-/// chess only: every one of them reads attack maps alone, so a Chess960
-/// starting array answers exactly as the same placement would.
+/// Every `mobility` fact reads attack maps alone, so a Chess960 starting array
+/// answers exactly as the same placement would.
 #[test]
 fn the_mobility_facts_of_a_chess960_position_are_the_classic_ones() {
     let facts = facts_under(&CHESS960, NINE_SIXTY);
     let mobility = facts.mobility;
-    assert_eq!(mobility.by_role[Side::Us.index()], [8, 4, 0, 0, 0]);
-    assert_eq!(mobility.by_role[Side::Them.index()], [8, 4, 0, 0, 0]);
-    assert_eq!(mobility.safe_by_role[Side::Us.index()], [8, 4, 0, 0, 0]);
-    assert_eq!(mobility.total, [12, 12]);
-    assert_eq!(mobility.space, [0, 0]);
+    assert_eq!(mobility.pawns, by_colour([8, 8]));
+    assert_eq!(mobility.knights, by_colour([4, 4]));
+    assert_eq!(mobility.safe_pawns, by_colour([8, 8]));
+    assert_eq!(mobility.safe_knights, by_colour([4, 4]));
+    assert_eq!(mobility.total, by_colour([12, 12]));
+    assert_eq!(mobility.space, by_colour([0, 0]));
     // The two knights leave e2 and e7 uncovered, so a square fewer than the
     // classic array's 22.
-    assert_eq!(mobility.controlled, [21, 21]);
-    assert_eq!(mobility.centre_control, [0, 0]);
-    assert_eq!(mobility.extended_centre_control, [4, 4]);
-    assert_eq!(mobility.immobile_pieces, [5, 5]);
+    assert_eq!(facts.attacks.controlled.white.len(), 21);
+    assert_eq!(facts.attacks.controlled.black.len(), 21);
+    assert_eq!(mobility.centre_control, by_colour([0, 0]));
+    assert_eq!(mobility.extended_centre_control, by_colour([4, 4]));
+    assert_eq!(mobility.immobile_pieces, by_colour([5, 5]));
 
     let classic = facts_of("bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w - - 0 1");
     assert_eq!(classic.mobility, mobility);

@@ -2,8 +2,8 @@
 
 `esca` is the position-facts library: a Rust crate at the root of this
 repository and a Python package of the same name built from it. Terms used below are
-defined in [`esca-vocabulary.md`](esca-vocabulary.md); features and their
-encodings in [`features.md`](features.md).
+defined in [`esca-vocabulary.md`](esca-vocabulary.md); every fact, its type and
+its meaning in [`features.md`](features.md).
 
 Board representation and move generation come from `cozy-chess`. Its types
 are an implementation detail: no `cozy_chess` item appears in any signature,
@@ -20,7 +20,7 @@ Cargo features:
 | `tokio` | no | `uci::tokio`: the same client on a tokio runtime. Implies `uci`. |
 | `polyglot` | no | The `polyglot` module: opening books read, picked from and built. |
 | `openings` | no | The `openings` module: the bundled ECO code and name of a position. |
-| `serde` | no | `Serialize`/`Deserialize` for `Position`, `Move`, `Schema` and the manifest types. |
+| `serde` | no | `Serialize` for the facts and the board vocabulary, `Serialize`/`Deserialize` for `Position` and `Move`. |
 
 `Position::polyglot_key` needs no feature: the key is part of the position,
 and the `polyglot` and `openings` modules are indexed by it.
@@ -316,17 +316,30 @@ pub struct IllegalMove;
 ## 5. Facts
 
 Grouped plain structs with public fields; the accessor *is* the field. Every
-side-paired value is `[T; 2]`, subscripted by `Side::index()`. Definitions are
-those in `features.md` §1, repeated in the doc comments.
+value that differs between the two sides is a `ByColour<T>` — `.white`,
+`.black`, `.of(colour)` or `[colour]`. Where a fact is about the side to move
+rather than about a colour it is a plain value, and its meaning says so. Every
+field, its type and its meaning are in [`features.md`](features.md), which is
+generated from these definitions.
 
 ```rust
-pub enum Side { Us, Them }
-
-impl Side {
-    pub const ALL: [Side; 2];
-    /// 0 for us, 1 for them.
-    pub const fn index(self) -> usize;
+pub struct ByColour<T> {
+    pub white: T,
+    pub black: T,
 }
+
+impl<T> ByColour<T> {
+    pub const fn new(white: T, black: T) -> ByColour<T>;
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> ByColour<U>;
+}
+
+impl<T: Copy> ByColour<T> {
+    pub const fn of(&self, colour: Colour) -> T;
+    pub fn from_fn(f: impl FnMut(Colour) -> T) -> ByColour<T>;
+}
+
+impl<T> Index<Colour> for ByColour<T> { /* … */ }
+impl<T> IndexMut<Colour> for ByColour<T> { /* … */ }
 
 pub struct Facts {
     pub placement: PlacementFacts,
@@ -338,121 +351,48 @@ pub struct Facts {
     pub king: KingFacts,
     pub mobility: MobilityFacts,
     pub attacks: AttackFacts,
-    pub exchange: [ExchangeFacts; 2],
+    pub exchange: ExchangeFacts,
     pub threats: ThreatFacts,
-    pub tactics: [TacticsFacts; 2],
+    pub tactics: TacticsFacts,
     pub endgame: EndgameFacts,
-    pub planes: PlaneFacts,
+    pub maps: MapFacts,
     pub moves: MoveList<AnnotatedMove>,
 }
 
 pub struct PlacementFacts {
-    /// Each side's units, by role P, N, B, R, Q, K.
-    pub by_role: [[SquareSet; 6]; 2],
+    pub units: ByColour<SquareSet>,
+    pub pawns: ByColour<SquareSet>,
+    pub knights: ByColour<SquareSet>,
+    pub bishops: ByColour<SquareSet>,
+    pub rooks: ByColour<SquareSet>,
+    pub queens: ByColour<SquareSet>,
+    pub kings: ByColour<SquareSet>,
 }
 
 impl PlacementFacts {
-    pub fn of(&self, side: Side, role: Role) -> SquareSet;
+    pub fn of(&self, colour: Colour, role: Role) -> SquareSet;
 }
 
-/// The `us` block, then the `them` block, the second after a null move.
+/// The values for the side not to move are read after a null move; when the
+/// side to move is in check that move does not exist and they are zero.
 pub struct ExchangeFacts {
-    pub see_best_capture: i32,
-    pub see_positive_capture_count: u16,
-    pub see_equal_capture_count: u16,
-    pub see_positive_total: i32,
+    pub see_best_capture: ByColour<i32>,
+    pub see_positive_capture_count: ByColour<u16>,
+    pub see_equal_capture_count: ByColour<u16>,
+    pub see_positive_total: ByColour<i32>,
 }
 
 pub enum Opposition { Direct, Distant }
 pub enum DrawishMaterial { TwoKnights, WrongBishop, OppositeBishops }
+pub enum CastledSide { Short, Long }
 
 pub struct EndgameFacts {
-    pub king_centralisation: [u8; 2],
-    pub race_plies: [u8; 2],
+    pub king_centralisation: ByColour<u8>,
+    pub race_plies: ByColour<u8>,
     pub opposition: Option<Opposition>,
-    pub key_square_occupied: [bool; 2],
-    pub wrong_colour_bishop: [bool; 2],
+    pub key_square_occupied: ByColour<bool>,
+    pub wrong_colour_bishop: ByColour<bool>,
     pub drawish_material: Option<DrawishMaterial>,
-}
-
-impl EndgameFacts {
-    /// Our race plies less theirs: negative when we promote first.
-    pub fn race_plies_diff(&self) -> i32;
-}
-
-pub struct PawnFacts {
-    pub pawns: [SquareSet; 2],
-    pub passed: [SquareSet; 2],
-    pub candidates: [SquareSet; 2],
-    pub doubled: [SquareSet; 2],
-    pub isolated: [SquareSet; 2],
-    pub backward: [SquareSet; 2],
-    pub defended: [SquareSet; 2],
-    pub count_by_file: [[u8; 8]; 2],
-    pub count_by_rank: [[u8; 8]; 2],
-    pub open_files: FileSet,
-    pub semi_open_files: [FileSet; 2],
-    pub islands: [u8; 2],
-    pub levers: [u8; 2],
-    pub rams: u8,
-    pub passer_lead_rank: [Option<u8>; 2],
-    pub passer_protected: [u8; 2],
-    pub passers_connected: [bool; 2],
-    pub passer_unstoppable: [bool; 2],
-    pub chain_max_length: [u8; 2],
-    pub chain_base_attacked: [bool; 2],
-    pub majority_by_wing: [[bool; 2]; 2],
-    pub holes: [SquareSet; 2],
-    pub holes_occupied: [u8; 2],
-    pub fixed_pawns: [u8; 2],
-    pub blocked_passers: [u8; 2],
-    pub passer_distance: [Option<u8>; 2],
-    pub passer_king_distance: [[Option<u8>; 2]; 2],
-    pub passer_in_square: [bool; 2],
-    pub passer_free_path: [u8; 2],
-    pub half_open_at_enemy_king: [u8; 2],
-    pub backward_on_semi_open: [u8; 2],
-}
-
-pub struct AttackFacts {
-    pub by: [SquareSet; 2],
-    pub by_pawns: [SquareSet; 2],
-    pub by_role: [[SquareSet; 6]; 2],
-    pub attacked: [SquareSet; 2],
-    pub hanging: [SquareSet; 2],
-    pub en_prise: [SquareSet; 2],
-    pub pinned: [SquareSet; 2],
-    pub defended: [SquareSet; 2],
-    pub attacked_value: [i32; 2],
-    pub hanging_value: [i32; 2],
-    pub en_prise_value: [i32; 2],
-    pub en_prise_max_value: [i32; 2],
-    pub pinned_value: [i32; 2],
-    pub skewer_candidates: [u8; 2],
-    /* the placement the sets were read from */
-}
-
-impl AttackFacts {
-    pub fn attackers_of(&self, sq: Square, side: Side) -> SquareSet;
-    pub fn is_hanging(&self, sq: Square) -> bool;
-    pub fn units(&self, side: Side) -> SquareSet;
-}
-
-/// Every set is read on the units it is about: index 0 is what we stand to
-/// lose. Kings are in none of them.
-pub struct ThreatFacts {
-    pub threatened: [SquareSet; 2],
-    pub threatened_value: [i32; 2],
-    pub threat_max_gain: [i32; 2],
-    pub attacked_by_lesser: [SquareSet; 2],
-    pub queen_attacked_by_lesser: [bool; 2],
-    pub overloaded_defenders: [SquareSet; 2],
-    pub removable_defenders: [SquareSet; 2],
-    pub loose: [SquareSet; 2],
-    pub attacker_surplus: [SquareSet; 2],
-    pub xray_through_enemy: [u8; 2],
-    pub battery_count: [u8; 2],
-    pub battery_at_king: [bool; 2],
 }
 
 pub struct AnnotatedMove {
@@ -460,58 +400,32 @@ pub struct AnnotatedMove {
     pub facts: MoveFacts,
 }
 
-pub struct MoveFacts {
-    pub victim: Option<Role>,
-    pub mover: Role,
-    pub promotion: Option<Role>,
-    pub gives_check: bool,
-    pub gives_safe_check: bool,
-    pub is_safe: bool,
-    pub captures_hanging: bool,
-    pub escapes_attack: bool,
-    pub to_attacked_by_pawn: bool,
-    pub is_castling: bool,
-    pub is_en_passant: bool,
-    pub see: i32,
-    pub threat_created_max: i32,
-    pub moves_attacked_unit: bool,
-    pub blocks_check: bool,
-    pub advances_passer: bool,
-    pub creates_passer: bool,
-    pub creates_isolated: bool,
-    pub creates_doubled: bool,
-    pub creates_backward: bool,
-    pub opens_file_at_enemy_king: bool,
-    pub our_ring_attackers_delta: i32,
-    pub their_ring_attackers_delta: i32,
-    pub own_hanging_delta: i32,
-    pub their_hanging_delta: i32,
-    pub leaves_unit_hanging: bool,
-    pub gives_discovered_attack: bool,
-}
-
 impl Facts {
     /// The variant the facts were computed under.
     pub fn variant(&self) -> &'static str;
-    /// The colour that plays `Side::Us`.
+    /// The colour to move.
     pub fn side_to_move(&self) -> Colour;
-    /// The side `colour` plays: the index into every side-paired fact.
-    pub fn side(&self, colour: Colour) -> Side;
+    /// The names of the groups, in the order they are declared.
+    pub fn groups() -> impl Iterator<Item = &'static str>;
     /// A page of prose: material, structure, king safety, threats. Text not stable.
     pub fn summary(&self) -> String;
 }
 
-/// The `available`/`count` fields of a `TacticsFacts` carry the numbers; the
-/// schema's `*_available` and `only_moves` bits are predicates over them.
+/// The counts carry the numbers; these read a question off them.
 impl TacticsFacts {
-    pub fn check_available(&self) -> bool;
-    pub fn safe_check_available(&self) -> bool;
-    pub fn promotion_available(&self) -> bool;
-    pub fn safe_promotion_available(&self) -> bool;
-    pub fn capture_available(&self) -> bool;
-    pub fn fork_available(&self) -> bool;
-    pub fn pin_creation_available(&self) -> bool;
-    pub fn only_moves(&self) -> bool;
+    pub fn check_available(&self) -> ByColour<bool>;
+    pub fn safe_check_available(&self) -> ByColour<bool>;
+    pub fn promotion_available(&self) -> ByColour<bool>;
+    pub fn safe_promotion_available(&self) -> ByColour<bool>;
+    pub fn capture_available(&self) -> ByColour<bool>;
+    pub fn fork_available(&self) -> ByColour<bool>;
+    pub fn pin_creation_available(&self) -> ByColour<bool>;
+    pub fn only_moves(&self) -> ByColour<bool>;
+}
+
+impl KingFacts {
+    /// The weight besieging each king's ring, less the weight defending it.
+    pub fn ring_attacker_surplus(&self) -> ByColour<i16>;
 }
 
 /// Reusable buffers. One per thread; a search keeps one per node stack.
@@ -520,141 +434,83 @@ impl Scratch { pub fn new() -> Scratch; }
 ```
 
 Facts are computed from the position and the variant's legal move list, so a
-feature holds under every variant whose rules its definition assumes; the
-schema names which those are (§6). A `Variant` supplies rules, never facts.
+fact holds under every variant whose rules its definition assumes. A `Variant`
+supplies rules, never facts.
 
 The `history` facts other than the halfmove clock come from `Game::facts` and
 `Game::facts_in`, which have the history; `Position::facts` and
 `Position::facts_in` emit them as zero, `known` included.
 
----
-
-## 6. Schema and encoding
+### Worked example: which files carry a passed pawn
 
 ```rust
-pub struct Schema { /* groups, versions, widths, offsets */ }
-pub struct GroupSet(u16);
-pub struct SchemaId([u8; 16]);
+use esca::{CLASSIC, File, Position};
 
-impl Schema {
-    /// The v1 schema of `features.md`: 14 groups, 2039 values, and the
-    /// 40-value move row.
-    pub fn v1() -> &'static Schema;
-    pub fn id(&self) -> SchemaId;
-    pub fn semver(&self) -> &str;
-    pub fn width(&self) -> usize;
-    pub fn width_of(&self, groups: GroupSet) -> usize;
-    pub fn groups(&self) -> &[GroupSpec];
-    pub fn group(&self, name: &str) -> Option<&GroupSpec>;
-    /// The move row: the group named `move`, versioned on its own.
-    pub fn moves(&self) -> &'static GroupSpec;
-    /// The canonical text `id` hashes.
-    pub fn canonical(&self) -> String;
-    pub fn all(&self) -> GroupSet;
-    /// Where a group sits in the schema order.
-    pub fn group_index(&self, name: &str) -> Option<usize>;
-    /// The named groups; `None` when a name is not the schema's.
-    pub fn group_set(&self, names: &[&str]) -> Option<GroupSet>;
-    pub fn feature_count(&self) -> usize;
-    /// The features whose definitions hold under `variant`.
-    pub fn features_for(&'static self, variant: &dyn Variant) -> FeatureSet;
-}
+let position = Position::from_fen("8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1").unwrap();
+let facts = position.facts(&CLASSIC);
 
-impl GroupSet {
-    pub const EMPTY: GroupSet;
-    pub const fn only(index: usize) -> GroupSet;
-    pub const fn contains(self, index: usize) -> bool;
-    pub fn insert(&mut self, index: usize);
-    pub fn remove(&mut self, index: usize);
-    pub const fn is_empty(self) -> bool;
-    pub const fn len(self) -> u32;
-}
-
-impl SchemaId {
-    pub const fn bytes(self) -> [u8; 16];
-}
-
-pub struct GroupSpec {
-    pub name: &'static str,
-    pub version: u16,
-    pub width: usize,
-    pub features: &'static [FeatureSpec],
-}
-
-impl GroupSpec {
-    /// The group's own part of the canonical text.
-    pub fn canonical(&self) -> String;
-    pub fn feature(&self, name: &str) -> Option<&'static FeatureSpec>;
-}
-
-pub struct FeatureSpec {
-    pub name: &'static str,
-    /// Within the group, in values.
-    pub offset: usize,
-    pub width: usize,
-    /// The encoding kind and scale, as `features.md` §6 spells it.
-    pub encoding: &'static str,
-    /// Variant names the feature is defined for; empty means all of them.
-    pub variants: &'static [&'static str],
-}
-
-impl FeatureSpec {
-    pub fn defined_for(&self, variant_name: &str) -> bool;
-}
-
-/// A subset of a schema's features.
-pub struct FeatureSet { /* … */ }
-
-impl FeatureSet {
-    pub fn contains(&self, group: &str, feature: &str) -> bool;
-    pub fn names(&self) -> impl Iterator<Item = (&'static str, &'static str)>;
-}
-
-impl Facts {
-    /// Writes the selected groups in schema order; returns values written.
-    /// A feature not defined for the facts' variant is written as zeros, so
-    /// widths and offsets do not depend on the variant.
-    /// Panics if `out` is shorter than `schema.width_of(groups)`.
-    pub fn encode_into(&self, schema: &Schema, groups: GroupSet, out: &mut [f32]) -> usize;
-    pub fn encode(&self, schema: &Schema, groups: GroupSet) -> Vec<f32>;
-}
-
-impl MoveFacts {
-    /// `Schema::v1().moves().width`, as a constant.
-    pub const WIDTH: usize = 40;
-    /// Panics if `out` is shorter than `WIDTH`.
-    pub fn encode_into(&self, out: &mut [f32]);
-}
-
-/// One row per position, row-major, into `out` of `positions.len() * width`.
-pub fn encode_positions(
-    variant: &dyn Variant,
-    positions: &[Position],
-    schema: &Schema,
-    groups: GroupSet,
-    out: &mut [f32],
-);
-
-/// As above from FEN text; the error names the offending row.
-pub fn encode_fens(
-    variant: &dyn Variant,
-    fens: &[&str],
-    schema: &Schema,
-    groups: GroupSet,
-    out: &mut [f32],
-) -> Result<(), RowError>;
-
-pub struct RowError { pub row: usize, pub source: FenError }
+let files: Vec<File> = facts.pawns.passed.white.files().into_iter().collect();
+assert_eq!(files, [File::D]);
+assert!(facts.pawns.passed.black.is_empty());
 ```
 
-Rows are independent and the crate spawns no threads; the caller parallelises.
-`features.md` §4 names the features defined for classic chess only.
+```python
+import esca
 
-The v1 id is `dbe7a74d1478ca3f083be1cb5df36a1d`; its canonical text is checked
-in as `tests/data/schema_v1.txt`, the position row's groups
-first and the `move` section last. The one id covers both rows, so a net that
-stores it refuses a move row of another shape as surely as a position row of
-one.
+facts = esca.Position.from_fen("8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1").facts()
+
+assert list(facts.pawns.passed.white.files) == ["d"]
+assert not facts.pawns.passed.black
+
+assert facts.to_dict()["pawns"]["passed"] == {"white": ["d5"], "black": []}
+```
+
+---
+
+## 6. The catalogue
+
+Every group, field, type and meaning as data. `docs/features.md` is generated
+from it, and the MCP server serves it as `esca://facts-catalogue`.
+
+```rust
+pub struct Field {
+    pub name: &'static str,
+    /* … */
+}
+
+impl Field {
+    /// The field's type, as the declaration spells it.
+    pub fn type_name(&self) -> String;
+    /// What the field holds, in one sentence.
+    pub fn meaning(&self) -> String;
+}
+
+pub struct Group {
+    pub name: &'static str,
+    pub fields: &'static [Field],
+    /* … */
+}
+
+impl Group {
+    pub fn meaning(&self) -> String;
+    pub fn field(&self, name: &str) -> Option<&'static Field>;
+}
+
+/// Every group, in the order `Facts` declares them.
+pub fn catalogue() -> &'static [Group];
+
+/// The catalogue as the Markdown of `docs/features.md`.
+pub fn markdown() -> String;
+```
+
+Each group type carries its own entry, so a field and its documentation cannot
+disagree: `PawnFacts::GROUP`, `PawnFacts::FIELDS` and `PawnFacts::ENTRY`, and
+`MoveFacts::FIELDS` for a move. `cargo run --example catalogue` rewrites
+`docs/features.md`; a test fails when it is stale.
+
+With the `serde` feature every group serialises to the same shape the Python
+`to_dict()` writes: a `ByColour` as an object keyed by colour, a square or file
+set as a list of names, and an enum as its snake-case name.
 
 ---
 
@@ -695,9 +551,9 @@ can reach, and `Record::position` returns `FenError::Position` for those.
 
 ## 8. Adding a variant
 
-A variant is one more `Variant` implementation. `Position`, `Facts`,
-`MoveFacts`, `Schema` and the encoders are untouched, because `Position` is
-data and every fact derives from the variant's own legal move list.
+A variant is one more `Variant` implementation. `Position`, `Facts` and
+`MoveFacts` are untouched, because `Position` is data and every fact derives
+from the variant's own legal move list.
 
 ```rust
 pub struct Horde;
@@ -713,7 +569,6 @@ impl Variant for Horde {
 
 let game = Game::new(Arc::new(Horde));
 let facts = game.facts();     // unchanged code
-let defined = Schema::v1().features_for(game.variant());
 ```
 
 The model a variant must fit: an 8×8 board, the six standard roles, two
@@ -725,10 +580,11 @@ colours, one unit per square. Rules beyond that need the model widened first.
 
 Built from the same crate with feature `python`; distributed with `.pyi` stubs,
 so every signature below is typed and checkable. Squares, roles, colours,
-outcomes and castling styles are text on this surface, and a file set is the
-string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
-`Position`, `Game`, `Schema`, `MoveSchema`, `Facts` with its groups,
-`lichess.Batch`, `pgn.Game`, `polyglot.Book` with its `Entry`, `Raw` and
+outcomes and castling styles are text on this surface; a colour is written
+`"white"` or `"black"` and read from either, or from `"w"` or `"b"`, in any
+case. The classes are `Variant`, `SquareSet`, `Move`,
+`Position`, `Game`, `Facts` with its groups, `ByColour`, `FileSet`,
+`pgn.Game`, `polyglot.Book` with its `Entry`, `Raw` and
 `Builder`, `openings.Opening`, `endings.Ending` with its class, verdict, technique and
 evidence, `uci.Engine` and `uci.AsyncEngine` with their
 `Limits`, `Option`, `Info` and `Answer`, and `uci.protocol` with `Command`,
@@ -736,11 +592,9 @@ evidence, `uci.Engine` and `uci.AsyncEngine` with their
 
 ```python
 import esca
-import numpy as np
 
 esca.CLASSIC  # Variant
 esca.CHESS960
-esca.US, esca.THEM  # 0 and 1, the index of a side-paired fact
 
 # Game — variant defaults to classic everywhere it is optional
 g = esca.Game()
@@ -762,39 +616,27 @@ print(g.position.summary())
 
 # Position on its own; rules come from the variant argument
 p = esca.Position.from_fen(fen)
-p.fen, p.epd, p.side_to_move, p.en_passant, p.in_check  # str, str, "w", "e6", bool
+p.fen, p.epd, p.side_to_move, p.en_passant, p.in_check  # str, str, "white", "e6", bool
 p.piece_at("e1")  # "K"
 f = p.facts(esca.CLASSIC)
 f = g.facts()  # variant taken from the game
 
 p.see("e5"), p.see_capture(mv)  # static exchange evaluation, in value units
 
-f.side("b")  # esca.US or esca.THEM, whichever Black plays
-f.pawns.passed[esca.US]  # SquareSet
-list(f.attacks.hanging[esca.THEM])  # ["e5", …]
-list(f.threats.threatened[esca.US])  # what we stand to lose
-f.king.ring_attack_weight[esca.US]
+f.pawns.passed.white  # SquareSet
+f.pawns.passed.of("black")  # the same by colour; f.pawns.passed["b"] too
+list(f.attacks.hanging.black)  # ["e5", …]
+f.king.ring_attack_weight.white  # int
+list(f.pawns.open_files)  # FileSet, iterated as ["c", "e", "h"]
 print(f.summary())
 
-# Schema and batch encoding
-esca.SCHEMA  # Schema, also as esca.SCHEMA_V1
-esca.SCHEMA_ID  # "16a7…", 32 hex chars
-esca.WIDTH  # 2039
-esca.MOVE_WIDTH  # 40
-esca.MOVE_SCHEMA  # MoveSchema, also as esca.SCHEMA.moves()
-esca.MOVE_SCHEMA.features()  # [{"name", "offset", "width", "encoding"}, …]
-esca.schema()  # [{"name", "version", "width", "offset"}, …]
-esca.features_for(esca.CHESS960)  # [("state", "in_check"), …]
-
-# (n, w) float32
-x = esca.encode(fens, variant=esca.CHESS960, groups=["state", "pawns"])
-esca.encode_into(fens, out, groups=["state", "pawns"])  # caller's array
-moves, mx = esca.encode_moves(fen)  # list[Move], (m, 40)
-moves, mx, cuts = esca.encode_moves(fens)  # per FEN, (total, 40), (n + 1,) int64
-
-# Lichess dump
-for batch in esca.lichess.batches(path, batch_size=8192, min_depth=20):
-    batch.fens, batch.features, batch.cp, batch.mate, batch.best_moves
+# Walking the groups without knowing them
+f.groups()  # ["placement", "state", …]
+f.group("pawns").fields()  # {"pawns": ByColour, "passed": ByColour, …}
+f.pawns.to_dict()  # the same as plain data
+f.to_dict()  # {group: {field: value}} for every group
+esca.facts_catalogue()  # [{"name", "meaning", "fields": [{"name", "type", "meaning"}]}]
+esca.move_facts_catalogue()  # the same for a move's facts
 
 # PGN
 for pg in esca.pgn.read(path):  # or read_string(text); skip_errors=True drops bad games
@@ -885,28 +727,10 @@ session.received(protocol.parse("uciok"))
 session.state  # "idle"
 ```
 
-Every function that encodes takes keyword-only `variant`, `schema` and
-`groups`, defaulting to `esca.CLASSIC`, `esca.SCHEMA` and every group:
-
-```python
-esca.encode(fens, *, variant=..., schema=..., groups=None) -> np.ndarray
-esca.encode_into(fens, out, *, variant=..., schema=..., groups=None) -> None
-esca.encode_moves(fen, *, variant=...) -> tuple[list[Move], np.ndarray]
-esca.encode_moves(fens, *, variant=...) -> tuple[list[list[Move]], np.ndarray, np.ndarray]
-esca.lichess.batches(path, *, batch_size=8192, min_depth=0,
-                     variant=..., schema=..., groups=None) -> Iterator[Batch]
-```
-
 | Contract | |
 |---|---|
-| Returned arrays are C-contiguous `float32`, allocated in Rust and handed over without a copy. | |
-| Batch calls release the GIL, parallelise rows, and reuse their buffers internally. | |
-| A malformed FEN raises `ValueError` naming the row index. | |
-| `encode_moves` takes one FEN or a sequence of them. A sequence stacks every position's move rows into one `(total, 40)` array and returns the `(n + 1,)` int64 offsets that cut it, so FEN `i` owns `rows[offsets[i]:offsets[i + 1]]`: no padding, and one array per call rather than one per position. | |
 | `Position`, `Move`, `Facts` and their groups are immutable and picklable; `Position` and `Move` are hashable. | |
 | A malformed game raises `ValueError` naming the line and column; the stream goes on with the next game. | |
-| A batch row takes the deepest evaluation that reaches `min_depth`, and its best line; a record with none, with a placement no game can reach, or with an unreadable line is skipped. | |
-| `batch.cp` and `batch.mate` are both `(n,)` float32 and side-relative: a row is a mate row when `mate` is not 0.0, and a centipawn row otherwise. | |
 
 ---
 

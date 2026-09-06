@@ -92,7 +92,7 @@ jobs:
         run: |
           uv run --isolated --no-project --python 3.12 \
             --with "$(ls dist/esca-*.whl)" \
-            python -c "import esca, esca.explain, esca.lichess, esca.openings, esca.pgn, esca.polyglot, esca.uci; print(esca.SCHEMA_ID)"
+            python -c "import esca, esca.endings, esca.explain, esca.openings, esca.pgn, esca.polyglot, esca.uci; print(esca.__version__)"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.platform.runner }}-${{ matrix.platform.target }}

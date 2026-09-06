@@ -135,12 +135,30 @@ FREE_PROMOTION_THEIRS = "8/5P2/7k/8/7K/8/8/8 b - - 0 1"
 
 #: The helper `conftest.py` hands over.
 FactsOf = Callable[..., esca.Facts]
+Files = Callable[[str], esca.FileSet]
 
 
 def roles(letters: str) -> list[bool]:
-    """The five counted roles, named by their letters in the order the schema
+    """The five counted roles, named by their letters in the order the group
     writes them: `roles("nr")` is a knight and a rook."""
     return [letter in letters for letter in "pnbrq"]
+
+
+def check_roles(tactics: esca.TacticsFacts, colour: str) -> list[bool]:
+    """The five checking flags of `colour`, in the order `roles` writes them."""
+    return [getattr(tactics, f"check_by_{role}").of(colour) for role in ("pawn", "knight", "bishop", "rook", "queen")]
+
+
+def safe_check_roles(tactics: esca.TacticsFacts, colour: str) -> list[bool]:
+    """The same for the checks whose destination is safe."""
+    return [
+        getattr(tactics, f"safe_check_by_{role}").of(colour) for role in ("pawn", "knight", "bishop", "rook", "queen")
+    ]
+
+
+def promotion_roles(tactics: esca.TacticsFacts, colour: str) -> list[bool]:
+    """The four promotion flags of `colour`, queen first."""
+    return [getattr(tactics, f"promotes_to_{role}").of(colour) for role in ("queen", "rook", "bishop", "knight")]
 
 
 @pytest.mark.parametrize(
@@ -148,7 +166,7 @@ def roles(letters: str) -> list[bool]:
     [
         (START, [False, False]),
         (MATE, [True, False]),
-        (MATE_THEIRS, [False, True]),
+        (MATE_THEIRS, [True, False]),
         (CHECKS, [True, True]),
         (DISCOVERY, [True, False]),
     ],
@@ -158,8 +176,7 @@ def test_a_check_is_available_when_a_legal_move_leaves_the_enemy_king_attacked(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].check_available == available[0]
-    assert tactics[esca.THEM].check_available == available[1]
+    assert tactics.check_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -168,7 +185,7 @@ def test_a_check_is_available_when_a_legal_move_leaves_the_enemy_king_attacked(
         (START, [0, 0]),
         (MATE, [1, 0]),
         (CHECKS, [3, 2]),
-        (CHECKS_THEIRS, [2, 3]),
+        (CHECKS_THEIRS, [3, 2]),
         (PROMOTIONS, [4, 0]),
         (DISCOVERY, [7, 0]),
     ],
@@ -176,12 +193,11 @@ def test_a_check_is_available_when_a_legal_move_leaves_the_enemy_king_attacked(
 )
 def test_every_checking_move_is_counted_once(fen: str, checks: list[int], facts_of: FactsOf) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].check_count == checks[0]
-    assert tactics[esca.THEM].check_count == checks[1]
+    assert tactics.check_count == esca.ByColour(*checks)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (MATE, "r", ""),
@@ -193,11 +209,11 @@ def test_every_checking_move_is_counted_once(fen: str, checks: list[int], facts_
     ids=["start", "mate", "checks", "promotions", "promotion_captures", "pins"],
 )
 def test_a_checking_move_is_recorded_against_the_role_that_makes_it(
-    fen: str, us: str, them: str, facts_of: FactsOf
+    fen: str, white: str, black: str, facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].check_by_role == roles(us)
-    assert tactics[esca.THEM].check_by_role == roles(them)
+    assert check_roles(tactics, "white") == roles(white)
+    assert check_roles(tactics, "black") == roles(black)
 
 
 @pytest.mark.parametrize(
@@ -215,8 +231,7 @@ def test_a_safe_check_is_a_check_whose_destination_the_enemy_cannot_profitably_t
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].safe_check_available == available[0]
-    assert tactics[esca.THEM].safe_check_available == available[1]
+    assert tactics.safe_check_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -235,12 +250,11 @@ def test_only_the_checks_with_a_safe_destination_are_counted_safe(
     fen: str, checks: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].safe_check_count == checks[0]
-    assert tactics[esca.THEM].safe_check_count == checks[1]
+    assert tactics.safe_check_count == esca.ByColour(*checks)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (FORKS, "", "r"),
@@ -252,11 +266,11 @@ def test_only_the_checks_with_a_safe_destination_are_counted_safe(
     ids=["start", "forks", "checks", "promotions", "promotion_captures", "pins"],
 )
 def test_a_safe_check_is_recorded_against_the_role_that_makes_it(
-    fen: str, us: str, them: str, facts_of: FactsOf
+    fen: str, white: str, black: str, facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].safe_check_by_role == roles(us)
-    assert tactics[esca.THEM].safe_check_by_role == roles(them)
+    assert safe_check_roles(tactics, "white") == roles(white)
+    assert safe_check_roles(tactics, "black") == roles(black)
 
 
 @pytest.mark.parametrize(
@@ -265,7 +279,7 @@ def test_a_safe_check_is_recorded_against_the_role_that_makes_it(
         (START, [False, False]),
         (CHECKS, [False, False]),
         (DISCOVERY, [True, False]),
-        (DISCOVERY_THEIRS, [False, True]),
+        (DISCOVERY_THEIRS, [True, False]),
     ],
     ids=["start", "checks", "discovery", "discovery_theirs"],
 )
@@ -273,8 +287,7 @@ def test_a_double_check_is_a_move_that_leaves_two_units_giving_check(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].double_check_available == available[0]
-    assert tactics[esca.THEM].double_check_available == available[1]
+    assert tactics.double_check_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -284,7 +297,7 @@ def test_a_double_check_is_a_move_that_leaves_two_units_giving_check(
         (CHECKS, [False, False]),
         (FORKS, [False, False]),
         (DISCOVERY, [True, False]),
-        (DISCOVERY_THEIRS, [False, True]),
+        (DISCOVERY_THEIRS, [True, False]),
     ],
     ids=["start", "checks", "forks", "discovery", "discovery_theirs"],
 )
@@ -292,8 +305,7 @@ def test_a_discovered_check_comes_from_a_unit_that_did_not_move(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].discovered_check_available == available[0]
-    assert tactics[esca.THEM].discovered_check_available == available[1]
+    assert tactics.discovered_check_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -303,7 +315,7 @@ def test_a_discovered_check_comes_from_a_unit_that_did_not_move(
         (STALEMATE, [False, False]),
         (CHECKS, [False, False]),
         (MATE, [True, False]),
-        (MATE_THEIRS, [False, True]),
+        (MATE_THEIRS, [True, False]),
     ],
     ids=["start", "stalemate", "checks", "mate", "mate_theirs"],
 )
@@ -311,8 +323,7 @@ def test_a_mate_in_1_is_a_legal_move_that_leaves_the_opponent_checkmated(
     fen: str, mate: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].mate_in_1 == mate[0]
-    assert tactics[esca.THEM].mate_in_1 == mate[1]
+    assert tactics.mate_in_1 == esca.ByColour(*mate)
 
 
 @pytest.mark.parametrize(
@@ -330,8 +341,7 @@ def test_a_stalemate_in_1_is_a_legal_move_that_leaves_the_opponent_without_one(
     fen: str, stalemate: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].stalemate_in_1 == stalemate[0]
-    assert tactics[esca.THEM].stalemate_in_1 == stalemate[1]
+    assert tactics.stalemate_in_1 == esca.ByColour(*stalemate)
 
 
 @pytest.mark.parametrize(
@@ -348,12 +358,11 @@ def test_a_promotion_is_available_when_a_legal_move_makes_one(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].promotion_available == available[0]
-    assert tactics[esca.THEM].promotion_available == available[1]
+    assert tactics.promotion_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (CHECKS, "", ""),
@@ -362,14 +371,16 @@ def test_a_promotion_is_available_when_a_legal_move_makes_one(
     ],
     ids=["start", "checks", "promotions", "promotion_captures"],
 )
-def test_a_promotion_is_filed_under_the_file_it_lands_on(fen: str, us: str, them: str, facts_of: FactsOf) -> None:
+def test_a_promotion_is_filed_under_the_file_it_lands_on(
+    fen: str, white: str, black: str, facts_of: FactsOf, files: Files
+) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].promotion_files == us
-    assert tactics[esca.THEM].promotion_files == them
+    assert tactics.promotion_files.white == files(white)
+    assert tactics.promotion_files.black == files(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, [False] * 4, [False] * 4),
         (CHECKS, [False] * 4, [False] * 4),
@@ -379,11 +390,11 @@ def test_a_promotion_is_filed_under_the_file_it_lands_on(fen: str, us: str, them
     ids=["start", "checks", "promotions", "promotion_captures"],
 )
 def test_every_promotion_piece_is_obtainable_wherever_a_pawn_may_promote(
-    fen: str, us: list[bool], them: list[bool], facts_of: FactsOf
+    fen: str, white: list[bool], black: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].promotion_roles == us
-    assert tactics[esca.THEM].promotion_roles == them
+    assert promotion_roles(tactics, "white") == white
+    assert promotion_roles(tactics, "black") == black
 
 
 @pytest.mark.parametrize(
@@ -400,12 +411,11 @@ def test_a_safe_promotion_is_one_whose_destination_is_a_safe_destination(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].safe_promotion_available == available[0]
-    assert tactics[esca.THEM].safe_promotion_available == available[1]
+    assert tactics.safe_promotion_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
-    ("fen", "us", "them"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (CHECKS, "", ""),
@@ -415,11 +425,11 @@ def test_a_safe_promotion_is_one_whose_destination_is_a_safe_destination(
     ids=["start", "checks", "promotions", "promotion_captures"],
 )
 def test_a_guarded_promotion_square_is_left_out_of_the_safe_files(
-    fen: str, us: str, them: str, facts_of: FactsOf
+    fen: str, white: str, black: str, facts_of: FactsOf, files: Files
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].safe_promotion_files == us
-    assert tactics[esca.THEM].safe_promotion_files == them
+    assert tactics.safe_promotion_files.white == files(white)
+    assert tactics.safe_promotion_files.black == files(black)
 
 
 @pytest.mark.parametrize(
@@ -438,8 +448,7 @@ def test_a_capture_is_available_when_a_legal_move_takes_a_unit(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].capture_available == available[0]
-    assert tactics[esca.THEM].capture_available == available[1]
+    assert tactics.capture_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -457,8 +466,7 @@ def test_each_capturing_move_counts_for_itself_so_four_promotions_count_four(
     fen: str, captures: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].capture_count == captures[0]
-    assert tactics[esca.THEM].capture_count == captures[1]
+    assert tactics.capture_count == esca.ByColour(*captures)
 
 
 @pytest.mark.parametrize(
@@ -469,7 +477,7 @@ def test_each_capturing_move_counts_for_itself_so_four_promotions_count_four(
         (FORKS, [False, False]),
         (CHECKS, [True, True]),
         (MATE, [True, False]),
-        (MATE_THEIRS, [False, True]),
+        (MATE_THEIRS, [True, False]),
         (PROMOTION_CAPTURES, [True, True]),
         (DISCOVERY, [True, False]),
     ],
@@ -479,8 +487,7 @@ def test_a_capture_wins_when_the_exchange_it_starts_wins_material(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].winning_capture_available == available[0]
-    assert tactics[esca.THEM].winning_capture_available == available[1]
+    assert tactics.winning_capture_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -490,7 +497,7 @@ def test_a_capture_wins_when_the_exchange_it_starts_wins_material(
         (PINS, [0, 0]),
         (CHECKS, [5, 3]),
         (MATE, [5, 0]),
-        (MATE_THEIRS, [0, 5]),
+        (MATE_THEIRS, [5, 0]),
         (PROMOTION_CAPTURES, [13, 13]),
         (IN_CHECK, [5, 0]),
         (DISCOVERY, [3, 0]),
@@ -501,8 +508,7 @@ def test_the_max_gain_is_the_best_see_over_the_captures_and_never_below_zero(
     fen: str, gain: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].winning_capture_max_gain == gain[0]
-    assert tactics[esca.THEM].winning_capture_max_gain == gain[1]
+    assert tactics.winning_capture_max_gain == esca.ByColour(*gain)
 
 
 @pytest.mark.parametrize(
@@ -512,7 +518,7 @@ def test_the_max_gain_is_the_best_see_over_the_captures_and_never_below_zero(
         (FORKS, [False, False]),
         (CHECKS, [True, True]),
         (DISCOVERY, [True, False]),
-        (MATE_THEIRS, [False, True]),
+        (MATE_THEIRS, [True, False]),
     ],
     ids=["start", "forks", "checks", "discovery", "mate_theirs"],
 )
@@ -520,8 +526,7 @@ def test_a_hanging_victim_is_one_the_owner_leaves_undefended_under_attack(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].captures_hanging == available[0]
-    assert tactics[esca.THEM].captures_hanging == available[1]
+    assert tactics.captures_hanging == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -530,7 +535,7 @@ def test_a_hanging_victim_is_one_the_owner_leaves_undefended_under_attack(
         (START, [0, 0]),
         (FORKS, [0, 0]),
         (CHECKS, [5, 3]),
-        (CHECKS_THEIRS, [3, 5]),
+        (CHECKS_THEIRS, [5, 3]),
         (PROMOTION_CAPTURES, [5, 5]),
         (DISCOVERY, [3, 0]),
     ],
@@ -540,8 +545,7 @@ def test_the_hanging_victims_are_ranked_by_value_and_the_largest_is_kept(
     fen: str, value: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].hanging_victim_max_value == value[0]
-    assert tactics[esca.THEM].hanging_victim_max_value == value[1]
+    assert tactics.hanging_victim_max_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
@@ -550,11 +554,11 @@ def test_the_hanging_victims_are_ranked_by_value_and_the_largest_is_kept(
         (START, [0, 0]),
         (PROMOTION_CAPTURES, [0, 0]),
         (CHECKS, [0, 1]),
-        (CHECKS_THEIRS, [1, 0]),
+        (CHECKS_THEIRS, [0, 1]),
         (DISCOVERY, [0, 1]),
-        (DISCOVERY_THEIRS, [1, 0]),
+        (DISCOVERY_THEIRS, [0, 1]),
         (TRADE, [1, 0]),
-        (TRADE_THEIRS, [0, 1]),
+        (TRADE_THEIRS, [1, 0]),
     ],
     ids=[
         "start",
@@ -571,8 +575,7 @@ def test_an_equal_capture_is_one_whose_exchange_comes_out_level(
     fen: str, captures: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].equal_capture_count == captures[0]
-    assert tactics[esca.THEM].equal_capture_count == captures[1]
+    assert tactics.equal_capture_count == esca.ByColour(*captures)
 
 
 @pytest.mark.parametrize(
@@ -581,12 +584,12 @@ def test_an_equal_capture_is_one_whose_exchange_comes_out_level(
         (START, [0, 0]),
         (CHECKS, [0, 0]),
         (MATE, [0, 1]),
-        (MATE_THEIRS, [1, 0]),
+        (MATE_THEIRS, [0, 1]),
         (FORKS, [0, 1]),
         (PINS, [1, 0]),
-        (PINS_THEIRS, [0, 1]),
+        (PINS_THEIRS, [1, 0]),
         (LOSING_TAKE, [1, 0]),
-        (LOSING_TAKE_THEIRS, [0, 1]),
+        (LOSING_TAKE_THEIRS, [1, 0]),
     ],
     ids=[
         "start",
@@ -604,8 +607,7 @@ def test_a_losing_capture_is_one_whose_exchange_costs_material(
     fen: str, captures: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].losing_capture_count == captures[0]
-    assert tactics[esca.THEM].losing_capture_count == captures[1]
+    assert tactics.losing_capture_count == esca.ByColour(*captures)
 
 
 @pytest.mark.parametrize(
@@ -614,7 +616,7 @@ def test_a_losing_capture_is_one_whose_exchange_costs_material(
         (START, [False, False]),
         (PINS, [False, False]),
         (CHECKS, [True, False]),
-        (CHECKS_THEIRS, [False, True]),
+        (CHECKS_THEIRS, [True, False]),
         (FORKS, [True, True]),
     ],
     ids=["start", "pins", "checks", "checks_theirs", "forks"],
@@ -623,8 +625,7 @@ def test_a_fork_leaves_the_mover_attacking_two_units_it_may_take(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].fork_available == available[0]
-    assert tactics[esca.THEM].fork_available == available[1]
+    assert tactics.fork_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -632,7 +633,7 @@ def test_a_fork_leaves_the_mover_attacking_two_units_it_may_take(
     [
         (START, [0, 0]),
         (CHECKS, [2, 0]),
-        (CHECKS_THEIRS, [0, 2]),
+        (CHECKS_THEIRS, [2, 0]),
         (PROMOTIONS, [3, 0]),
         (FORKS, [1, 1]),
     ],
@@ -642,8 +643,7 @@ def test_every_forking_move_is_counted_once_however_many_units_it_forks(
     fen: str, forks: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].fork_count == forks[0]
-    assert tactics[esca.THEM].fork_count == forks[1]
+    assert tactics.fork_count == esca.ByColour(*forks)
 
 
 @pytest.mark.parametrize(
@@ -652,7 +652,7 @@ def test_every_forking_move_is_counted_once_however_many_units_it_forks(
         (START, [0, 0]),
         (FORKS, [5, 5]),
         (CHECKS, [9, 0]),
-        (CHECKS_THEIRS, [0, 9]),
+        (CHECKS_THEIRS, [9, 0]),
         (PROMOTIONS, [9, 0]),
     ],
     ids=["start", "forks", "checks", "checks_theirs", "promotions"],
@@ -661,8 +661,7 @@ def test_the_forked_value_is_the_largest_single_target_a_forking_king_counting_n
     fen: str, value: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].fork_max_value == value[0]
-    assert tactics[esca.THEM].fork_max_value == value[1]
+    assert tactics.fork_max_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
@@ -671,15 +670,14 @@ def test_the_forked_value_is_the_largest_single_target_a_forking_king_counting_n
         (START, [False, False]),
         (PINS, [False, False]),
         (CHECKS, [True, False]),
-        (CHECKS_THEIRS, [False, True]),
+        (CHECKS_THEIRS, [True, False]),
         (FORKS, [True, False]),
     ],
     ids=["start", "pins", "checks", "checks_theirs", "forks"],
 )
 def test_a_knight_fork_is_one_the_knight_itself_makes(fen: str, available: list[bool], facts_of: FactsOf) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].knight_fork_available == available[0]
-    assert tactics[esca.THEM].knight_fork_available == available[1]
+    assert tactics.knight_fork_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -688,7 +686,7 @@ def test_a_knight_fork_is_one_the_knight_itself_makes(fen: str, available: list[
         (START, [False, False]),
         (FORKS, [False, False]),
         (CHECKS, [True, False]),
-        (CHECKS_THEIRS, [False, True]),
+        (CHECKS_THEIRS, [True, False]),
         (PROMOTIONS, [True, False]),
     ],
     ids=["start", "forks", "checks", "checks_theirs", "promotions"],
@@ -697,8 +695,7 @@ def test_a_royal_fork_is_a_fork_one_of_whose_targets_is_the_king(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].royal_fork_available == available[0]
-    assert tactics[esca.THEM].royal_fork_available == available[1]
+    assert tactics.royal_fork_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -709,7 +706,7 @@ def test_a_royal_fork_is_a_fork_one_of_whose_targets_is_the_king(
         (FORKS, [True, False]),
         (MATE, [False, True]),
         (PINS, [True, False]),
-        (PINS_THEIRS, [False, True]),
+        (PINS_THEIRS, [True, False]),
     ],
     ids=["start", "checks", "forks", "mate", "pins", "pins_theirs"],
 )
@@ -717,8 +714,7 @@ def test_a_pin_is_created_when_the_mover_traps_a_unit_in_front_of_a_dearer_one(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].pin_creation_available == available[0]
-    assert tactics[esca.THEM].pin_creation_available == available[1]
+    assert tactics.pin_creation_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -728,7 +724,7 @@ def test_a_pin_is_created_when_the_mover_traps_a_unit_in_front_of_a_dearer_one(
         (FORKS, [1, 0]),
         (MATE, [0, 1]),
         (PINS, [3, 0]),
-        (PINS_THEIRS, [0, 3]),
+        (PINS_THEIRS, [3, 0]),
         (DISCOVERY, [0, 1]),
     ],
     ids=["start", "forks", "mate", "pins", "pins_theirs", "discovery"],
@@ -737,8 +733,7 @@ def test_every_move_that_pins_is_counted_once_however_many_pins_it_makes(
     fen: str, pins: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].pin_creation_count == pins[0]
-    assert tactics[esca.THEM].pin_creation_count == pins[1]
+    assert tactics.pin_creation_count == esca.ByColour(*pins)
 
 
 @pytest.mark.parametrize(
@@ -748,7 +743,7 @@ def test_every_move_that_pins_is_counted_once_however_many_pins_it_makes(
         (FORKS, [False, False]),
         (MATE, [True, True]),
         (PINS, [True, False]),
-        (PINS_THEIRS, [False, True]),
+        (PINS_THEIRS, [True, False]),
     ],
     ids=["start", "forks", "mate", "pins", "pins_theirs"],
 )
@@ -756,8 +751,7 @@ def test_a_skewer_puts_the_dearer_unit_in_front_of_the_cheaper_one(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].skewer_creation_available == available[0]
-    assert tactics[esca.THEM].skewer_creation_available == available[1]
+    assert tactics.skewer_creation_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -766,7 +760,7 @@ def test_a_skewer_puts_the_dearer_unit_in_front_of_the_cheaper_one(
         (START, [False, False]),
         (FORKS, [False, False]),
         (PINS, [False, True]),
-        (PINS_THEIRS, [True, False]),
+        (PINS_THEIRS, [False, True]),
         (DISCOVERY, [True, False]),
     ],
     ids=["start", "forks", "pins", "pins_theirs", "discovery"],
@@ -775,8 +769,7 @@ def test_a_discovered_attack_uncovers_a_slider_onto_a_piece_worth_three_or_more(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].discovered_attack_available == available[0]
-    assert tactics[esca.THEM].discovered_attack_available == available[1]
+    assert tactics.discovered_attack_available == esca.ByColour(*available)
 
 
 @pytest.mark.parametrize(
@@ -795,8 +788,7 @@ def test_the_legal_moves_are_counted_for_us_and_for_them_after_the_null_move(
     fen: str, moves: list[int], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].legal_move_count == moves[0]
-    assert tactics[esca.THEM].legal_move_count == moves[1]
+    assert tactics.legal_move_count == esca.ByColour(*moves)
 
 
 @pytest.mark.parametrize(
@@ -814,8 +806,7 @@ def test_a_side_is_down_to_only_moves_with_at_most_two_of_them_to_choose_from(
     fen: str, only: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].only_moves == only[0]
-    assert tactics[esca.THEM].only_moves == only[1]
+    assert tactics.only_moves == esca.ByColour(*only)
 
 
 @pytest.mark.parametrize(
@@ -828,18 +819,18 @@ def test_a_side_is_down_to_only_moves_with_at_most_two_of_them_to_choose_from(
     ],
     ids=["start", "stalemate", "discovery", "in_check"],
 )
-def test_their_block_is_unavailable_and_empty_when_the_null_move_does_not_exist(
+def test_the_side_not_to_move_is_unread_when_the_null_move_does_not_exist(
     fen: str, available: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].available == available[0]
-    assert tactics[esca.THEM].available == available[1]
+    assert tactics.available == esca.ByColour(*available)
     if not available[1]:
-        them = tactics[esca.THEM]
-        assert (them.legal_move_count, them.check_count, them.capture_count, them.fork_count) == (0, 0, 0, 0)
-        assert not them.only_moves
-        assert not them.check_available
-        assert not them.promotion_available
+        assert tactics.legal_move_count.black == 0
+        assert tactics.check_count.black == 0
+        assert tactics.capture_count.black == 0
+        assert not tactics.only_moves.black
+        assert not tactics.check_available.black
+        assert not tactics.promotion_available.black
 
 
 @pytest.mark.parametrize(
@@ -848,7 +839,7 @@ def test_their_block_is_unavailable_and_empty_when_the_null_move_does_not_exist(
         (START, [False, False]),
         (MATE, [False, False]),
         (SAFE_CHECK_CAPTURE, [True, False]),
-        (SAFE_CHECK_CAPTURE_THEIRS, [False, True]),
+        (SAFE_CHECK_CAPTURE_THEIRS, [True, False]),
         (UNSAFE_CHECK_CAPTURE, [False, True]),
         (DISCOVERY, [True, False]),
     ],
@@ -865,8 +856,7 @@ def test_a_capturing_check_is_reported_only_when_its_destination_is_safe(
     fen: str, capturing: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].safe_check_capturing == capturing[0]
-    assert tactics[esca.THEM].safe_check_capturing == capturing[1]
+    assert tactics.safe_check_capturing == esca.ByColour(*capturing)
 
 
 @pytest.mark.parametrize(
@@ -874,8 +864,8 @@ def test_a_capturing_check_is_reported_only_when_its_destination_is_safe(
     [
         (START, [False, False]),
         (DISCOVERED_QUEEN, [True, False]),
-        (DISCOVERED_QUEEN_THEIRS, [False, True]),
-        (MIRRORED_QUEEN, [True, False]),
+        (DISCOVERED_QUEEN_THEIRS, [True, False]),
+        (MIRRORED_QUEEN, [False, True]),
         (MIRRORED_QUEEN_THEIRS, [False, True]),
         (DISCOVERED_ROOK, [False, False]),
     ],
@@ -892,11 +882,9 @@ def test_a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
     fen: str, uncovered: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].discovered_attack_on_queen == uncovered[0]
-    assert tactics[esca.THEM].discovered_attack_on_queen == uncovered[1]
-    for side in (esca.US, esca.THEM):
-        block = tactics[side]
-        assert block.discovered_attack_available or not block.discovered_attack_on_queen
+    assert tactics.discovered_attack_on_queen == esca.ByColour(*uncovered)
+    for colour in ("white", "black"):
+        assert tactics.discovered_attack_available.of(colour) or not (tactics.discovered_attack_on_queen.of(colour))
 
 
 @pytest.mark.parametrize(
@@ -904,7 +892,7 @@ def test_a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
     [
         (START, [False, False]),
         (MATE, [True, False]),
-        (MATE_THEIRS, [False, True]),
+        (MATE_THEIRS, [True, False]),
         (BACK_RANK_LUFT, [False, False]),
         (BACK_RANK_ONE_SIDED, [True, False]),
         (BACK_RANK_BLOCKED, [False, True]),
@@ -922,8 +910,7 @@ def test_a_back_rank_mate_threat_is_a_rook_or_queen_check_on_a_sealed_back_rank(
     fen: str, threat: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].back_rank_mate_threat == threat[0]
-    assert tactics[esca.THEM].back_rank_mate_threat == threat[1]
+    assert tactics.back_rank_mate_threat == esca.ByColour(*threat)
 
 
 @pytest.mark.parametrize(
@@ -931,7 +918,7 @@ def test_a_back_rank_mate_threat_is_a_rook_or_queen_check_on_a_sealed_back_rank(
     [
         (START, [False, False]),
         (QUIET_THREAT, [True, False]),
-        (QUIET_THREAT_THEIRS, [False, True]),
+        (QUIET_THREAT_THEIRS, [True, False]),
         (THREAT_STANDS, [False, True]),
         (PROMOTION_CAPTURES, [False, False]),
         (MATE, [False, True]),
@@ -951,8 +938,7 @@ def test_a_quiet_threat_leaves_more_to_be_won_than_stands_to_be_won_now(
     fen: str, threat: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].quiet_threat_available == threat[0]
-    assert tactics[esca.THEM].quiet_threat_available == threat[1]
+    assert tactics.quiet_threat_available == esca.ByColour(*threat)
 
 
 @pytest.mark.parametrize(
@@ -961,8 +947,8 @@ def test_a_quiet_threat_leaves_more_to_be_won_than_stands_to_be_won_now(
         (START, [False, False]),
         (MATE, [False, False]),
         (BOXED_IN, [True, False]),
-        (BOXED_IN_THEIRS, [False, True]),
-        (BOXED_IN_MIRRORED, [True, False]),
+        (BOXED_IN_THEIRS, [True, False]),
+        (BOXED_IN_MIRRORED, [False, True]),
         (STALEMATE, [False, True]),
     ],
     ids=[
@@ -978,8 +964,7 @@ def test_a_side_has_no_safe_moves_when_every_legal_move_lands_where_it_can_be_ta
     fen: str, boxed: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].no_safe_moves == boxed[0]
-    assert tactics[esca.THEM].no_safe_moves == boxed[1]
+    assert tactics.no_safe_moves == esca.ByColour(*boxed)
 
 
 @pytest.mark.parametrize(
@@ -990,7 +975,7 @@ def test_a_side_has_no_safe_moves_when_every_legal_move_lands_where_it_can_be_ta
         (GUARDED_PROMOTION, [False, False]),
         (PROMOTION_CAPTURES, [True, True]),
         (FREE_PROMOTION, [True, False]),
-        (FREE_PROMOTION_THEIRS, [False, True]),
+        (FREE_PROMOTION_THEIRS, [True, False]),
     ],
     ids=[
         "start",
@@ -1005,44 +990,40 @@ def test_a_promotion_is_see_positive_when_the_exchange_on_its_square_wins_materi
     fen: str, positive: list[bool], facts_of: FactsOf
 ) -> None:
     tactics = facts_of(fen).tactics
-    assert tactics[esca.US].promotion_see_positive == positive[0]
-    assert tactics[esca.THEM].promotion_see_positive == positive[1]
+    assert tactics.promotion_see_positive == esca.ByColour(*positive)
 
 
-def test_a_block_the_null_move_does_not_allow_states_no_tactic_of_its_own(facts_of: FactsOf) -> None:
-    """A block with no side to move states no tactic, `no_safe_moves` included:
-    zero there says the block was not computed, not that a safe move exists."""
-    theirs = facts_of(IN_CHECK).tactics[esca.THEM]
-    assert not theirs.available
-    assert not theirs.safe_check_capturing
-    assert not theirs.discovered_attack_on_queen
-    assert not theirs.back_rank_mate_threat
-    assert not theirs.quiet_threat_available
-    assert not theirs.no_safe_moves
-    assert not theirs.promotion_see_positive
+def test_a_side_the_null_move_does_not_allow_states_no_tactic_of_its_own(facts_of: FactsOf) -> None:
+    """A side with no move to make states no tactic, `no_safe_moves` included:
+    false there says the values were not read, not that a safe move exists."""
+    theirs = facts_of(IN_CHECK).tactics
+    assert not theirs.available.black
+    assert not theirs.safe_check_capturing.black
+    assert not theirs.discovered_attack_on_queen.black
+    assert not theirs.back_rank_mate_threat.black
+    assert not theirs.quiet_threat_available.black
+    assert not theirs.no_safe_moves.black
+    assert not theirs.promotion_see_positive.black
 
 
 def test_the_tactics_of_a_chess960_position_read_a_castling_by_the_kings_landing_square(
     facts_of: FactsOf,
 ) -> None:
-    """No `tactics` fact is among the four `features.md` §4 keeps for classic
-    chess only, and the group reads a Chess960 castling by the square its king
-    lands on: Black is checked by the rook the castling brings to d1, and the
-    mover is a king, so no `check_by_role` bit is set."""
-    facts = facts_of(NINE_SIXTY, esca.CHESS960)
-    ours = facts.tactics[esca.US]
-    theirs = facts.tactics[esca.THEM]
+    """The group reads a Chess960 castling by the square its king lands on:
+    Black is checked by the rook the castling brings to d1, and the mover is a
+    king, so no checking-role flag is set for it."""
+    tactics = facts_of(NINE_SIXTY, esca.CHESS960).tactics
 
-    assert ours.legal_move_count == 12
-    assert ours.check_count == 2
-    assert ours.check_by_role == roles("r")
-    assert ours.safe_check_count == 2
-    assert not ours.discovered_check_available
-    assert not ours.fork_available
-    assert ours.skewer_creation_available
-    assert not ours.pin_creation_available
+    assert tactics.legal_move_count.white == 12
+    assert tactics.check_count.white == 2
+    assert check_roles(tactics, "white") == roles("r")
+    assert tactics.safe_check_count.white == 2
+    assert not tactics.discovered_check_available.white
+    assert not tactics.fork_available.white
+    assert tactics.skewer_creation_available.white
+    assert not tactics.pin_creation_available.white
 
-    assert theirs.legal_move_count == 15
-    assert theirs.check_count == 1
-    assert theirs.check_by_role == roles("r")
-    assert theirs.skewer_creation_available
+    assert tactics.legal_move_count.black == 15
+    assert tactics.check_count.black == 1
+    assert check_roles(tactics, "black") == roles("r")
+    assert tactics.skewer_creation_available.black

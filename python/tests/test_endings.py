@@ -160,14 +160,14 @@ def ending(fen: str) -> endings.Ending:
 @pytest.mark.parametrize(
     ("fen", "text", "stronger"),
     [
-        (BARE_KINGS, "KvK", "w"),
-        (LONE_QUEEN, "KQvK", "w"),
-        (ROOK_AND_PAWN, "KRPvKR", "w"),
-        (BLACK_IS_STRONGER, "KQvKR", "b"),
-        (ROOK_V_TWO_MINORS, "KBNvKR", "b"),
-        (BISHOP_V_KNIGHT, "KBvKN", "w"),
-        (PAWN_ENDING, "KPPvKPP", "w"),
-        (START, "KQRRBBNNPPPPPPPPvKQRRBBNNPPPPPPPP", "w"),
+        (BARE_KINGS, "KvK", "white"),
+        (LONE_QUEEN, "KQvK", "white"),
+        (ROOK_AND_PAWN, "KRPvKR", "white"),
+        (BLACK_IS_STRONGER, "KQvKR", "black"),
+        (ROOK_V_TWO_MINORS, "KBNvKR", "black"),
+        (BISHOP_V_KNIGHT, "KBvKN", "white"),
+        (PAWN_ENDING, "KPPvKPP", "white"),
+        (START, "KQRRBBNNPPPPPPPPvKQRRBBNNPPPPPPPP", "white"),
     ],
     ids=[
         "bare_kings",
@@ -228,8 +228,8 @@ def test_a_signature_counts_the_pieces_and_the_material_of_a_side(fen: str, side
 
 def test_a_signature_refuses_a_colour_or_a_role_it_does_not_know() -> None:
     signature = ending(BARE_KINGS).signature
-    with pytest.raises(ValueError, match="not a colour"):
-        signature.count("white", "r")
+    with pytest.raises(ValueError, match="a colour is"):
+        signature.count("grey", "r")
     with pytest.raises(ValueError, match="not a role"):
         signature.count("w", "rook")
 
@@ -346,8 +346,8 @@ def test_the_class_is_the_same_whichever_side_is_stronger() -> None:
     white = ending(QUEEN_V_ROOK)
     black = ending(BLACK_IS_STRONGER)
     assert white.class_ == black.class_
-    assert (white.verdict, white.verdict.winner) == ("win", "w")
-    assert (black.verdict, black.verdict.winner) == ("win", "b")
+    assert (white.verdict, white.verdict.winner) == ("win", "white")
+    assert (black.verdict, black.verdict.winner) == ("win", "black")
 
 
 # ---------------------------------------------------------------- the verdict
@@ -357,35 +357,35 @@ def test_the_class_is_the_same_whichever_side_is_stronger() -> None:
     ("fen", "verdict", "winner"),
     [
         (BARE_KINGS, "draw", None),
-        (LONE_QUEEN, "win", "w"),
-        (LONE_ROOK, "win", "w"),
-        (TWO_BISHOPS, "win", "w"),
+        (LONE_QUEEN, "win", "white"),
+        (LONE_ROOK, "win", "white"),
+        (TWO_BISHOPS, "win", "white"),
         (TWO_DARK_BISHOPS, "draw", None),
-        (BISHOP_AND_KNIGHT, "win", "w"),
+        (BISHOP_AND_KNIGHT, "win", "white"),
         (TWO_KNIGHTS, "draw", None),
         (LONE_BISHOP, "draw", None),
         (LONE_KNIGHT, "draw", None),
-        (CENTRE_PAWN, "usually_win", "w"),
-        (RUNNING_PAWN, "win", "w"),
+        (CENTRE_PAWN, "usually_win", "white"),
+        (RUNNING_PAWN, "win", "white"),
         (H_PAWN_CORNER, "draw", None),
         (A_PAWN_CORNER, "draw", None),
         (WRONG_BISHOP, "draw", None),
         (WRONG_BISHOP_OTHER_CORNER, "draw", None),
-        (RIGHT_BISHOP, "usually_win", "w"),
+        (RIGHT_BISHOP, "usually_win", "white"),
         (QUEEN_V_QUEEN, "draw", None),
-        (QUEEN_V_ROOK, "win", "w"),
-        (QUEEN_V_PAWN, "usually_win", "w"),
+        (QUEEN_V_ROOK, "win", "white"),
+        (QUEEN_V_PAWN, "usually_win", "white"),
         (QUEEN_V_TWO_MINORS, "unknown", None),
         (ROOK_V_ROOK, "draw", None),
-        (ROOK_V_BISHOP, "usually_draw", "w"),
-        (ROOK_V_KNIGHT, "usually_draw", "w"),
-        (ROOK_AND_PAWN, "usually_win", "w"),
-        (ROOK_AND_PAWN_HELD, "usually_draw", "w"),
-        (TWO_BISHOPS_V_KNIGHT, "usually_win", "w"),
-        (BISHOP_V_PAWN, "usually_draw", "b"),
+        (ROOK_V_BISHOP, "usually_draw", "white"),
+        (ROOK_V_KNIGHT, "usually_draw", "white"),
+        (ROOK_AND_PAWN, "usually_win", "white"),
+        (ROOK_AND_PAWN_HELD, "usually_draw", "white"),
+        (TWO_BISHOPS_V_KNIGHT, "usually_win", "white"),
+        (BISHOP_V_PAWN, "usually_draw", "black"),
         (SAME_COLOUR_BISHOPS, "draw", None),
         (PAWN_ENDING, "unknown", None),
-        (BLACK_IS_STRONGER, "win", "b"),
+        (BLACK_IS_STRONGER, "win", "black"),
     ],
     ids=[
         "bare_kings",
@@ -625,7 +625,7 @@ def test_a_class_says_in_one_sentence_what_the_ending_is() -> None:
 def test_a_verdict_names_the_side_it_gives_the_ending_to() -> None:
     verdict = ending(LONE_QUEEN).verdict
     assert verdict.describe() == "White wins this ending by force, against any defence."
-    assert verdict.winner == "w"
+    assert verdict.winner == "white"
     assert ending(BARE_KINGS).verdict.winner is None
     assert ending(PAWN_ENDING).verdict.name == "unknown"
 

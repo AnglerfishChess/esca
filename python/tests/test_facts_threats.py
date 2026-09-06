@@ -110,7 +110,7 @@ Squares = Callable[[str], set[str]]
 
 
 @pytest.mark.parametrize(
-    ("fen", "ours", "theirs"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (HANGING_KNIGHT, "", "d5"),
@@ -118,14 +118,14 @@ Squares = Callable[[str], set[str]]
         (PAWN_ATTACKS_ROOK, "e4", ""),
         (QUEEN_UNDER_KNIGHT, "e4", ""),
         (CROSS_THREATS, "e4", "d5"),
-        (CROSS_THREATS_BLACK, "d5", "e4"),
+        (CROSS_THREATS_BLACK, "e4", "d5"),
         (OVERLOADED_ROOK, "", ""),
         (REMOVABLE_ROOK, "", "d7"),
-        (REMOVABLE_ROOK_BLACK, "d7", ""),
+        (REMOVABLE_ROOK_BLACK, "", "d7"),
         (REMOVABLE_KNIGHT, "b4", "c6"),
         (REMOVABLE_TRADE, "b4", ""),
         (XRAY_BISHOP, "b3", "d5"),
-        (XRAY_BISHOP_BLACK, "d5", "b3"),
+        (XRAY_BISHOP_BLACK, "b3", "d5"),
         (DOUBLED_ROOKS, "", ""),
         (TWO_ON_ONE, "", "d7"),
     ],
@@ -149,11 +149,11 @@ Squares = Callable[[str], set[str]]
     ],
 )
 def test_a_unit_is_threatened_when_the_exchange_on_its_square_wins_material(
-    fen: str, ours: str, theirs: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     threats = facts_of(fen).threats
-    assert set(threats.threatened[esca.US]) == squares(ours)
-    assert set(threats.threatened[esca.THEM]) == squares(theirs)
+    assert set(threats.threatened.white) == squares(white)
+    assert set(threats.threatened.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -165,13 +165,13 @@ def test_a_unit_is_threatened_when_the_exchange_on_its_square_wins_material(
         (PAWN_ATTACKS_ROOK, (5, 0)),
         (QUEEN_UNDER_KNIGHT, (9, 0)),
         (CROSS_THREATS, (1, 9)),
-        (CROSS_THREATS_BLACK, (9, 1)),
+        (CROSS_THREATS_BLACK, (1, 9)),
         (REMOVABLE_ROOK, (0, 5)),
-        (REMOVABLE_ROOK_BLACK, (5, 0)),
+        (REMOVABLE_ROOK_BLACK, (0, 5)),
         (REMOVABLE_KNIGHT, (3, 3)),
         (REMOVABLE_TRADE, (3, 0)),
         (XRAY_BISHOP, (3, 9)),
-        (XRAY_BISHOP_BLACK, (9, 3)),
+        (XRAY_BISHOP_BLACK, (3, 9)),
     ],
     ids=[
         "start",
@@ -193,8 +193,7 @@ def test_the_threatened_value_adds_up_what_is_about_to_be_lost(
     fen: str, value: tuple[int, int], facts_of: FactsOf
 ) -> None:
     threats = facts_of(fen).threats
-    assert threats.threatened_value[esca.US] == value[0]
-    assert threats.threatened_value[esca.THEM] == value[1]
+    assert threats.threatened_value == esca.ByColour(*value)
 
 
 @pytest.mark.parametrize(
@@ -206,9 +205,9 @@ def test_the_threatened_value_adds_up_what_is_about_to_be_lost(
         (PAWN_ATTACKS_ROOK, (5, 0)),
         (QUEEN_UNDER_KNIGHT, (9, 0)),
         (CROSS_THREATS, (1, 9)),
-        (CROSS_THREATS_BLACK, (9, 1)),
+        (CROSS_THREATS_BLACK, (1, 9)),
         (REMOVABLE_ROOK, (0, 5)),
-        (REMOVABLE_ROOK_BLACK, (5, 0)),
+        (REMOVABLE_ROOK_BLACK, (0, 5)),
         (REMOVABLE_KNIGHT, (3, 3)),
         (REMOVABLE_TRADE, (3, 0)),
         (XRAY_BISHOP, (3, 9)),
@@ -236,24 +235,23 @@ def test_the_max_gain_is_the_largest_exchange_the_opponent_can_start(
     fen: str, gain: tuple[int, int], facts_of: FactsOf
 ) -> None:
     threats = facts_of(fen).threats
-    assert threats.threat_max_gain[esca.US] == gain[0]
-    assert threats.threat_max_gain[esca.THEM] == gain[1]
+    assert threats.threat_max_gain == esca.ByColour(*gain)
 
 
 @pytest.mark.parametrize(
-    ("fen", "ours", "theirs"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (HANGING_KNIGHT, "", ""),
         (PAWN_ATTACKS_ROOK, "e4", ""),
         (QUEEN_UNDER_KNIGHT, "e4", ""),
         (CROSS_THREATS, "", "d5"),
-        (CROSS_THREATS_BLACK, "d5", ""),
+        (CROSS_THREATS_BLACK, "", "d5"),
         (REMOVABLE_ROOK, "", "d7"),
-        (REMOVABLE_ROOK_BLACK, "d7", ""),
+        (REMOVABLE_ROOK_BLACK, "", "d7"),
         (REMOVABLE_KNIGHT, "", ""),
         (XRAY_BISHOP, "", "d5"),
-        (XRAY_BISHOP_BLACK, "d5", ""),
+        (XRAY_BISHOP_BLACK, "", "d5"),
         (DOUBLED_ROOKS, "", ""),
     ],
     ids=[
@@ -272,11 +270,11 @@ def test_the_max_gain_is_the_largest_exchange_the_opponent_can_start(
     ],
 )
 def test_a_lesser_attacker_is_one_the_defender_would_be_glad_to_trade_with(
-    fen: str, ours: str, theirs: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     threats = facts_of(fen).threats
-    assert set(threats.attacked_by_lesser[esca.US]) == squares(ours)
-    assert set(threats.attacked_by_lesser[esca.THEM]) == squares(theirs)
+    assert set(threats.attacked_by_lesser.white) == squares(white)
+    assert set(threats.attacked_by_lesser.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -285,11 +283,11 @@ def test_a_lesser_attacker_is_one_the_defender_would_be_glad_to_trade_with(
         (START, (False, False)),
         (PAWN_ATTACKS_ROOK, (False, False)),
         (QUEEN_UNDER_KNIGHT, (True, False)),
-        (QUEEN_UNDER_KNIGHT_BLACK, (False, True)),
+        (QUEEN_UNDER_KNIGHT_BLACK, (True, False)),
         (CROSS_THREATS, (False, True)),
-        (CROSS_THREATS_BLACK, (True, False)),
+        (CROSS_THREATS_BLACK, (False, True)),
         (XRAY_BISHOP, (False, True)),
-        (XRAY_BISHOP_BLACK, (True, False)),
+        (XRAY_BISHOP_BLACK, (False, True)),
         (DOUBLED_ROOKS, (False, False)),
     ],
     ids=[
@@ -306,25 +304,25 @@ def test_a_lesser_attacker_is_one_the_defender_would_be_glad_to_trade_with(
 )
 def test_a_queen_under_a_lesser_unit_is_its_own_fact(fen: str, under: tuple[bool, bool], facts_of: FactsOf) -> None:
     threats = facts_of(fen).threats
-    assert threats.queen_attacked_by_lesser[esca.US] is under[0]
-    assert threats.queen_attacked_by_lesser[esca.THEM] is under[1]
+    assert threats.queen_attacked_by_lesser.white is under[0]
+    assert threats.queen_attacked_by_lesser.black is under[1]
 
 
 @pytest.mark.parametrize(
-    ("fen", "ours", "theirs"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (DEFENDED_KNIGHT, "", ""),
         (OVERLOADED_ROOK, "", "d7"),
-        (OVERLOADED_ROOK_BLACK, "d7", ""),
+        (OVERLOADED_ROOK_BLACK, "", "d7"),
         (REMOVABLE_ROOK, "", "d7"),
         (OVERLOADED_KNIGHT, "", "c6"),
-        (OVERLOADED_KNIGHT_BLACK, "c6", ""),
+        (OVERLOADED_KNIGHT_BLACK, "", "c6"),
         (REMOVABLE_KNIGHT, "", "c6"),
         (REMOVABLE_TRADE, "", "c6"),
-        (REMOVABLE_TRADE_BLACK, "c6", ""),
+        (REMOVABLE_TRADE_BLACK, "", "c6"),
         (OVERLOADED_PAWN, "", "b7"),
-        (OVERLOADED_PAWN_BLACK, "b7", ""),
+        (OVERLOADED_PAWN_BLACK, "", "b7"),
         (DOUBLED_ROOKS, "", ""),
     ],
     ids=[
@@ -344,25 +342,25 @@ def test_a_queen_under_a_lesser_unit_is_its_own_fact(fen: str, under: tuple[bool
     ],
 )
 def test_a_defender_of_two_attacked_units_is_overloaded(
-    fen: str, ours: str, theirs: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     threats = facts_of(fen).threats
-    assert set(threats.overloaded_defenders[esca.US]) == squares(ours)
-    assert set(threats.overloaded_defenders[esca.THEM]) == squares(theirs)
+    assert set(threats.overloaded_defenders.white) == squares(white)
+    assert set(threats.overloaded_defenders.black) == squares(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "ours", "theirs"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (OVERLOADED_ROOK, "", ""),
         (REMOVABLE_ROOK, "", "d7"),
-        (REMOVABLE_ROOK_BLACK, "d7", ""),
+        (REMOVABLE_ROOK_BLACK, "", "d7"),
         (OVERLOADED_KNIGHT, "", ""),
         (REMOVABLE_KNIGHT, "", "c6"),
-        (REMOVABLE_KNIGHT_BLACK, "c6", ""),
+        (REMOVABLE_KNIGHT_BLACK, "", "c6"),
         (REMOVABLE_TRADE, "", "c6"),
-        (REMOVABLE_TRADE_BLACK, "c6", ""),
+        (REMOVABLE_TRADE_BLACK, "", "c6"),
         (OVERLOADED_PAWN, "", ""),
         (OVERLOADED_PAWN_BLACK, "", ""),
     ],
@@ -381,15 +379,15 @@ def test_a_defender_of_two_attacked_units_is_overloaded(
     ],
 )
 def test_a_defender_the_enemy_can_take_for_free_is_removable(
-    fen: str, ours: str, theirs: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     threats = facts_of(fen).threats
-    assert set(threats.removable_defenders[esca.US]) == squares(ours)
-    assert set(threats.removable_defenders[esca.THEM]) == squares(theirs)
+    assert set(threats.removable_defenders.white) == squares(white)
+    assert set(threats.removable_defenders.black) == squares(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "ours", "theirs"),
+    ("fen", "white", "black"),
     [
         (START, "a1 h1", "a8 h8"),
         (HANGING_KNIGHT, "", "d5"),
@@ -422,22 +420,22 @@ def test_a_defender_the_enemy_can_take_for_free_is_removable(
     ],
 )
 def test_a_loose_unit_is_one_its_own_side_does_not_defend(
-    fen: str, ours: str, theirs: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     threats = facts_of(fen).threats
-    assert set(threats.loose[esca.US]) == squares(ours)
-    assert set(threats.loose[esca.THEM]) == squares(theirs)
+    assert set(threats.loose.white) == squares(white)
+    assert set(threats.loose.black) == squares(black)
 
 
 @pytest.mark.parametrize(
-    ("fen", "ours", "theirs"),
+    ("fen", "white", "black"),
     [
         (START, "", ""),
         (DEFENDED_KNIGHT, "", ""),
         (PAWN_ATTACKS_ROOK, "e4", ""),
         (QUEEN_UNDER_KNIGHT, "e4", ""),
         (CROSS_THREATS, "", "d5"),
-        (CROSS_THREATS_BLACK, "d5", ""),
+        (CROSS_THREATS_BLACK, "", "d5"),
         (REMOVABLE_ROOK, "", "d7"),
         (REMOVABLE_KNIGHT, "b4", "c6"),
         (REMOVABLE_TRADE, "b4", ""),
@@ -461,11 +459,11 @@ def test_a_loose_unit_is_one_its_own_side_does_not_defend(
     ],
 )
 def test_a_surplus_counts_only_the_attackers_and_defenders_worth_at_most_the_unit(
-    fen: str, ours: str, theirs: str, facts_of: FactsOf, squares: Squares
+    fen: str, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     threats = facts_of(fen).threats
-    assert set(threats.attacker_surplus[esca.US]) == squares(ours)
-    assert set(threats.attacker_surplus[esca.THEM]) == squares(theirs)
+    assert set(threats.attacker_surplus.white) == squares(white)
+    assert set(threats.attacker_surplus.black) == squares(black)
 
 
 @pytest.mark.parametrize(
@@ -474,10 +472,10 @@ def test_a_surplus_counts_only_the_attackers_and_defenders_worth_at_most_the_uni
         (START, (0, 0)),
         (DEFENDED_KNIGHT, (0, 0)),
         (OVERLOADED_ROOK, (1, 0)),
-        (OVERLOADED_ROOK_BLACK, (0, 1)),
+        (OVERLOADED_ROOK_BLACK, (1, 0)),
         (REMOVABLE_ROOK, (1, 0)),
         (XRAY_BISHOP, (1, 0)),
-        (XRAY_BISHOP_BLACK, (0, 1)),
+        (XRAY_BISHOP_BLACK, (1, 0)),
         (XRAY_ROOK, (1, 0)),
         (DOUBLED_ROOKS, (1, 1)),
         (OVERLOADED_PAWN, (1, 0)),
@@ -499,8 +497,7 @@ def test_a_surplus_counts_only_the_attackers_and_defenders_worth_at_most_the_uni
 )
 def test_an_x_ray_looks_through_one_enemy_unit_at_another(fen: str, count: tuple[int, int], facts_of: FactsOf) -> None:
     threats = facts_of(fen).threats
-    assert threats.xray_through_enemy[esca.US] == count[0]
-    assert threats.xray_through_enemy[esca.THEM] == count[1]
+    assert threats.xray_through_enemy == esca.ByColour(*count)
 
 
 @pytest.mark.parametrize(
@@ -509,14 +506,14 @@ def test_an_x_ray_looks_through_one_enemy_unit_at_another(fen: str, count: tuple
         (START, (0, 0)),
         (XRAY_ROOK, (0, 0)),
         (OVERLOADED_ROOK, (1, 0)),
-        (OVERLOADED_ROOK_BLACK, (0, 1)),
+        (OVERLOADED_ROOK_BLACK, (1, 0)),
         (OVERLOADED_KNIGHT, (1, 0)),
         (OVERLOADED_PAWN, (1, 0)),
         (DOUBLED_ROOKS, (1, 1)),
         (BATTERY_AT_KING, (1, 0)),
-        (BATTERY_AT_KING_BLACK, (0, 1)),
+        (BATTERY_AT_KING_BLACK, (1, 0)),
         (BISHOP_BATTERY, (1, 0)),
-        (BISHOP_BATTERY_BLACK, (0, 1)),
+        (BISHOP_BATTERY_BLACK, (1, 0)),
     ],
     ids=[
         "start",
@@ -536,8 +533,7 @@ def test_a_battery_is_two_sliders_on_one_line_they_both_move_along(
     fen: str, count: tuple[int, int], facts_of: FactsOf
 ) -> None:
     threats = facts_of(fen).threats
-    assert threats.battery_count[esca.US] == count[0]
-    assert threats.battery_count[esca.THEM] == count[1]
+    assert threats.battery_count == esca.ByColour(*count)
 
 
 @pytest.mark.parametrize(
@@ -548,9 +544,9 @@ def test_a_battery_is_two_sliders_on_one_line_they_both_move_along(
         (OVERLOADED_KNIGHT, (False, False)),
         (DOUBLED_ROOKS, (True, True)),
         (BATTERY_AT_KING, (True, False)),
-        (BATTERY_AT_KING_BLACK, (False, True)),
+        (BATTERY_AT_KING_BLACK, (True, False)),
         (BISHOP_BATTERY, (True, False)),
-        (BISHOP_BATTERY_BLACK, (False, True)),
+        (BISHOP_BATTERY_BLACK, (True, False)),
     ],
     ids=[
         "start",
@@ -567,12 +563,12 @@ def test_a_battery_at_the_king_is_one_whose_line_meets_the_enemy_ring(
     fen: str, at_king: tuple[bool, bool], facts_of: FactsOf
 ) -> None:
     threats = facts_of(fen).threats
-    assert threats.battery_at_king[esca.US] is at_king[0]
-    assert threats.battery_at_king[esca.THEM] is at_king[1]
+    assert threats.battery_at_king.white is at_king[0]
+    assert threats.battery_at_king.black is at_king[1]
 
 
 @pytest.mark.parametrize(
-    ("white", "black"),
+    ("white_to_move", "black_to_move"),
     [
         (CROSS_THREATS, CROSS_THREATS_BLACK),
         (REMOVABLE_ROOK, REMOVABLE_ROOK_BLACK),
@@ -581,16 +577,18 @@ def test_a_battery_at_the_king_is_one_whose_line_meets_the_enemy_ring(
     ],
     ids=["cross_threats", "removable_rook", "overloaded_pawn", "bishop_battery"],
 )
-def test_the_blocks_swap_with_the_side_to_move(white: str, black: str, facts_of: FactsOf) -> None:
+def test_the_same_placement_reads_the_same_whoever_is_to_move(
+    white_to_move: str, black_to_move: str, facts_of: FactsOf
+) -> None:
     """Nothing in the group depends on whose turn it is."""
-    ours = facts_of(white).threats
-    theirs = facts_of(black).threats
-    assert set(ours.threatened[esca.US]) == set(theirs.threatened[esca.THEM])
-    assert ours.threatened_value[esca.US] == theirs.threatened_value[esca.THEM]
-    assert ours.threat_max_gain[esca.US] == theirs.threat_max_gain[esca.THEM]
-    assert set(ours.overloaded_defenders[esca.US]) == set(theirs.overloaded_defenders[esca.THEM])
-    assert set(ours.loose[esca.US]) == set(theirs.loose[esca.THEM])
-    assert ours.battery_count[esca.US] == theirs.battery_count[esca.THEM]
+    first = facts_of(white_to_move).threats
+    second = facts_of(black_to_move).threats
+    assert set(first.threatened.white) == set(second.threatened.white)
+    assert first.threatened_value == second.threatened_value
+    assert first.threat_max_gain == second.threat_max_gain
+    assert set(first.overloaded_defenders.black) == set(second.overloaded_defenders.black)
+    assert set(first.loose.white) == set(second.loose.white)
+    assert first.battery_count == second.battery_count
 
 
 def test_threatened_is_what_en_prise_approximates(facts_of: FactsOf, squares: Squares) -> None:
@@ -598,11 +596,11 @@ def test_threatened_is_what_en_prise_approximates(facts_of: FactsOf, squares: Sq
     exchange out: two rooks against one win the defended rook that no cheaper
     unit attacks."""
     facts = facts_of(TWO_ON_ONE)
-    assert set(facts.attacks.en_prise[esca.THEM]) == squares("")
-    assert set(facts.threats.threatened[esca.THEM]) == squares("d7")
+    assert set(facts.attacks.en_prise.black) == squares("")
+    assert set(facts.threats.threatened.black) == squares("d7")
 
     # The other way round on the same board: a knight a pawn defends is en
     # prise to nothing cheaper, and the rook that attacks it wins nothing.
     facts = facts_of(DEFENDED_KNIGHT)
-    assert set(facts.attacks.en_prise[esca.THEM]) == squares("")
-    assert set(facts.threats.threatened[esca.THEM]) == squares("")
+    assert set(facts.attacks.en_prise.black) == squares("")
+    assert set(facts.threats.threatened.black) == squares("")

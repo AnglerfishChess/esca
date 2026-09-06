@@ -5,8 +5,8 @@
 
 mod common;
 
-use common::{facts_of, facts_under, squares};
-use esca::{CHESS960, Role, Side, SquareSet};
+use common::{by_colour, facts_of, facts_under, squares};
+use esca::{CHESS960, Colour, SquareSet};
 use rstest::rstest;
 
 /// The untouched array: every unit but the two rooks stands on a defended square.
@@ -63,12 +63,12 @@ const NINE_SIXTY: &str = "nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB
 )]
 fn a_side_attacks_every_square_one_of_its_units_could_capture_on(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.by[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.by[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.controlled.white, squares(white));
+    assert_eq!(facts.attacks.controlled.black, squares(black));
 }
 
 #[rstest]
@@ -81,12 +81,12 @@ fn a_side_attacks_every_square_one_of_its_units_could_capture_on(
 #[case::castled(CASTLED, 34, 29)]
 fn the_attacked_square_count_is_the_size_of_that_map(
     #[case] fen: &str,
-    #[case] us: u32,
-    #[case] them: u32,
+    #[case] white: u32,
+    #[case] black: u32,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.by[Side::Us.index()].len(), us);
-    assert_eq!(facts.attacks.by[Side::Them.index()].len(), them);
+    assert_eq!(facts.attacks.controlled.white.len(), white);
+    assert_eq!(facts.attacks.controlled.black.len(), black);
 }
 
 #[rstest]
@@ -96,12 +96,12 @@ fn the_attacked_square_count_is_the_size_of_that_map(
 #[case::castled(CASTLED, "c5 d4 e3 e5 f3 f4 g3 h3", "c5 e5 e6 f6 g6 h6")]
 fn a_pawn_attacks_the_two_squares_diagonally_ahead_of_it_and_no_other(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.by_pawns[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.by_pawns[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.by_pawns.white, squares(white));
+    assert_eq!(facts.attacks.by_pawns.black, squares(black));
 }
 
 /// The whole map is the union of the six role maps, so a role a side has none
@@ -110,35 +110,28 @@ fn a_pawn_attacks_the_two_squares_diagonally_ahead_of_it_and_no_other(
 fn the_map_is_kept_per_role_as_well() {
     let facts = facts_of(LOOSE);
     let attacks = &facts.attacks;
-    let (us, them) = (Side::Us.index(), Side::Them.index());
 
+    assert_eq!(attacks.by_knights.white, squares("d4 d6 e3 e7 g3 g7 h4 h6"));
     assert_eq!(
-        attacks.by_role[us][Role::Knight.index()],
-        squares("d4 d6 e3 e7 g3 g7 h4 h6")
-    );
-    assert_eq!(
-        attacks.by_role[us][Role::Rook.index()],
+        attacks.by_rooks.white,
         squares("a1 b1 c1 d2 d3 d4 d5 d6 d7 d8 e1 f1 g1")
     );
-    assert_eq!(
-        attacks.by_role[us][Role::King.index()],
-        squares("f1 f2 g2 h1 h2")
-    );
-    assert_eq!(
-        attacks.by_role[them][Role::Bishop.index()],
-        squares("a3 a5 c3 c5 d6 e7 f8")
-    );
-    assert!(attacks.by_role[them][Role::Queen.index()].is_empty());
+    assert_eq!(attacks.by_kings.white, squares("f1 f2 g2 h1 h2"));
+    assert_eq!(attacks.by_bishops.black, squares("a3 a5 c3 c5 d6 e7 f8"));
+    assert!(attacks.by_queens.black.is_empty());
 
-    for side in [us, them] {
-        let union = Role::ALL.into_iter().fold(SquareSet::EMPTY, |all, role| {
-            all | attacks.by_role[side][role.index()]
-        });
-        assert_eq!(union, attacks.by[side]);
-        assert_eq!(
-            attacks.by_pawns[side],
-            attacks.by_role[side][Role::Pawn.index()]
-        );
+    for colour in Colour::ALL {
+        let union = [
+            attacks.by_pawns,
+            attacks.by_knights,
+            attacks.by_bishops,
+            attacks.by_rooks,
+            attacks.by_queens,
+            attacks.by_kings,
+        ]
+        .into_iter()
+        .fold(SquareSet::EMPTY, |all, set| all | set.of(colour));
+        assert_eq!(union, attacks.controlled.of(colour));
     }
 }
 
@@ -148,18 +141,18 @@ fn the_map_is_kept_per_role_as_well() {
 #[case::loose(LOOSE, "c3 d1 f5", "b4 d8")]
 #[case::checked(CHECKED, "b1", "e2")]
 #[case::pins(PINS, "b5 c3 e3", "c6")]
-#[case::pins_theirs(PINS_THEIRS, "c6", "b5 c3 e3")]
+#[case::pins_theirs(PINS_THEIRS, "b5 c3 e3", "c6")]
 #[case::skewers(SKEWERS, "b5 d1 e5", "d5")]
 #[case::behind(BEHIND, "a7 c1", "a6 b7 c7")]
 #[case::castled(CASTLED, "c3", "f7")]
 fn an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.attacked[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.attacked[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.attacked.white, squares(white));
+    assert_eq!(facts.attacks.attacked.black, squares(black));
 }
 
 #[rstest]
@@ -168,12 +161,12 @@ fn an_attacked_unit_is_one_the_opponent_bears_on_defended_or_not(
 #[case::loose(LOOSE, [9, 8])]
 #[case::checked(CHECKED, [5, 5])]
 #[case::pins(PINS, [9, 3])]
-#[case::pins_theirs(PINS_THEIRS, [3, 9])]
+#[case::pins_theirs(PINS_THEIRS, [9, 3])]
 #[case::skewers(SKEWERS, [11, 9])]
 #[case::behind(BEHIND, [14, 13])]
 #[case::castled(CASTLED, [3, 1])]
 fn the_attacked_value_adds_up_what_stands_under_attack(#[case] fen: &str, #[case] value: [i32; 2]) {
-    assert_eq!(facts_of(fen).attacks.attacked_value, value);
+    assert_eq!(facts_of(fen).attacks.attacked_value, by_colour(value));
 }
 
 #[rstest]
@@ -182,18 +175,18 @@ fn the_attacked_value_adds_up_what_stands_under_attack(#[case] fen: &str, #[case
 #[case::loose(LOOSE, "d1", "d8")]
 #[case::checked(CHECKED, "b1", "")]
 #[case::pins(PINS, "c3", "c6")]
-#[case::pins_theirs(PINS_THEIRS, "c6", "c3")]
+#[case::pins_theirs(PINS_THEIRS, "c3", "c6")]
 #[case::skewers(SKEWERS, "b5 d1 e5", "")]
 #[case::behind(BEHIND, "a7", "")]
 #[case::castled(CASTLED, "c3", "")]
 fn a_hanging_unit_is_attacked_and_undefended_and_is_never_a_king(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.hanging[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.hanging[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.hanging.white, squares(white));
+    assert_eq!(facts.attacks.hanging.black, squares(black));
 }
 
 #[rstest]
@@ -209,7 +202,7 @@ fn the_hanging_value_adds_up_what_the_hanging_units_are_worth(
     #[case] fen: &str,
     #[case] value: [i32; 2],
 ) {
-    assert_eq!(facts_of(fen).attacks.hanging_value, value);
+    assert_eq!(facts_of(fen).attacks.hanging_value, by_colour(value));
 }
 
 #[rstest]
@@ -223,12 +216,12 @@ fn the_hanging_value_adds_up_what_the_hanging_units_are_worth(
 #[case::castled(CASTLED, "c3", "")]
 fn a_unit_is_en_prise_when_it_hangs_or_a_cheaper_unit_attacks_it(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.en_prise[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.en_prise[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.en_prise.white, squares(white));
+    assert_eq!(facts.attacks.en_prise.black, squares(black));
 }
 
 #[rstest]
@@ -242,7 +235,7 @@ fn a_unit_is_en_prise_when_it_hangs_or_a_cheaper_unit_attacks_it(
 #[case::behind(BEHIND, [14, 0])]
 #[case::castled(CASTLED, [3, 0])]
 fn the_en_prise_value_adds_up_what_stands_en_prise(#[case] fen: &str, #[case] value: [i32; 2]) {
-    assert_eq!(facts_of(fen).attacks.en_prise_value, value);
+    assert_eq!(facts_of(fen).attacks.en_prise_value, by_colour(value));
 }
 
 #[rstest]
@@ -258,7 +251,7 @@ fn the_en_prise_maximum_is_the_largest_value_standing_en_prise(
     #[case] fen: &str,
     #[case] value: [i32; 2],
 ) {
-    assert_eq!(facts_of(fen).attacks.en_prise_max_value, value);
+    assert_eq!(facts_of(fen).attacks.en_prise_max_value, by_colour(value));
 }
 
 #[rstest]
@@ -267,31 +260,31 @@ fn the_en_prise_maximum_is_the_largest_value_standing_en_prise(
 #[case::loose(LOOSE, "", "")]
 #[case::checked(CHECKED, "", "")]
 #[case::pins(PINS, "c3 e3", "c6")]
-#[case::pins_theirs(PINS_THEIRS, "c6", "c3 e3")]
+#[case::pins_theirs(PINS_THEIRS, "c3 e3", "c6")]
 #[case::behind(BEHIND, "", "")]
 #[case::castled(CASTLED, "", "f7")]
 #[case::pinned_queen(PINNED_QUEEN, "e2", "")]
-#[case::pinned_queen_black(PINNED_QUEEN_BLACK, "", "e2")]
+#[case::pinned_queen_black(PINNED_QUEEN_BLACK, "e2", "")]
 fn a_pinned_unit_is_the_only_thing_between_a_slider_and_its_own_king(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.pinned[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.pinned[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.pinned.white, squares(white));
+    assert_eq!(facts.attacks.pinned.black, squares(black));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::loose(LOOSE, [0, 0])]
 #[case::pins(PINS, [6, 3])]
-#[case::pins_theirs(PINS_THEIRS, [3, 6])]
+#[case::pins_theirs(PINS_THEIRS, [6, 3])]
 #[case::castled(CASTLED, [0, 1])]
 #[case::pinned_queen(PINNED_QUEEN, [9, 0])]
-#[case::pinned_queen_black(PINNED_QUEEN_BLACK, [0, 9])]
+#[case::pinned_queen_black(PINNED_QUEEN_BLACK, [9, 0])]
 fn the_pinned_value_adds_up_what_may_not_move(#[case] fen: &str, #[case] value: [i32; 2]) {
-    assert_eq!(facts_of(fen).attacks.pinned_value, value);
+    assert_eq!(facts_of(fen).attacks.pinned_value, by_colour(value));
 }
 
 #[rstest]
@@ -306,7 +299,7 @@ fn a_skewer_is_counted_once_per_slider_front_unit_and_cheaper_unit_behind(
     #[case] fen: &str,
     #[case] skewers: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).attacks.skewer_candidates, skewers);
+    assert_eq!(facts_of(fen).attacks.skewer_candidates, by_colour(skewers));
 }
 
 #[rstest]
@@ -324,12 +317,12 @@ fn a_skewer_is_counted_once_per_slider_front_unit_and_cheaper_unit_behind(
 #[case::castled(CASTLED, "d1 d4 e3 f1 f2 g1 g2 h2", "d6 d8 f6 f7 f8 g7 g8 h7")]
 fn a_defended_unit_stands_on_a_square_its_own_side_attacks(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.attacks.defended[Side::Us.index()], squares(us));
-    assert_eq!(facts.attacks.defended[Side::Them.index()], squares(them));
+    assert_eq!(facts.attacks.defended.white, squares(white));
+    assert_eq!(facts.attacks.defended.black, squares(black));
 }
 
 #[rstest]
@@ -337,15 +330,11 @@ fn a_defended_unit_stands_on_a_square_its_own_side_attacks(
 #[case::loose(LOOSE, "b2 c3 d1 e4 f5 g1 g2 h2", "a5 b4 d8 g6 g8 h7")]
 #[case::skewers(SKEWERS, "b2 b5 d1 e5 g1", "b8 d5 d8 g7 g8")]
 #[case::behind(BEHIND, "a7 c1 d2", "a4 a6 b7 c7 c8 g8 h6")]
-#[case::pins_theirs(PINS_THEIRS, "b4 c6 e5 e8 f7", "b5 c3 e1 e3 h3")]
-fn the_units_of_each_side_are_listed_us_first(
-    #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
-) {
-    let facts = facts_of(fen);
-    assert_eq!(facts.attacks.units(Side::Us), squares(us));
-    assert_eq!(facts.attacks.units(Side::Them), squares(them));
+#[case::pins_theirs(PINS_THEIRS, "b5 c3 e1 e3 h3", "b4 c6 e5 e8 f7")]
+fn the_units_of_each_side_are_listed(#[case] fen: &str, #[case] white: &str, #[case] black: &str) {
+    let placement = facts_of(fen).placement;
+    assert_eq!(placement.units.white, squares(white));
+    assert_eq!(placement.units.black, squares(black));
 }
 
 #[rstest]
@@ -359,16 +348,13 @@ fn the_units_of_each_side_are_listed_us_first(
 fn the_attackers_of_a_square_are_the_units_of_a_side_that_bear_on_it(
     #[case] fen: &str,
     #[case] square: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
-    let facts = facts_of(fen);
+    let position = esca::Position::from_fen(fen).expect("a test FEN is a legal position");
     let square = square.parse().expect("a square name");
-    assert_eq!(facts.attacks.attackers_of(square, Side::Us), squares(us));
-    assert_eq!(
-        facts.attacks.attackers_of(square, Side::Them),
-        squares(them)
-    );
+    assert_eq!(position.attackers(square, Colour::White), squares(white));
+    assert_eq!(position.attackers(square, Colour::Black), squares(black));
 }
 
 #[rstest]
@@ -383,34 +369,35 @@ fn a_unit_of_either_colour_is_asked_whether_it_hangs(
     #[case] square: &str,
     #[case] hanging: bool,
 ) {
-    let facts = facts_of(fen);
+    let hanging_units = facts_of(fen).attacks.hanging;
     let square = square.parse().expect("a square name");
-    assert_eq!(facts.attacks.is_hanging(square), hanging);
+    assert_eq!(
+        hanging_units.white.contains(square) || hanging_units.black.contains(square),
+        hanging
+    );
 }
 
-/// No `attacks` fact is among the four `features.md` §4 defines for classic
-/// chess only, so a Chess960 position answers exactly as the same placement
-/// would.
+/// No `attacks` fact reads the back rank, so a Chess960 position answers
+/// exactly as the same placement would.
 #[test]
 fn the_attack_facts_of_a_chess960_position_are_the_classic_ones() {
     let facts = facts_under(&CHESS960, NINE_SIXTY);
     let attacks = &facts.attacks;
-    let (us, them) = (Side::Us.index(), Side::Them.index());
 
-    assert_eq!(attacks.by[us].len(), 28);
-    assert_eq!(attacks.by[them].len(), 36);
-    assert_eq!(attacks.hanging[us], squares("a4 b4 h4"));
-    assert_eq!(attacks.hanging[them], squares("a5 b3 g5"));
-    assert_eq!(attacks.hanging_value, [3, 5]);
-    assert_eq!(attacks.en_prise[them], squares("a5 b3 g5"));
-    assert_eq!(attacks.en_prise_max_value, [1, 3]);
+    assert_eq!(attacks.controlled.white.len(), 28);
+    assert_eq!(attacks.controlled.black.len(), 36);
+    assert_eq!(attacks.hanging.white, squares("a4 b4 h4"));
+    assert_eq!(attacks.hanging.black, squares("a5 b3 g5"));
+    assert_eq!(attacks.hanging_value, by_colour([3, 5]));
+    assert_eq!(attacks.en_prise.black, squares("a5 b3 g5"));
+    assert_eq!(attacks.en_prise_max_value, by_colour([1, 3]));
     assert_eq!(
-        attacks.defended[us],
+        attacks.defended.white,
         squares("a1 c1 c2 d1 d2 e3 f1 f3 g1 g2")
     );
-    assert!(attacks.pinned[us].is_empty());
-    assert!(attacks.pinned[them].is_empty());
-    assert_eq!(attacks.skewer_candidates, [0, 0]);
+    assert!(attacks.pinned.white.is_empty());
+    assert!(attacks.pinned.black.is_empty());
+    assert_eq!(attacks.skewer_candidates, by_colour([0, 0]));
 
     let classic = facts_of("nnqrkr1b/1p1pp3/3p4/p4ppp/PP5P/1b2PP2/2PPK1P1/N1QR1RBB w - - 0 10");
     assert_eq!(classic.attacks, *attacks);

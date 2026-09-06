@@ -17,7 +17,8 @@ Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books an
 `Classic` and `Chess960` — so a position can be asked the same question under different rules, and
 a new variant is a new implementation and nothing else. A `Game` pairs a variant with the moves
 played, which is what repetition and claimable draws need. `Facts` answers what is true about a
-position, both as prose a reader can check and as the flat `f32` row a net consumes.
+position — 221 named facts in 14 groups, and 27 more about every legal move — each of them typed,
+named after what a player would call it, and told about White and Black by name.
 
 ## Rust
 
@@ -27,19 +28,17 @@ esca = "0.3"
 ```
 
 ```rust
-use esca::{Game, Schema, Side, classic};
+use esca::{Colour, Game, classic};
 
 let mut game = Game::new(classic());   // Chess960 rules: `esca::chess960()`
 game.play_san("e4").unwrap();
 game.play_uci("e7e5").unwrap();
 println!("{}", game.position().fen());
 
-let facts = game.facts();              // side-relative, in the mover's view
-println!("{}", facts.tactics[Side::Us.index()].legal_move_count);
+let facts = game.facts();
+println!("{}", facts.tactics.legal_move_count.white);
+println!("{:?}", facts.pawns.passed.of(Colour::Black).files());
 println!("{}", facts.summary());
-
-let schema = Schema::v1();             // the row a net eats: 2039 f32
-println!("{}", facts.encode(schema, schema.all()).len());
 ```
 
 Cargo features, none on by default: `lichess` (streaming reader for the Lichess evaluation
@@ -61,16 +60,13 @@ game.play_san("e4")
 game.play("e7e5")
 print(game.position.fen)
 
-facts = game.facts()  # side-relative: index with esca.US / esca.THEM
-print(facts.tactics[esca.US].legal_move_count)
-print(facts.summary())
-
-rows = esca.encode([game.position.fen])  # (1, 2039) float32, ready for a net
-print(rows.shape, esca.SCHEMA_ID)
+facts = game.facts()
+print(facts.tactics.legal_move_count.white)
+print(list(facts.pawns.passed.black.files))
+print(facts.to_dict()["material"])  # every group as plain JSON-able data
 ```
 
-Wheels are abi3 for Python 3.12 and up. `esca.lichess.batches()` streams the evaluation dump as
-encoded batches with their targets.
+Wheels are abi3 for Python 3.12 and up.
 
 ## What it covers
 
@@ -81,12 +77,12 @@ encoded batches with their targets.
 - UCI move text in either castling spelling, and SAN with the disambiguation it needs.
 - Checkmate, stalemate, insufficient material, the fifty- and seventy-five-move rules, and
   threefold and fivefold repetition.
-- `Facts`: fourteen groups of cheap position facts — the board itself, game state, material,
-  pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics, endgame, history
-  and attack planes — plus `MoveFacts` for every legal move, all side-relative and in the
-  mover's view.
-- `Schema`, a versioned manifest with a `schema_id`, and batch encoders that write `f32` rows
-  without allocating.
+- `Facts`: fourteen groups of cheap position facts — the board itself, game state, history,
+  material, pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics, endgame
+  and the attack maps side by side — plus `MoveFacts` for every legal move. Every value that
+  differs between the two sides is a `ByColour`, read as `.white`, `.black` or `.of(colour)`.
+- A catalogue of those facts as data — name, type and meaning — which `docs/features.md` is
+  generated from, and which the MCP server serves.
 - Polyglot opening books: the format's own key on every `Position`, books read, drawn from and
   built, and an ECO code and name for some 3,800 named positions.
 - Named endings with theory verdicts and technique names, and a one-line English `describe()`
@@ -105,6 +101,8 @@ with the library and pins the matching `esca`, and is documented in
 
 - [`docs/esca-api.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-api.md) —
   the API in both languages.
+- [`docs/features.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/features.md) —
+  every fact, its type and its meaning, group by group.
 - [`docs/esca-vocabulary.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-vocabulary.md) —
   the terms the API and the facts are named after.
 
@@ -112,7 +110,7 @@ with the library and pins the matching `esca`, and is documented in
 
 - [AnglerfishChess/anglerfish](https://github.com/AnglerfishChess/anglerfish) — the chess engine
   that plays from a learned evaluation, and the Python trainer that produces it. Both are built on
-  esca, and the trainer eats the rows `Schema` defines.
+  esca; the trainer turns its facts into the rows a net eats.
 - [AnglerfishChess/uci-test-suite](https://github.com/AnglerfishChess/uci-test-suite) — a
   conformance suite that checks a program is a valid UCI engine, whatever its strength. It talks to
   the engine under test through esca's UCI client.

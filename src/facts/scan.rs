@@ -4,9 +4,7 @@
 use cozy_chess as cc;
 
 use crate::position::Position;
-use crate::types::{Colour, File, Rank, Role, Square, SquareSet};
-
-use super::Side;
+use crate::types::{ByColour, Colour, File, Rank, Role, Square, SquareSet};
 
 /// Conventional value: P=1, N=B=3, R=5, Q=9, a king 0.
 #[inline]
@@ -88,9 +86,7 @@ pub(crate) const EXTENDED_CENTRE: SquareSet = SquareSet::from_bits(0x0000_3C3C_3
 /// The four central squares d4, e4, d5, e5.
 pub(crate) const CENTRE: SquareSet = SquareSet::from_bits(0x0000_0018_1800_0000);
 
-/// A position's placement and attack sets, in side-relative terms.
-///
-/// Every `[_; 2]` is indexed by [`Side`]: index 0 is the side to move.
+/// A position's placement and attack sets.
 #[derive(Clone)]
 pub(crate) struct Scan {
     /// The side to move.
@@ -98,19 +94,19 @@ pub(crate) struct Scan {
     /// Every occupied square.
     pub occupied: SquareSet,
     /// Each side's units.
-    pub units: [SquareSet; 2],
+    pub units: ByColour<SquareSet>,
     /// Each side's units, by role.
-    pub role_units: [[SquareSet; 6]; 2],
+    pub role_units: ByColour<[SquareSet; 6]>,
     /// Each side's king.
-    pub kings: [Square; 2],
+    pub kings: ByColour<Square>,
     /// The squares the unit on each square attacks; empty for an empty square.
     pub attacks_from: [SquareSet; 64],
     /// Each side's attack map, by role.
-    pub by_role: [[SquareSet; 6]; 2],
+    pub by_role: ByColour<[SquareSet; 6]>,
     /// Each side's whole attack map.
-    pub by: [SquareSet; 2],
+    pub by: ByColour<SquareSet>,
     /// Whether each side may still castle either way.
-    pub castling: [bool; 2],
+    pub castling: ByColour<bool>,
 }
 
 impl Scan {
@@ -121,89 +117,59 @@ impl Scan {
         let mut scan = Scan {
             us,
             occupied,
-            units: [SquareSet::EMPTY; 2],
-            role_units: [[SquareSet::EMPTY; 6]; 2],
-            kings: [position.king_of(us), position.king_of(!us)],
+            units: ByColour::default(),
+            role_units: ByColour::default(),
+            kings: ByColour::new(
+                position.king_of(Colour::White),
+                position.king_of(Colour::Black),
+            ),
             attacks_from: [SquareSet::EMPTY; 64],
-            by_role: [[SquareSet::EMPTY; 6]; 2],
-            by: [SquareSet::EMPTY; 2],
-            castling: [
-                position.castling_rights().any(us),
-                position.castling_rights().any(!us),
-            ],
+            by_role: ByColour::default(),
+            by: ByColour::default(),
+            castling: ByColour::from_fn(|colour| position.castling_rights().any(colour)),
         };
-        for side in Side::ALL {
-            let colour = scan.colour(side);
-            scan.units[side.index()] = position.by_colour(colour);
+        for colour in Colour::ALL {
+            scan.units[colour] = position.by_colour(colour);
             for role in Role::ALL {
                 let set = position.by_colour(colour) & position.by_role(role);
-                scan.role_units[side.index()][role.index()] = set;
+                scan.role_units[colour][role.index()] = set;
                 let mut attacks = SquareSet::EMPTY;
                 for square in set {
                     let from = attacks_of(role, square, colour, occupied);
                     scan.attacks_from[square.index()] = from;
                     attacks |= from;
                 }
-                scan.by_role[side.index()][role.index()] = attacks;
-                scan.by[side.index()] |= attacks;
+                scan.by_role[colour][role.index()] = attacks;
+                scan.by[colour] |= attacks;
             }
         }
         scan
     }
 
-    /// The colour playing as `side`.
+    /// The units of `colour` that attack `square`.
     #[inline]
-    pub fn colour(&self, side: Side) -> Colour {
-        match side {
-            Side::Us => self.us,
-            Side::Them => !self.us,
-        }
+    pub fn attackers_of(&self, square: Square, colour: Colour) -> SquareSet {
+        attackers(square, colour, &self.role_units.of(colour), self.occupied)
     }
 
-    /// The units of `side` that attack `square`.
+    /// The rank of `square` counted from `colour`'s own back rank, from 1.
     #[inline]
-    pub fn attackers_of(&self, square: Square, side: Side) -> SquareSet {
-        attackers(
-            square,
-            self.colour(side),
-            &self.role_units[side.index()],
-            self.occupied,
-        )
+    pub fn relative_rank(&self, square: Square, colour: Colour) -> u32 {
+        square.rank().relative_to(colour).index() as u32 + 1
     }
 
-    /// The rank of `square` counted from `side`'s own back rank, from 1.
+    /// The square on `file` at `colour`'s relative rank `rank`, from 1.
     #[inline]
-    pub fn relative_rank(&self, square: Square, side: Side) -> u32 {
-        square.rank().relative_to(self.colour(side)).index() as u32 + 1
-    }
-
-    /// The square on `file` at `side`'s relative rank `rank`, from 1.
-    #[inline]
-    pub fn relative_square(&self, file: File, rank: u32, side: Side) -> Square {
+    pub fn relative_square(&self, file: File, rank: u32, colour: Colour) -> Square {
         let rank = Rank::from_index(rank as usize - 1).expect("a relative rank is 1 to 8");
-        Square::new(file, rank.relative_to(self.colour(side)))
+        Square::new(file, rank.relative_to(colour))
     }
 
-    /// The 32 squares that are light in the mover's view.
-    #[inline]
-    pub fn view_light(&self) -> SquareSet {
-        match self.us {
-            Colour::White => SquareSet::LIGHT,
-            Colour::Black => SquareSet::DARK,
-        }
-    }
-
-    /// The 32 squares that are dark in the mover's view.
-    #[inline]
-    pub fn view_dark(&self) -> SquareSet {
-        !self.view_light()
-    }
-
-    /// The half of the board `side` starts on.
-    pub fn own_half(&self, side: Side) -> SquareSet {
+    /// The half of the board `colour` starts on.
+    pub fn own_half(&self, colour: Colour) -> SquareSet {
         let mut set = SquareSet::EMPTY;
         for square in Square::ALL {
-            if self.relative_rank(square, side) <= 4 {
+            if self.relative_rank(square, colour) <= 4 {
                 set.insert(square);
             }
         }

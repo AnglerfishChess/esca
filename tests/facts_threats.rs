@@ -6,8 +6,7 @@
 
 mod common;
 
-use common::{facts_of, squares};
-use esca::Side;
+use common::{by_colour, facts_of, squares};
 use rstest::rstest;
 
 /// The untouched array: nothing attacked, and a loose rook in each corner.
@@ -108,24 +107,24 @@ const BISHOP_BATTERY_BLACK: &str = "8/7k/8/8/8/2B5/1Q6/6K1 b - - 0 1";
 #[case::pawn_attacks_rook(PAWN_ATTACKS_ROOK, "e4", "")]
 #[case::queen_under_knight(QUEEN_UNDER_KNIGHT, "e4", "")]
 #[case::cross_threats(CROSS_THREATS, "e4", "d5")]
-#[case::cross_threats_black(CROSS_THREATS_BLACK, "d5", "e4")]
+#[case::cross_threats_black(CROSS_THREATS_BLACK, "e4", "d5")]
 #[case::overloaded_rook(OVERLOADED_ROOK, "", "")]
 #[case::removable_rook(REMOVABLE_ROOK, "", "d7")]
-#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, "d7", "")]
+#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, "", "d7")]
 #[case::removable_knight(REMOVABLE_KNIGHT, "b4", "c6")]
 #[case::removable_trade(REMOVABLE_TRADE, "b4", "")]
 #[case::xray_bishop(XRAY_BISHOP, "b3", "d5")]
-#[case::xray_bishop_black(XRAY_BISHOP_BLACK, "d5", "b3")]
+#[case::xray_bishop_black(XRAY_BISHOP_BLACK, "b3", "d5")]
 #[case::doubled_rooks(DOUBLED_ROOKS, "", "")]
 #[case::two_on_one(TWO_ON_ONE, "", "d7")]
 fn a_unit_is_threatened_when_the_exchange_on_its_square_wins_material(
     #[case] fen: &str,
-    #[case] ours: &str,
-    #[case] theirs: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.threatened[Side::Us.index()], squares(ours));
-    assert_eq!(threats.threatened[Side::Them.index()], squares(theirs));
+    assert_eq!(threats.threatened.white, squares(white));
+    assert_eq!(threats.threatened.black, squares(black));
 }
 
 #[rstest]
@@ -135,20 +134,19 @@ fn a_unit_is_threatened_when_the_exchange_on_its_square_wins_material(
 #[case::pawn_attacks_rook(PAWN_ATTACKS_ROOK, [5, 0])]
 #[case::queen_under_knight(QUEEN_UNDER_KNIGHT, [9, 0])]
 #[case::cross_threats(CROSS_THREATS, [1, 9])]
-#[case::cross_threats_black(CROSS_THREATS_BLACK, [9, 1])]
+#[case::cross_threats_black(CROSS_THREATS_BLACK, [1, 9])]
 #[case::removable_rook(REMOVABLE_ROOK, [0, 5])]
-#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, [5, 0])]
+#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, [0, 5])]
 #[case::removable_knight(REMOVABLE_KNIGHT, [3, 3])]
 #[case::removable_trade(REMOVABLE_TRADE, [3, 0])]
 #[case::xray_bishop(XRAY_BISHOP, [3, 9])]
-#[case::xray_bishop_black(XRAY_BISHOP_BLACK, [9, 3])]
+#[case::xray_bishop_black(XRAY_BISHOP_BLACK, [3, 9])]
 fn the_threatened_value_adds_up_what_is_about_to_be_lost(
     #[case] fen: &str,
     #[case] value: [i32; 2],
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.threatened_value[Side::Us.index()], value[0]);
-    assert_eq!(threats.threatened_value[Side::Them.index()], value[1]);
+    assert_eq!(threats.threatened_value, by_colour(value));
 }
 
 #[rstest]
@@ -158,9 +156,9 @@ fn the_threatened_value_adds_up_what_is_about_to_be_lost(
 #[case::pawn_attacks_rook(PAWN_ATTACKS_ROOK, [5, 0])]
 #[case::queen_under_knight(QUEEN_UNDER_KNIGHT, [9, 0])]
 #[case::cross_threats(CROSS_THREATS, [1, 9])]
-#[case::cross_threats_black(CROSS_THREATS_BLACK, [9, 1])]
+#[case::cross_threats_black(CROSS_THREATS_BLACK, [1, 9])]
 #[case::removable_rook(REMOVABLE_ROOK, [0, 5])]
-#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, [5, 0])]
+#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, [0, 5])]
 #[case::removable_knight(REMOVABLE_KNIGHT, [3, 3])]
 #[case::removable_trade(REMOVABLE_TRADE, [3, 0])]
 #[case::xray_bishop(XRAY_BISHOP, [3, 9])]
@@ -171,8 +169,7 @@ fn the_max_gain_is_the_largest_exchange_the_opponent_can_start(
     #[case] gain: [i32; 2],
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.threat_max_gain[Side::Us.index()], gain[0]);
-    assert_eq!(threats.threat_max_gain[Side::Them.index()], gain[1]);
+    assert_eq!(threats.threat_max_gain, by_colour(gain));
 }
 
 #[rstest]
@@ -181,98 +178,82 @@ fn the_max_gain_is_the_largest_exchange_the_opponent_can_start(
 #[case::pawn_attacks_rook(PAWN_ATTACKS_ROOK, "e4", "")]
 #[case::queen_under_knight(QUEEN_UNDER_KNIGHT, "e4", "")]
 #[case::cross_threats(CROSS_THREATS, "", "d5")]
-#[case::cross_threats_black(CROSS_THREATS_BLACK, "d5", "")]
+#[case::cross_threats_black(CROSS_THREATS_BLACK, "", "d5")]
 #[case::removable_rook(REMOVABLE_ROOK, "", "d7")]
-#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, "d7", "")]
+#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, "", "d7")]
 #[case::removable_knight(REMOVABLE_KNIGHT, "", "")]
 #[case::xray_bishop(XRAY_BISHOP, "", "d5")]
-#[case::xray_bishop_black(XRAY_BISHOP_BLACK, "d5", "")]
+#[case::xray_bishop_black(XRAY_BISHOP_BLACK, "", "d5")]
 #[case::doubled_rooks(DOUBLED_ROOKS, "", "")]
 fn a_lesser_attacker_is_one_the_defender_would_be_glad_to_trade_with(
     #[case] fen: &str,
-    #[case] ours: &str,
-    #[case] theirs: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.attacked_by_lesser[Side::Us.index()], squares(ours));
-    assert_eq!(
-        threats.attacked_by_lesser[Side::Them.index()],
-        squares(theirs)
-    );
+    assert_eq!(threats.attacked_by_lesser.white, squares(white));
+    assert_eq!(threats.attacked_by_lesser.black, squares(black));
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::pawn_attacks_rook(PAWN_ATTACKS_ROOK, [false, false])]
 #[case::queen_under_knight(QUEEN_UNDER_KNIGHT, [true, false])]
-#[case::queen_under_knight_black(QUEEN_UNDER_KNIGHT_BLACK, [false, true])]
+#[case::queen_under_knight_black(QUEEN_UNDER_KNIGHT_BLACK, [true, false])]
 #[case::cross_threats(CROSS_THREATS, [false, true])]
-#[case::cross_threats_black(CROSS_THREATS_BLACK, [true, false])]
+#[case::cross_threats_black(CROSS_THREATS_BLACK, [false, true])]
 #[case::xray_bishop(XRAY_BISHOP, [false, true])]
-#[case::xray_bishop_black(XRAY_BISHOP_BLACK, [true, false])]
+#[case::xray_bishop_black(XRAY_BISHOP_BLACK, [false, true])]
 #[case::doubled_rooks(DOUBLED_ROOKS, [false, false])]
 fn a_queen_under_a_lesser_unit_is_its_own_fact(#[case] fen: &str, #[case] under: [bool; 2]) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.queen_attacked_by_lesser[Side::Us.index()], under[0]);
-    assert_eq!(
-        threats.queen_attacked_by_lesser[Side::Them.index()],
-        under[1]
-    );
+    assert_eq!(threats.queen_attacked_by_lesser, by_colour(under));
 }
 
 #[rstest]
 #[case::start(START, "", "")]
 #[case::defended_knight(DEFENDED_KNIGHT, "", "")]
 #[case::overloaded_rook(OVERLOADED_ROOK, "", "d7")]
-#[case::overloaded_rook_black(OVERLOADED_ROOK_BLACK, "d7", "")]
+#[case::overloaded_rook_black(OVERLOADED_ROOK_BLACK, "", "d7")]
 #[case::removable_rook(REMOVABLE_ROOK, "", "d7")]
 #[case::overloaded_knight(OVERLOADED_KNIGHT, "", "c6")]
-#[case::overloaded_knight_black(OVERLOADED_KNIGHT_BLACK, "c6", "")]
+#[case::overloaded_knight_black(OVERLOADED_KNIGHT_BLACK, "", "c6")]
 #[case::removable_knight(REMOVABLE_KNIGHT, "", "c6")]
 #[case::removable_trade(REMOVABLE_TRADE, "", "c6")]
-#[case::removable_trade_black(REMOVABLE_TRADE_BLACK, "c6", "")]
+#[case::removable_trade_black(REMOVABLE_TRADE_BLACK, "", "c6")]
 #[case::overloaded_pawn(OVERLOADED_PAWN, "", "b7")]
-#[case::overloaded_pawn_black(OVERLOADED_PAWN_BLACK, "b7", "")]
+#[case::overloaded_pawn_black(OVERLOADED_PAWN_BLACK, "", "b7")]
 #[case::doubled_rooks(DOUBLED_ROOKS, "", "")]
 fn a_defender_of_two_attacked_units_is_overloaded(
     #[case] fen: &str,
-    #[case] ours: &str,
-    #[case] theirs: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(
-        threats.overloaded_defenders[Side::Us.index()],
-        squares(ours)
-    );
-    assert_eq!(
-        threats.overloaded_defenders[Side::Them.index()],
-        squares(theirs)
-    );
+    assert_eq!(threats.overloaded_defenders.white, squares(white));
+    assert_eq!(threats.overloaded_defenders.black, squares(black));
 }
 
 #[rstest]
 #[case::start(START, "", "")]
 #[case::overloaded_rook(OVERLOADED_ROOK, "", "")]
 #[case::removable_rook(REMOVABLE_ROOK, "", "d7")]
-#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, "d7", "")]
+#[case::removable_rook_black(REMOVABLE_ROOK_BLACK, "", "d7")]
 #[case::overloaded_knight(OVERLOADED_KNIGHT, "", "")]
 #[case::removable_knight(REMOVABLE_KNIGHT, "", "c6")]
-#[case::removable_knight_black(REMOVABLE_KNIGHT_BLACK, "c6", "")]
+#[case::removable_knight_black(REMOVABLE_KNIGHT_BLACK, "", "c6")]
 #[case::removable_trade(REMOVABLE_TRADE, "", "c6")]
-#[case::removable_trade_black(REMOVABLE_TRADE_BLACK, "c6", "")]
+#[case::removable_trade_black(REMOVABLE_TRADE_BLACK, "", "c6")]
 #[case::overloaded_pawn(OVERLOADED_PAWN, "", "")]
 #[case::overloaded_pawn_black(OVERLOADED_PAWN_BLACK, "", "")]
 fn a_defender_the_enemy_can_take_for_free_is_removable(
     #[case] fen: &str,
-    #[case] ours: &str,
-    #[case] theirs: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.removable_defenders[Side::Us.index()], squares(ours));
-    assert_eq!(
-        threats.removable_defenders[Side::Them.index()],
-        squares(theirs)
-    );
+    assert_eq!(threats.removable_defenders.white, squares(white));
+    assert_eq!(threats.removable_defenders.black, squares(black));
 }
 
 #[rstest]
@@ -291,12 +272,12 @@ fn a_defender_the_enemy_can_take_for_free_is_removable(
 #[case::doubled_rooks(DOUBLED_ROOKS, "", "")]
 fn a_loose_unit_is_one_its_own_side_does_not_defend(
     #[case] fen: &str,
-    #[case] ours: &str,
-    #[case] theirs: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.loose[Side::Us.index()], squares(ours));
-    assert_eq!(threats.loose[Side::Them.index()], squares(theirs));
+    assert_eq!(threats.loose.white, squares(white));
+    assert_eq!(threats.loose.black, squares(black));
 }
 
 #[rstest]
@@ -305,7 +286,7 @@ fn a_loose_unit_is_one_its_own_side_does_not_defend(
 #[case::pawn_attacks_rook(PAWN_ATTACKS_ROOK, "e4", "")]
 #[case::queen_under_knight(QUEEN_UNDER_KNIGHT, "e4", "")]
 #[case::cross_threats(CROSS_THREATS, "", "d5")]
-#[case::cross_threats_black(CROSS_THREATS_BLACK, "d5", "")]
+#[case::cross_threats_black(CROSS_THREATS_BLACK, "", "d5")]
 #[case::removable_rook(REMOVABLE_ROOK, "", "d7")]
 #[case::removable_knight(REMOVABLE_KNIGHT, "b4", "c6")]
 #[case::removable_trade(REMOVABLE_TRADE, "b4", "")]
@@ -314,54 +295,49 @@ fn a_loose_unit_is_one_its_own_side_does_not_defend(
 #[case::doubled_rooks(DOUBLED_ROOKS, "", "")]
 fn a_surplus_counts_only_the_attackers_and_defenders_worth_at_most_the_unit(
     #[case] fen: &str,
-    #[case] ours: &str,
-    #[case] theirs: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.attacker_surplus[Side::Us.index()], squares(ours));
-    assert_eq!(
-        threats.attacker_surplus[Side::Them.index()],
-        squares(theirs)
-    );
+    assert_eq!(threats.attacker_surplus.white, squares(white));
+    assert_eq!(threats.attacker_surplus.black, squares(black));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::defended_knight(DEFENDED_KNIGHT, [0, 0])]
 #[case::overloaded_rook(OVERLOADED_ROOK, [1, 0])]
-#[case::overloaded_rook_black(OVERLOADED_ROOK_BLACK, [0, 1])]
+#[case::overloaded_rook_black(OVERLOADED_ROOK_BLACK, [1, 0])]
 #[case::removable_rook(REMOVABLE_ROOK, [1, 0])]
 #[case::xray_bishop(XRAY_BISHOP, [1, 0])]
-#[case::xray_bishop_black(XRAY_BISHOP_BLACK, [0, 1])]
+#[case::xray_bishop_black(XRAY_BISHOP_BLACK, [1, 0])]
 #[case::xray_rook(XRAY_ROOK, [1, 0])]
 #[case::doubled_rooks(DOUBLED_ROOKS, [1, 1])]
 #[case::overloaded_pawn(OVERLOADED_PAWN, [1, 0])]
 #[case::bishop_battery(BISHOP_BATTERY, [0, 0])]
 fn an_x_ray_looks_through_one_enemy_unit_at_another(#[case] fen: &str, #[case] count: [u8; 2]) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.xray_through_enemy[Side::Us.index()], count[0]);
-    assert_eq!(threats.xray_through_enemy[Side::Them.index()], count[1]);
+    assert_eq!(threats.xray_through_enemy, by_colour(count));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::xray_rook(XRAY_ROOK, [0, 0])]
 #[case::overloaded_rook(OVERLOADED_ROOK, [1, 0])]
-#[case::overloaded_rook_black(OVERLOADED_ROOK_BLACK, [0, 1])]
+#[case::overloaded_rook_black(OVERLOADED_ROOK_BLACK, [1, 0])]
 #[case::overloaded_knight(OVERLOADED_KNIGHT, [1, 0])]
 #[case::overloaded_pawn(OVERLOADED_PAWN, [1, 0])]
 #[case::doubled_rooks(DOUBLED_ROOKS, [1, 1])]
 #[case::battery_at_king(BATTERY_AT_KING, [1, 0])]
-#[case::battery_at_king_black(BATTERY_AT_KING_BLACK, [0, 1])]
+#[case::battery_at_king_black(BATTERY_AT_KING_BLACK, [1, 0])]
 #[case::bishop_battery(BISHOP_BATTERY, [1, 0])]
-#[case::bishop_battery_black(BISHOP_BATTERY_BLACK, [0, 1])]
+#[case::bishop_battery_black(BISHOP_BATTERY_BLACK, [1, 0])]
 fn a_battery_is_two_sliders_on_one_line_they_both_move_along(
     #[case] fen: &str,
     #[case] count: [u8; 2],
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.battery_count[Side::Us.index()], count[0]);
-    assert_eq!(threats.battery_count[Side::Them.index()], count[1]);
+    assert_eq!(threats.battery_count, by_colour(count));
 }
 
 #[rstest]
@@ -370,39 +346,36 @@ fn a_battery_is_two_sliders_on_one_line_they_both_move_along(
 #[case::overloaded_knight(OVERLOADED_KNIGHT, [false, false])]
 #[case::doubled_rooks(DOUBLED_ROOKS, [true, true])]
 #[case::battery_at_king(BATTERY_AT_KING, [true, false])]
-#[case::battery_at_king_black(BATTERY_AT_KING_BLACK, [false, true])]
+#[case::battery_at_king_black(BATTERY_AT_KING_BLACK, [true, false])]
 #[case::bishop_battery(BISHOP_BATTERY, [true, false])]
-#[case::bishop_battery_black(BISHOP_BATTERY_BLACK, [false, true])]
+#[case::bishop_battery_black(BISHOP_BATTERY_BLACK, [true, false])]
 fn a_battery_at_the_king_is_one_whose_line_meets_the_enemy_ring(
     #[case] fen: &str,
     #[case] at_king: [bool; 2],
 ) {
     let threats = facts_of(fen).threats;
-    assert_eq!(threats.battery_at_king[Side::Us.index()], at_king[0]);
-    assert_eq!(threats.battery_at_king[Side::Them.index()], at_king[1]);
+    assert_eq!(threats.battery_at_king, by_colour(at_king));
 }
 
 /// Nothing in the group depends on whose turn it is, so the same position with
-/// the other side to move reads the two blocks the other way round.
+/// The same placement with the other side to move reads exactly the same.
 #[rstest]
 #[case::cross_threats(CROSS_THREATS, CROSS_THREATS_BLACK)]
 #[case::removable_rook(REMOVABLE_ROOK, REMOVABLE_ROOK_BLACK)]
 #[case::overloaded_pawn(OVERLOADED_PAWN, OVERLOADED_PAWN_BLACK)]
 #[case::bishop_battery(BISHOP_BATTERY, BISHOP_BATTERY_BLACK)]
-fn the_blocks_swap_with_the_side_to_move(#[case] white: &str, #[case] black: &str) {
-    let ours = facts_of(white).threats;
-    let theirs = facts_of(black).threats;
-    let us = Side::Us.index();
-    let them = Side::Them.index();
-    assert_eq!(ours.threatened[us], theirs.threatened[them]);
-    assert_eq!(ours.threatened_value[us], theirs.threatened_value[them]);
-    assert_eq!(ours.threat_max_gain[us], theirs.threat_max_gain[them]);
-    assert_eq!(
-        ours.overloaded_defenders[us],
-        theirs.overloaded_defenders[them]
-    );
-    assert_eq!(ours.loose[us], theirs.loose[them]);
-    assert_eq!(ours.battery_count[us], theirs.battery_count[them]);
+fn the_same_placement_reads_the_same_whoever_is_to_move(
+    #[case] white_to_move: &str,
+    #[case] black_to_move: &str,
+) {
+    let first = facts_of(white_to_move).threats;
+    let second = facts_of(black_to_move).threats;
+    assert_eq!(first.threatened, second.threatened);
+    assert_eq!(first.threatened_value, second.threatened_value);
+    assert_eq!(first.threat_max_gain, second.threat_max_gain);
+    assert_eq!(first.overloaded_defenders, second.overloaded_defenders);
+    assert_eq!(first.loose, second.loose);
+    assert_eq!(first.battery_count, second.battery_count);
 }
 
 /// `en_prise` reads one attacker against one defender, `threatened` plays the
@@ -411,14 +384,12 @@ fn the_blocks_swap_with_the_side_to_move(#[case] white: &str, #[case] black: &st
 #[test]
 fn threatened_is_what_en_prise_approximates() {
     let facts = facts_of(TWO_ON_ONE);
-    let them = Side::Them.index();
-    assert_eq!(facts.attacks.en_prise[them], squares(""));
-    assert_eq!(facts.threats.threatened[them], squares("d7"));
+    assert_eq!(facts.attacks.en_prise.black, squares(""));
+    assert_eq!(facts.threats.threatened.black, squares("d7"));
 
     // The other way round on the same board: a knight a pawn defends is en
     // prise to nothing cheaper, and the rook that attacks it wins nothing.
     let facts = facts_of(DEFENDED_KNIGHT);
-    let them = Side::Them.index();
-    assert_eq!(facts.attacks.en_prise[them], squares(""));
-    assert_eq!(facts.threats.threatened[them], squares(""));
+    assert_eq!(facts.attacks.en_prise.black, squares(""));
+    assert_eq!(facts.threats.threatened.black, squares(""));
 }

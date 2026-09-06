@@ -1,9 +1,9 @@
 //! King safety and shelter.
 
-use crate::types::{File, Rank, Role, Square, SquareSet};
+use crate::types::{ByColour, Colour, File, Rank, Role, Square, SquareSet};
 
 use super::scan::{Scan, attacks_of, distance};
-use super::{CastledSide, KingFacts, Side, tropism};
+use super::{CastledSide, KingFacts, tropism};
 
 /// The eight directions a ray leaves a king by, as (file, rank) steps.
 const RAYS: [(i32, i32); 8] = [
@@ -29,13 +29,13 @@ pub(super) fn shield_files(king: File) -> [File; 3] {
     [centre - 1, centre, centre + 1].map(|i| File::from_index(i).expect("b to g has neighbours"))
 }
 
-/// The squares `side` attacks with anything but its king.
-fn guarded_by(scan: &Scan, side: Side) -> SquareSet {
+/// The squares `colour` attacks with anything but its king.
+fn guarded_by(scan: &Scan, colour: Colour) -> SquareSet {
     Role::ALL
         .into_iter()
         .filter(|&role| role != Role::King)
         .fold(SquareSet::EMPTY, |set, role| {
-            set | scan.by_role[side.index()][role.index()]
+            set | scan.by_role.of(colour)[role.index()]
         })
 }
 
@@ -52,84 +52,88 @@ fn ring_weight(role: Role) -> u8 {
 pub(super) fn king_facts(scan: &Scan) -> KingFacts {
     let mut facts = KingFacts {
         square: scan.kings,
-        on_home_square: [false; 2],
-        castled_queenside: [false; 2],
-        castled_kingside: [false; 2],
-        shield_files: [
-            shield_files(scan.kings[0].file()),
-            shield_files(scan.kings[1].file()),
-        ],
-        shield: [[None; 3]; 2],
-        file_open: [[false; 3]; 2],
-        file_semi_open_for_enemy: [[false; 3]; 2],
-        storm: [[None; 3]; 2],
-        ring: [SquareSet::EMPTY; 2],
-        ring_attackers: [0; 2],
-        ring_attack_weight: [0; 2],
-        ring_defended: [0; 2],
-        ring_holes: [0; 2],
-        escape_squares: [0; 2],
-        back_rank_risk: [false; 2],
-        distance: distance(scan.kings[0], scan.kings[1]).min(255) as u8,
-        tropism: [0.0; 2],
-        virtual_mobility: [0; 2],
-        ring_defenders: [0; 2],
-        ring_defence_weight: [0; 2],
-        open_rays: [0; 2],
-        luft: [false; 2],
-        castled_side: [None; 2],
-        opposite_side_castling: queen_side(scan.kings[0]) != queen_side(scan.kings[1]),
+        on_home_square: ByColour::default(),
+        castled_queenside: ByColour::default(),
+        castled_kingside: ByColour::default(),
+        shield_files: scan.kings.map(|king| shield_files(king.file())),
+        shield: ByColour::new([None; 3], [None; 3]),
+        shield_file_open: ByColour::default(),
+        shield_file_semi_open_for_enemy: ByColour::default(),
+        storm: ByColour::new([None; 3], [None; 3]),
+        ring: ByColour::default(),
+        ring_attackers: ByColour::default(),
+        ring_attack_weight: ByColour::default(),
+        ring_defended: ByColour::default(),
+        ring_holes: ByColour::default(),
+        escape_squares: ByColour::default(),
+        back_rank_risk: ByColour::default(),
+        distance: distance(scan.kings.white, scan.kings.black).min(255) as u8,
+        tropism: ByColour::default(),
+        virtual_mobility: ByColour::default(),
+        ring_defenders: ByColour::default(),
+        ring_defence_weight: ByColour::default(),
+        open_rays: ByColour::default(),
+        luft: ByColour::default(),
+        castled_side: ByColour::default(),
+        opposite_side_castling: queen_side(scan.kings.white) != queen_side(scan.kings.black),
     };
 
-    for side in Side::ALL {
-        let i = side.index();
-        let them = (!side).index();
-        let king = scan.kings[i];
-        let rank = scan.relative_rank(king, side);
-        let ours = scan.role_units[i][Role::Pawn.index()];
-        let theirs = scan.role_units[them][Role::Pawn.index()];
+    for colour in Colour::ALL {
+        let them = !colour;
+        let king = scan.kings.of(colour);
+        let rank = scan.relative_rank(king, colour);
+        let ours = scan.role_units.of(colour)[Role::Pawn.index()];
+        let theirs = scan.role_units.of(them)[Role::Pawn.index()];
 
-        facts.on_home_square[i] = king.file() == File::E && rank == 1;
-        facts.castled_queenside[i] = king.file() <= File::C;
-        facts.castled_kingside[i] = king.file() >= File::F;
+        facts.on_home_square[colour] = king.file() == File::E && rank == 1;
+        facts.castled_queenside[colour] = king.file() <= File::C;
+        facts.castled_kingside[colour] = king.file() >= File::F;
 
-        for (slot, &file) in facts.shield_files[i].iter().enumerate() {
+        for (slot, file) in facts.shield_files.of(colour).into_iter().enumerate() {
             let mask = file_mask(file);
-            facts.file_open[i][slot] = (mask & (ours | theirs)).is_empty();
-            facts.file_semi_open_for_enemy[i][slot] =
+            facts.shield_file_open[colour][slot] = (mask & (ours | theirs)).is_empty();
+            facts.shield_file_semi_open_for_enemy[colour][slot] =
                 (mask & theirs).is_empty() && !(mask & ours).is_empty();
-            facts.shield[i][slot] = nearest_ahead(scan, mask & ours, rank, side);
-            facts.storm[i][slot] = nearest_ahead(scan, mask & theirs, rank, side);
+            facts.shield[colour][slot] = nearest_ahead(scan, mask & ours, rank, colour);
+            facts.storm[colour][slot] = nearest_ahead(scan, mask & theirs, rank, colour);
         }
 
-        let ring = attacks_of(Role::King, king, scan.colour(side), scan.occupied);
-        facts.ring[i] = ring;
+        let ring = attacks_of(Role::King, king, colour, scan.occupied);
+        facts.ring[colour] = ring;
         for role in [Role::Knight, Role::Bishop, Role::Rook, Role::Queen] {
-            for square in scan.role_units[them][role.index()] {
+            for square in scan.role_units.of(them)[role.index()] {
                 if !(scan.attacks_from[square.index()] & ring).is_empty() {
-                    facts.ring_attackers[i] = facts.ring_attackers[i].saturating_add(1);
-                    facts.ring_attack_weight[i] =
-                        facts.ring_attack_weight[i].saturating_add(ring_weight(role));
+                    facts.ring_attackers[colour] =
+                        facts.ring_attackers.of(colour).saturating_add(1);
+                    facts.ring_attack_weight[colour] = facts
+                        .ring_attack_weight
+                        .of(colour)
+                        .saturating_add(ring_weight(role));
                 }
             }
-            for square in scan.role_units[i][role.index()] {
+            for square in scan.role_units.of(colour)[role.index()] {
                 if !(scan.attacks_from[square.index()] & ring).is_empty() {
-                    facts.ring_defenders[i] = facts.ring_defenders[i].saturating_add(1);
-                    facts.ring_defence_weight[i] =
-                        facts.ring_defence_weight[i].saturating_add(ring_weight(role));
+                    facts.ring_defenders[colour] =
+                        facts.ring_defenders.of(colour).saturating_add(1);
+                    facts.ring_defence_weight[colour] = facts
+                        .ring_defence_weight
+                        .of(colour)
+                        .saturating_add(ring_weight(role));
                 }
             }
         }
-        let guarded = guarded_by(scan, side);
-        facts.ring_defended[i] = (ring & guarded).len().min(255) as u8;
-        facts.ring_holes[i] = ((ring & scan.by[them]) - guarded).len().min(255) as u8;
-        facts.escape_squares[i] = ((ring - scan.units[i]) - scan.by[them]).len().min(255) as u8;
+        let guarded = guarded_by(scan, colour);
+        facts.ring_defended[colour] = (ring & guarded).len().min(255) as u8;
+        facts.ring_holes[colour] = ((ring & scan.by.of(them)) - guarded).len().min(255) as u8;
+        facts.escape_squares[colour] = ((ring - scan.units.of(colour)) - scan.by.of(them))
+            .len()
+            .min(255) as u8;
 
-        let ahead = ahead_of_the_back_rank(scan, king, side);
-        facts.back_rank_risk[i] = rank == 1 && ahead.is_subset(scan.units[i]);
-        facts.luft[i] = rank == 1 && !((ahead - scan.occupied) - scan.by[them]).is_empty();
+        let ahead = ahead_of_the_back_rank(scan, king, colour);
+        facts.back_rank_risk[colour] = rank == 1 && ahead.is_subset(scan.units.of(colour));
+        facts.luft[colour] = rank == 1 && !((ahead - scan.occupied) - scan.by.of(them)).is_empty();
 
-        facts.castled_side[i] = if scan.castling[i] {
+        facts.castled_side[colour] = if scan.castling.of(colour) {
             None
         } else if king.file() >= File::G {
             Some(CastledSide::Short)
@@ -139,9 +143,9 @@ pub(super) fn king_facts(scan: &Scan) -> KingFacts {
             None
         };
 
-        facts.open_rays[i] = open_rays(king, scan.occupied);
-        facts.tropism[i] = tropism(scan, king, !side);
-        facts.virtual_mobility[i] = attacks_of(Role::Queen, king, scan.colour(side), scan.occupied)
+        facts.open_rays[colour] = open_rays(king, scan.occupied);
+        facts.tropism[colour] = tropism(scan, king, them);
+        facts.virtual_mobility[colour] = attacks_of(Role::Queen, king, colour, scan.occupied)
             .len()
             .min(255) as u8;
     }
@@ -154,9 +158,9 @@ fn queen_side(square: Square) -> bool {
     square.file() <= File::D
 }
 
-/// The up-to-three squares of relative rank 2 adjacent to `king`, in `side`'s
-/// frame. Meaningful for a king on its relative rank 1.
-fn ahead_of_the_back_rank(scan: &Scan, king: Square, side: Side) -> SquareSet {
+/// The up-to-three squares of `colour`'s rank 2 adjacent to `king`.
+/// Meaningful for a king on its own rank 1.
+fn ahead_of_the_back_rank(scan: &Scan, king: Square, colour: Colour) -> SquareSet {
     [
         File::from_index(king.file().index().wrapping_sub(1)),
         Some(king.file()),
@@ -164,7 +168,7 @@ fn ahead_of_the_back_rank(scan: &Scan, king: Square, side: Side) -> SquareSet {
     ]
     .into_iter()
     .flatten()
-    .map(|file| scan.relative_square(file, 2, side).to_set())
+    .map(|file| scan.relative_square(file, 2, colour).to_set())
     .fold(SquareSet::EMPTY, |a, b| a | b)
 }
 
@@ -194,12 +198,12 @@ fn open_rays(king: Square, occupied: SquareSet) -> u8 {
     open
 }
 
-/// Ranks from a king at relative rank `rank` to the nearest pawn of `pawns`
-/// ahead of it, in `side`'s frame.
-fn nearest_ahead(scan: &Scan, pawns: SquareSet, rank: u32, side: Side) -> Option<u8> {
+/// Ranks from a king of `colour` at its rank `rank` to the nearest pawn of
+/// `pawns` ahead of it.
+fn nearest_ahead(scan: &Scan, pawns: SquareSet, rank: u32, colour: Colour) -> Option<u8> {
     pawns
         .into_iter()
-        .map(|square| scan.relative_rank(square, side))
+        .map(|square| scan.relative_rank(square, colour))
         .filter(|&pawn_rank| pawn_rank > rank)
         .min()
         .map(|pawn_rank| (pawn_rank - rank) as u8)

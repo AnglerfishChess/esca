@@ -25,7 +25,7 @@ class TestPosition:
         assert answer["legal_move_count"] == 20
         assert answer["status"]["state"] == "in_progress"
         assert answer["check"]["in_check"] is False
-        assert answer["material"]["white"]["pawn"] == 8
+        assert answer["material"]["white"]["pawns"] == 8
         assert answer["material"]["balance"] == 0
 
     def test_moves_are_played_from_the_position(self):
@@ -220,32 +220,31 @@ class TestExplainMove:
 
 
 class TestFacts:
-    def test_the_default_leaves_out_the_two_raw_groups(self):
+    def test_the_default_leaves_out_the_two_groups_that_restate_others(self):
         answer = server.facts()
         assert "placement" not in answer["groups"]
-        assert "planes" not in answer["groups"]
-        assert set(answer["groups_available"]) > set(answer["groups_returned"])
+        assert "maps" not in answer["groups"]
+        assert set(answer["groups_available"]) > set(answer["groups"])
 
     def test_only_the_named_groups_come_back(self):
         answer = server.facts(groups=["material", "state"])
         assert set(answer["groups"]) == {"material", "state"}
-        assert answer["schema_id"]
 
     def test_every_side_paired_value_is_labelled_by_colour(self):
         answer = server.facts(groups=["material"])["groups"]["material"]
-        assert answer["count"]["white"]["pawn"] == 8
+        assert answer["pawns"] == {"white": 8, "black": 8}
         assert answer["value"] == {"white": 39, "black": 39}
 
-    def test_the_perspective_says_which_side_the_facts_are_read_from(self):
-        white = server.facts()["perspective"]
-        black = server.facts(moves=["e4"])["perspective"]
-        assert white["us"] == "white"
-        assert black["us"] == "black"
+    def test_the_answer_says_who_is_to_move_and_nothing_is_read_against_it(self):
+        assert server.facts()["side_to_move"] == "white"
+        black = server.facts(moves=["e4"])
+        assert black["side_to_move"] == "black"
+        assert black["groups"]["material"]["pawns"] == {"white": 8, "black": 8}
 
-    def test_a_role_indexed_list_is_labelled_by_role(self):
+    def test_a_group_names_the_units_of_each_colour(self):
         answer = server.facts(groups=["placement"])["groups"]["placement"]
-        assert answer["by_role"]["white"]["king"] == ["e1"]
-        assert answer["by_role"]["black"]["pawn"] == ["a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7"]
+        assert answer["kings"]["white"] == ["e1"]
+        assert answer["pawns"]["black"] == ["a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7"]
 
     def test_a_file_indexed_list_is_labelled_by_file(self):
         answer = server.facts(groups=["pawns"])["groups"]["pawns"]
@@ -253,7 +252,7 @@ class TestFacts:
 
     def test_the_king_shield_is_labelled_by_the_files_it_stands_on(self):
         answer = server.facts(groups=["king"])["groups"]["king"]
-        assert answer["shield_files"]["white"] == "def"
+        assert answer["shield_files"]["white"] == ["d", "e", "f"]
         assert set(answer["shield"]["white"]) == set("def")
 
     def test_an_unknown_group_lists_the_known_ones(self):
@@ -443,16 +442,27 @@ class TestToPgn:
         assert "e5" in answer["error"]["legal_moves"]
 
 
-class TestSchemaAndPrompt:
-    def test_the_facts_schema_names_every_group_the_facts_tool_serves(self):
-        schema = server.facts_schema()
+class TestCatalogueAndPrompt:
+    def test_the_catalogue_names_every_group_the_facts_tool_serves(self):
+        catalogue = server.facts_catalogue()
         served = server.facts(groups=None)["groups_available"]
-        assert [group["name"] for group in schema["groups"]] == served
-        assert schema["schema_id"] == server.facts()["schema_id"]
+        assert [group["name"] for group in catalogue["groups"]] == served
 
-    def test_every_group_of_the_schema_carries_its_feature_names(self):
-        schema = server.facts_schema()
-        assert sum(len(group["features"]) for group in schema["groups"]) == schema["feature_count"]
+    def test_every_field_of_a_group_is_named_typed_and_explained(self):
+        catalogue = server.facts_catalogue()
+        answered = server.facts(groups=["pawns"])["groups"]["pawns"]
+        pawns = next(group for group in catalogue["groups"] if group["name"] == "pawns")
+        assert [field["name"] for field in pawns["fields"]] == list(answered)
+        for field in pawns["fields"]:
+            assert field["type"]
+            assert field["meaning"].endswith(".")
+
+    def test_the_catalogue_covers_a_moves_facts_too(self):
+        catalogue = server.facts_catalogue()
+        names = [field["name"] for field in catalogue["move"]]
+        assert "see" in names
+        assert "gives_check" in names
+        assert catalogue["types"]["ByColour"]
 
     def test_the_prompt_names_the_position_and_the_tools(self):
         text = server.analyse_position(fen=positions.START, moves="e4 e5")

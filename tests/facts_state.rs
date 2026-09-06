@@ -1,11 +1,11 @@
 //! The `state` group, fact by fact.
 //!
 //! Every expectation is worked out from the definitions in `docs/features.md`
-//! §2.2 for the named position above it.
+//! for the named position above it. A per-side case writes White first.
 
 mod common;
 
-use common::{facts_of, facts_under};
+use common::{by_colour, facts_of, facts_under};
 use esca::{CHESS960, CLASSIC, File, Variant};
 use rstest::rstest;
 
@@ -89,11 +89,11 @@ fn two_checkers_at_once_make_the_check_a_double_one(#[case] fen: &str, #[case] d
 #[rstest]
 #[case::start(&CLASSIC, START, [true, true], [true, true])]
 #[case::rights_split(&CLASSIC, RIGHTS_SPLIT, [true, false], [false, true])]
-#[case::rights_black_to_move(&CLASSIC, RIGHTS_BLACK_TO_MOVE, [true, true], [false, true])]
+#[case::rights_black_to_move(&CLASSIC, RIGHTS_BLACK_TO_MOVE, [true, true], [true, false])]
 #[case::rights_none(&CLASSIC, RIGHTS_NONE, [false, false], [false, false])]
 #[case::nine_sixty(&CHESS960, NINE_SIXTY, [true, true], [true, true])]
 #[case::nine_sixty_outermost(&CHESS960, NINE_SIXTY_OUTERMOST, [true, true], [true, true])]
-#[case::nine_sixty_split(&CHESS960, NINE_SIXTY_SPLIT, [false, true], [true, false])]
+#[case::nine_sixty_split(&CHESS960, NINE_SIXTY_SPLIT, [true, false], [false, true])]
 #[case::nine_sixty_inner(&CHESS960, NINE_SIXTY_INNER, [true, true], [false, false])]
 fn a_castling_right_survives_for_the_side_and_wing_the_fen_still_names(
     #[case] variant: &dyn Variant,
@@ -102,8 +102,8 @@ fn a_castling_right_survives_for_the_side_and_wing_the_fen_still_names(
     #[case] long: [bool; 2],
 ) {
     let state = facts_under(variant, fen).state;
-    assert_eq!(state.castle_short, short);
-    assert_eq!(state.castle_long, long);
+    assert_eq!(state.can_castle_short, by_colour(short));
+    assert_eq!(state.can_castle_long, by_colour(long));
 }
 
 #[rstest]
@@ -144,7 +144,7 @@ fn an_en_passant_capture_counts_only_when_a_legal_move_makes_it(
     #[case] fen: &str,
     #[case] legal: bool,
 ) {
-    assert_eq!(facts_of(fen).state.ep_capture_legal, legal);
+    assert_eq!(facts_of(fen).state.en_passant_capture_legal, legal);
 }
 
 /// No `state` fact is among the four `features.md` §4 defines for classic chess
@@ -154,10 +154,10 @@ fn the_state_facts_of_a_chess960_position_read_the_rooks_the_rights_name() {
     let state = facts_under(&CHESS960, NINE_SIXTY).state;
     assert!(!state.in_check);
     assert!(!state.double_check);
-    assert_eq!(state.castle_short, [true, true]);
-    assert_eq!(state.castle_long, [true, true]);
+    assert_eq!(state.can_castle_short, by_colour([true, true]));
+    assert_eq!(state.can_castle_long, by_colour([true, true]));
     assert_eq!(state.en_passant, Some(File::C));
-    assert!(state.ep_capture_legal, "b5 takes c6 en passant");
+    assert!(state.en_passant_capture_legal, "b5 takes c6 en passant");
 
     assert_eq!(
         facts_under(&CHESS960, NINE_SIXTY_OUTERMOST).state,

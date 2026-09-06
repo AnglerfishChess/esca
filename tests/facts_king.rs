@@ -5,8 +5,8 @@
 
 mod common;
 
-use common::{facts_of, facts_under};
-use esca::{CHESS960, CastledSide, Rank, Schema, Side};
+use common::{by_colour, facts_of, facts_under};
+use esca::{CHESS960, CastledSide, Colour, Rank};
 use rstest::rstest;
 
 use CastledSide::{Long, Short};
@@ -66,16 +66,16 @@ const STALE_RIGHT: &str = "r1q2rk1/1pb2pp1/p1n3np/P1NpPb2/1P3B2/2P2N2/3Q1PPP/R3R
 #[case::corners(CORNERS, 'h', 'a')]
 #[case::holes(HOLES, 'g', 'b')]
 #[case::boxed(BOXED, 'g', 'g')]
-#[case::bare_kings(BARE_KINGS, 'd', 'g')]
+#[case::bare_kings(BARE_KINGS, 'g', 'd')]
 #[case::endgame(ENDGAME, 'e', 'd')]
 fn a_kings_file_is_the_file_of_the_square_it_stands_on(
     #[case] fen: &str,
-    #[case] us: char,
-    #[case] them: char,
+    #[case] white: char,
+    #[case] black: char,
 ) {
-    let facts = facts_of(fen);
-    assert_eq!(facts.king.square[Side::Us.index()].file().to_char(), us);
-    assert_eq!(facts.king.square[Side::Them.index()].file().to_char(), them);
+    let square = facts_of(fen).king.square;
+    assert_eq!(square.white.file().to_char(), white);
+    assert_eq!(square.black.file().to_char(), black);
 }
 
 #[rstest]
@@ -83,18 +83,16 @@ fn a_kings_file_is_the_file_of_the_square_it_stands_on(
 #[case::uncastled(UNCASTLED, Rank::First, Rank::First)]
 #[case::holes(HOLES, Rank::First, Rank::Third)]
 #[case::boxed(BOXED, Rank::First, Rank::First)]
-#[case::bare_kings(BARE_KINGS, Rank::Fourth, Rank::First)]
+#[case::bare_kings(BARE_KINGS, Rank::First, Rank::Fourth)]
 #[case::endgame(ENDGAME, Rank::Third, Rank::Fourth)]
 fn a_kings_rank_is_counted_from_its_own_back_rank(
     #[case] fen: &str,
-    #[case] us: Rank,
-    #[case] them: Rank,
+    #[case] white: Rank,
+    #[case] black: Rank,
 ) {
-    let facts = facts_of(fen);
-    let ours = facts.side_to_move();
-    let square = facts.king.square;
-    assert_eq!(square[Side::Us.index()].rank().relative_to(ours), us);
-    assert_eq!(square[Side::Them.index()].rank().relative_to(!ours), them);
+    let square = facts_of(fen).king.square;
+    assert_eq!(square.white.rank().relative_to(Colour::White), white);
+    assert_eq!(square.black.rank().relative_to(Colour::Black), black);
 }
 
 #[rstest]
@@ -105,7 +103,7 @@ fn a_kings_rank_is_counted_from_its_own_back_rank(
 #[case::corners(CORNERS, [false, false])]
 #[case::endgame(ENDGAME, [false, false])]
 fn a_king_is_home_on_the_e_file_of_its_own_first_rank(#[case] fen: &str, #[case] home: [bool; 2]) {
-    assert_eq!(facts_of(fen).king.on_home_square, home);
+    assert_eq!(facts_of(fen).king.on_home_square, by_colour(home));
 }
 
 #[rstest]
@@ -121,8 +119,8 @@ fn a_castled_zone_is_the_wing_of_the_board_the_king_stands_on(
     #[case] kingside: [bool; 2],
 ) {
     let king = facts_of(fen).king;
-    assert_eq!(king.castled_queenside, queenside);
-    assert_eq!(king.castled_kingside, kingside);
+    assert_eq!(king.castled_queenside, by_colour(queenside));
+    assert_eq!(king.castled_kingside, by_colour(kingside));
 }
 
 #[rstest]
@@ -130,40 +128,43 @@ fn a_castled_zone_is_the_wing_of_the_board_the_king_stands_on(
 #[case::corners(CORNERS, "fgh", "abc")]
 #[case::storm(STORM, "fgh", "abc")]
 #[case::open_files(OPEN_FILES, "fgh", "bcd")]
-#[case::bare_kings(BARE_KINGS, "cde", "fgh")]
+#[case::bare_kings(BARE_KINGS, "fgh", "cde")]
 #[case::endgame(ENDGAME, "def", "cde")]
 fn the_king_files_are_the_kings_own_clamped_to_b_to_g_and_its_neighbours(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let facts = facts_of(fen);
-    let letters = |side: Side| {
-        facts.king.shield_files[side.index()]
+    let letters = |colour: Colour| {
+        facts
+            .king
+            .shield_files
+            .of(colour)
             .iter()
             .map(|file| file.to_char())
             .collect::<String>()
     };
-    assert_eq!(letters(Side::Us), us);
-    assert_eq!(letters(Side::Them), them);
+    assert_eq!(letters(Colour::White), white);
+    assert_eq!(letters(Colour::Black), black);
 }
 
 #[rstest]
 #[case::start(START, [Some(1), Some(1), Some(1)], [Some(1), Some(1), Some(1)])]
 #[case::storm(STORM, [Some(1), None, Some(3)], [Some(1), Some(2), Some(3)])]
-#[case::boxed(BOXED, [Some(1), Some(2), Some(1)], [Some(1), Some(1), Some(1)])]
+#[case::boxed(BOXED, [Some(1), Some(1), Some(1)], [Some(1), Some(2), Some(1)])]
 #[case::corners(CORNERS, [None, Some(1), None], [None, Some(1), None])]
 #[case::uncastled(UNCASTLED, [None, None, Some(1)], [Some(1), Some(1), Some(1)])]
 #[case::endgame(ENDGAME, [Some(1), None, None], [None, None, None])]
 #[case::bare_kings(BARE_KINGS, [None, None, None], [None, None, None])]
 fn a_pawn_shield_is_how_far_ahead_the_nearest_friendly_pawn_of_a_king_file_is(
     #[case] fen: &str,
-    #[case] us: [Option<u8>; 3],
-    #[case] them: [Option<u8>; 3],
+    #[case] white: [Option<u8>; 3],
+    #[case] black: [Option<u8>; 3],
 ) {
-    let facts = facts_of(fen);
-    assert_eq!(facts.king.shield[Side::Us.index()], us);
-    assert_eq!(facts.king.shield[Side::Them.index()], them);
+    let shield = facts_of(fen).king.shield;
+    assert_eq!(shield.white, white);
+    assert_eq!(shield.black, black);
 }
 
 #[rstest]
@@ -176,22 +177,16 @@ fn a_pawn_shield_is_how_far_ahead_the_nearest_friendly_pawn_of_a_king_file_is(
 #[case::siege(SIEGE, [false; 3], [true; 3], [false; 3], [true; 3])]
 fn a_king_file_is_open_when_bare_and_semi_open_when_only_the_enemy_has_left_it(
     #[case] fen: &str,
-    #[case] us_open: [bool; 3],
-    #[case] us_semi_open: [bool; 3],
-    #[case] them_open: [bool; 3],
-    #[case] them_semi_open: [bool; 3],
+    #[case] white_open: [bool; 3],
+    #[case] white_semi_open: [bool; 3],
+    #[case] black_open: [bool; 3],
+    #[case] black_semi_open: [bool; 3],
 ) {
     let king = facts_of(fen).king;
-    assert_eq!(king.file_open[Side::Us.index()], us_open);
-    assert_eq!(king.file_open[Side::Them.index()], them_open);
-    assert_eq!(
-        king.file_semi_open_for_enemy[Side::Us.index()],
-        us_semi_open
-    );
-    assert_eq!(
-        king.file_semi_open_for_enemy[Side::Them.index()],
-        them_semi_open
-    );
+    assert_eq!(king.shield_file_open.white, white_open);
+    assert_eq!(king.shield_file_open.black, black_open);
+    assert_eq!(king.shield_file_semi_open_for_enemy.white, white_semi_open);
+    assert_eq!(king.shield_file_semi_open_for_enemy.black, black_semi_open);
 }
 
 #[rstest]
@@ -199,17 +194,17 @@ fn a_king_file_is_open_when_bare_and_semi_open_when_only_the_enemy_has_left_it(
 #[case::storm(STORM, [Some(2), Some(3), Some(4)], [Some(5), Some(4), None])]
 #[case::open_files(OPEN_FILES, [None, None, Some(6)], [None, Some(4), None])]
 #[case::endgame(ENDGAME, [None, Some(2), None], [None, Some(1), None])]
-#[case::boxed(BOXED, [Some(6), Some(6), Some(6)], [Some(6), Some(5), Some(6)])]
+#[case::boxed(BOXED, [Some(6), Some(5), Some(6)], [Some(6), Some(6), Some(6)])]
 #[case::uncastled(UNCASTLED, [None, None, Some(6)], [Some(6), Some(6), Some(6)])]
 #[case::corners(CORNERS, [None, None, None], [None, None, None])]
 fn a_pawn_storm_is_how_far_ahead_the_nearest_enemy_pawn_of_a_king_file_is(
     #[case] fen: &str,
-    #[case] us: [Option<u8>; 3],
-    #[case] them: [Option<u8>; 3],
+    #[case] white: [Option<u8>; 3],
+    #[case] black: [Option<u8>; 3],
 ) {
-    let facts = facts_of(fen);
-    assert_eq!(facts.king.storm[Side::Us.index()], us);
-    assert_eq!(facts.king.storm[Side::Them.index()], them);
+    let storm = facts_of(fen).king.storm;
+    assert_eq!(storm.white, white);
+    assert_eq!(storm.black, black);
 }
 
 #[rstest]
@@ -223,7 +218,7 @@ fn a_ring_attacker_is_an_enemy_piece_bearing_on_a_square_next_to_the_king(
     #[case] fen: &str,
     #[case] attackers: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_attackers, attackers);
+    assert_eq!(facts_of(fen).king.ring_attackers, by_colour(attackers));
 }
 
 #[rstest]
@@ -237,7 +232,7 @@ fn ring_attack_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
     #[case] fen: &str,
     #[case] weight: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_attack_weight, weight);
+    assert_eq!(facts_of(fen).king.ring_attack_weight, by_colour(weight));
 }
 
 #[rstest]
@@ -252,7 +247,7 @@ fn a_ring_square_is_defended_by_the_kings_own_side_but_never_by_the_king(
     #[case] fen: &str,
     #[case] defended: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_defended, defended);
+    assert_eq!(facts_of(fen).king.ring_defended, by_colour(defended));
 }
 
 #[rstest]
@@ -267,22 +262,22 @@ fn a_ring_hole_is_a_ring_square_the_enemy_attacks_and_nothing_of_ours_covers(
     #[case] fen: &str,
     #[case] holes: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_holes, holes);
+    assert_eq!(facts_of(fen).king.ring_holes, by_colour(holes));
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::siege(SIEGE, [1, 2])]
 #[case::corners(CORNERS, [2, 2])]
-#[case::boxed(BOXED, [3, 2])]
+#[case::boxed(BOXED, [2, 3])]
 #[case::uncastled(UNCASTLED, [4, 1])]
 #[case::endgame(ENDGAME, [5, 4])]
-#[case::bare_kings(BARE_KINGS, [8, 5])]
+#[case::bare_kings(BARE_KINGS, [5, 8])]
 fn an_escape_square_is_next_to_the_king_free_of_our_own_and_unattacked(
     #[case] fen: &str,
     #[case] escapes: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.escape_squares, escapes);
+    assert_eq!(facts_of(fen).king.escape_squares, by_colour(escapes));
 }
 
 #[rstest]
@@ -290,13 +285,13 @@ fn an_escape_square_is_next_to_the_king_free_of_our_own_and_unattacked(
 #[case::siege(SIEGE, [true, true])]
 #[case::uncastled(UNCASTLED, [false, true])]
 #[case::uncastled_theirs(UNCASTLED_THEIRS, [true, false])]
-#[case::boxed(BOXED, [false, true])]
+#[case::boxed(BOXED, [true, false])]
 #[case::endgame(ENDGAME, [false, false])]
 fn back_rank_risk_is_a_first_rank_king_with_its_own_units_on_every_square_ahead(
     #[case] fen: &str,
     #[case] risk: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).king.back_rank_risk, risk);
+    assert_eq!(facts_of(fen).king.back_rank_risk, by_colour(risk));
 }
 
 #[rstest]
@@ -321,7 +316,7 @@ fn tropism_is_the_mean_distance_of_the_enemy_pieces_to_the_king(
     #[case] fen: &str,
     #[case] tropism: [f32; 2],
 ) {
-    assert_eq!(facts_of(fen).king.tropism, tropism);
+    assert_eq!(facts_of(fen).king.tropism, by_colour(tropism));
 }
 
 #[rstest]
@@ -330,12 +325,12 @@ fn tropism_is_the_mean_distance_of_the_enemy_pieces_to_the_king(
 #[case::storm(STORM, [12, 16])]
 #[case::holes(HOLES, [16, 22])]
 #[case::endgame(ENDGAME, [19, 21])]
-#[case::bare_kings(BARE_KINGS, [27, 21])]
+#[case::bare_kings(BARE_KINGS, [21, 27])]
 fn virtual_mobility_is_what_a_queen_on_the_kings_square_would_attack(
     #[case] fen: &str,
     #[case] mobility: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.virtual_mobility, mobility);
+    assert_eq!(facts_of(fen).king.virtual_mobility, by_colour(mobility));
 }
 
 #[rstest]
@@ -350,7 +345,7 @@ fn a_ring_defender_is_a_friendly_piece_bearing_on_a_square_next_to_the_king(
     #[case] fen: &str,
     #[case] defenders: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_defenders, defenders);
+    assert_eq!(facts_of(fen).king.ring_defenders, by_colour(defenders));
 }
 
 #[rstest]
@@ -365,7 +360,7 @@ fn ring_defence_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
     #[case] fen: &str,
     #[case] weight: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_defence_weight, weight);
+    assert_eq!(facts_of(fen).king.ring_defence_weight, by_colour(weight));
 }
 
 #[rstest]
@@ -378,9 +373,12 @@ fn ring_defence_weight_counts_a_queen_four_a_rook_two_and_a_minor_one(
 #[case::endgame(ENDGAME, [0, 0])]
 fn the_ring_attacker_surplus_is_the_besieging_weight_less_the_defending_one(
     #[case] fen: &str,
-    #[case] surplus: [i32; 2],
+    #[case] surplus: [i16; 2],
 ) {
-    assert_eq!(facts_of(fen).king.ring_attacker_surplus(), surplus);
+    assert_eq!(
+        facts_of(fen).king.ring_attacker_surplus(),
+        by_colour(surplus)
+    );
 }
 
 #[rstest]
@@ -390,12 +388,12 @@ fn the_ring_attacker_surplus_is_the_besieging_weight_less_the_defending_one(
 #[case::corners(CORNERS, [2, 2])]
 #[case::holes(HOLES, [3, 7])]
 #[case::endgame(ENDGAME, [6, 6])]
-#[case::bare_kings(BARE_KINGS, [8, 5])]
+#[case::bare_kings(BARE_KINGS, [5, 8])]
 fn an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
     #[case] fen: &str,
     #[case] rays: [u8; 2],
 ) {
-    assert_eq!(facts_of(fen).king.open_rays, rays);
+    assert_eq!(facts_of(fen).king.open_rays, by_colour(rays));
 }
 
 #[rstest]
@@ -405,13 +403,13 @@ fn an_open_ray_is_a_direction_off_the_king_that_is_empty_to_the_edge(
 #[case::uncastled(UNCASTLED, [true, false])]
 #[case::uncastled_theirs(UNCASTLED_THEIRS, [false, true])]
 #[case::corners(CORNERS, [true, true])]
-#[case::boxed(BOXED, [true, false])]
-#[case::bare_kings(BARE_KINGS, [false, true])]
+#[case::boxed(BOXED, [false, true])]
+#[case::bare_kings(BARE_KINGS, [true, false])]
 fn luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_rank(
     #[case] fen: &str,
     #[case] luft: [bool; 2],
 ) {
-    assert_eq!(facts_of(fen).king.luft, luft);
+    assert_eq!(facts_of(fen).king.luft, by_colour(luft));
 }
 
 #[rstest]
@@ -422,13 +420,13 @@ fn luft_is_an_empty_unattacked_square_ahead_of_a_king_on_its_own_first_rank(
 #[case::uncastled_theirs(UNCASTLED_THEIRS, [Some(Short), None])]
 #[case::corners(CORNERS, [Some(Short), Some(Long)])]
 #[case::siege(SIEGE, [Some(Short), Some(Long)])]
-#[case::bare_kings(BARE_KINGS, [None, Some(Short)])]
+#[case::bare_kings(BARE_KINGS, [Some(Short), None])]
 #[case::stale_right(STALE_RIGHT, [None, Some(Short)])]
 fn a_castled_side_is_the_kings_own_file_once_its_rights_are_spent(
     #[case] fen: &str,
     #[case] castled: [Option<CastledSide>; 2],
 ) {
-    assert_eq!(facts_of(fen).king.castled_side, castled);
+    assert_eq!(facts_of(fen).king.castled_side, by_colour(castled));
 }
 
 #[rstest]
@@ -447,43 +445,18 @@ fn opposite_side_castling_is_the_two_kings_standing_on_different_wings(
     assert_eq!(facts_of(fen).king.opposite_side_castling, opposite);
 }
 
-/// `features.md` §4 keeps `king_on_home_square` to classic chess: a Chess960
-/// array can start a king on e1 that has never moved, so the vector drops the
-/// bit the facts still read off the geometry.
+/// A Chess960 array can start a king on e1 that has never moved, and can spend
+/// its rights with both kings still at home: the facts read the geometry, and
+/// say so.
 #[test]
-fn the_home_square_bit_is_left_out_of_a_chess960_vector() {
-    let facts = facts_under(&CHESS960, NINE_SIXTY_HOME);
-    assert_eq!(facts.king.on_home_square, [true, true]);
-    assert!(
-        !Schema::v1()
-            .features_for(&CHESS960)
-            .contains("king", "king_on_home_square")
-    );
-}
+fn a_chess960_king_reads_its_geometry_like_any_other() {
+    let home = facts_under(&CHESS960, NINE_SIXTY_HOME).king;
+    assert_eq!(home.on_home_square, by_colour([true, true]));
 
-/// The same for `king_castled_zone`: a Chess960 array can start both kings in
-/// the kingside zone with no castling having happened.
-#[test]
-fn the_castled_zone_bits_are_left_out_of_a_chess960_vector() {
-    let facts = facts_under(&CHESS960, NINE_SIXTY_WING);
-    assert_eq!(facts.king.castled_kingside, [true, true]);
-    assert_eq!(facts.king.castled_queenside, [false, false]);
-    assert!(
-        !Schema::v1()
-            .features_for(&CHESS960)
-            .contains("king", "king_castled_zone")
-    );
-}
+    let wing = facts_under(&CHESS960, NINE_SIXTY_WING).king;
+    assert_eq!(wing.castled_kingside, by_colour([true, true]));
+    assert_eq!(wing.castled_queenside, by_colour([false, false]));
 
-/// The same for `castled_side`: a Chess960 array can spend its rights with the
-/// kings still on the squares they started on, and no castling ever played.
-#[test]
-fn the_castled_side_is_left_out_of_a_chess960_vector() {
-    let facts = facts_under(&CHESS960, NINE_SIXTY_SPENT);
-    assert_eq!(facts.king.castled_side, [Some(Short), Some(Short)]);
-    assert!(
-        !Schema::v1()
-            .features_for(&CHESS960)
-            .contains("king", "castled_side")
-    );
+    let spent = facts_under(&CHESS960, NINE_SIXTY_SPENT).king;
+    assert_eq!(spent.castled_side, by_colour([Some(Short), Some(Short)]));
 }

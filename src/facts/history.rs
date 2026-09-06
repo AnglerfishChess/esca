@@ -43,7 +43,6 @@ fn balance(position: &Position, colour: Colour) -> i32 {
 /// them, so `positions.len()` is `moves.len() + 1`.
 pub(crate) fn from_history(positions: &[Position], moves: &[Move]) -> HistoryFacts {
     let now = positions.last().expect("a history holds its start");
-    let us = now.side_to_move();
     let played = moves.len();
     let window = played.min(WINDOW);
 
@@ -68,7 +67,8 @@ pub(crate) fn from_history(positions: &[Position], moves: &[Move]) -> HistoryFac
         .find(|&ply| moves[ply].is_capture() || positions[ply + 1].in_check())
         .map_or(played, |ply| played - 1 - ply) as u32;
 
-    facts.material_trend = balance(now, us) - balance(&positions[played - window], us);
+    facts.material_trend =
+        balance(now, Colour::White) - balance(&positions[played - window], Colour::White);
 
     if let Some(&mv) = moves.last() {
         let before = &positions[played - 1];

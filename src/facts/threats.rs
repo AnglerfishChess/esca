@@ -2,11 +2,11 @@
 //! do not hold, and the slider geometry a threat is made of.
 
 use crate::position::Position;
-use crate::types::{Role, Square, SquareSet};
+use crate::types::{Colour, Role, Square, SquareSet};
 
+use super::ThreatFacts;
 use super::exchange::signed_see;
 use super::scan::{Scan, attacks_of, between, line, material_value, order_value};
-use super::{Side, ThreatFacts};
 
 /// The role of the unit standing on `square`.
 fn role_at(position: &Position, square: Square) -> Role {
@@ -19,11 +19,10 @@ fn role_at(position: &Position, square: Square) -> Role {
 /// The `threats` group of `position`.
 pub(super) fn threat_facts(position: &Position, scan: &Scan) -> ThreatFacts {
     let mut facts = ThreatFacts::default();
-    for side in Side::ALL {
-        let i = side.index();
-        let them = !side;
+    for colour in Colour::ALL {
+        let them = !colour;
         // A king is never captured, so it is in none of these sets.
-        let units = scan.units[i] - scan.role_units[i][Role::King.index()];
+        let units = scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()];
         // The sole defenders of an attacked friendly unit; the second such unit
         // a defender holds makes it overloaded.
         let mut sole = SquareSet::EMPTY;
@@ -31,25 +30,25 @@ pub(super) fn threat_facts(position: &Position, scan: &Scan) -> ThreatFacts {
         for square in units {
             let role = role_at(position, square);
             let attackers = scan.attackers_of(square, them);
-            let defenders = scan.attackers_of(square, side);
+            let defenders = scan.attackers_of(square, colour);
 
             let see = signed_see(position, square).unwrap_or(0).max(0);
             if see > 0 {
-                facts.threatened[i].insert(square);
-                facts.threatened_value[i] += material_value(role);
+                facts.threatened[colour].insert(square);
+                facts.threatened_value[colour] += material_value(role);
             }
-            facts.threat_max_gain[i] = facts.threat_max_gain[i].max(see);
+            facts.threat_max_gain[colour] = facts.threat_max_gain.of(colour).max(see);
 
             if attackers
                 .into_iter()
                 .any(|from| order_value(role_at(position, from)) < order_value(role))
             {
-                facts.attacked_by_lesser[i].insert(square);
-                facts.queen_attacked_by_lesser[i] |= role == Role::Queen;
+                facts.attacked_by_lesser[colour].insert(square);
+                facts.queen_attacked_by_lesser[colour] |= role == Role::Queen;
             }
 
             if defenders.is_empty() {
-                facts.loose[i].insert(square);
+                facts.loose[colour].insert(square);
             }
 
             let limit = order_value(role);
@@ -59,48 +58,42 @@ pub(super) fn threat_facts(position: &Position, scan: &Scan) -> ThreatFacts {
                     .count()
             };
             if cheap(attackers) > cheap(defenders) {
-                facts.attacker_surplus[i].insert(square);
+                facts.attacker_surplus[colour].insert(square);
             }
 
             if !attackers.is_empty() && defenders.len() == 1 {
                 let defender = defenders.first().expect("a set of one has a member");
                 if sole.contains(defender) {
-                    facts.overloaded_defenders[i].insert(defender);
+                    facts.overloaded_defenders[colour].insert(defender);
                 }
                 sole.insert(defender);
             }
         }
 
-        facts.removable_defenders[i] = sole
+        facts.removable_defenders[colour] = sole
             .into_iter()
             .filter(|&defender| signed_see(position, defender).is_some_and(|see| see >= 0))
             .collect();
 
-        facts.xray_through_enemy[i] = xrays_through_enemy(scan, side);
-        let (batteries, at_king) = batteries(position, scan, side);
-        facts.battery_count[i] = batteries;
-        facts.battery_at_king[i] = at_king;
+        facts.xray_through_enemy[colour] = xrays_through_enemy(scan, colour);
+        let (batteries, at_king) = batteries(position, scan, colour);
+        facts.battery_count[colour] = batteries;
+        facts.battery_at_king[colour] = at_king;
     }
     facts
 }
 
-/// How many (slider, target) pairs of `side` x-ray an enemy unit through one
+/// How many (slider, target) pairs of `colour` x-ray an enemy unit through one
 /// enemy unit.
-fn xrays_through_enemy(scan: &Scan, side: Side) -> u8 {
-    let i = side.index();
-    let them = (!side).index();
+fn xrays_through_enemy(scan: &Scan, colour: Colour) -> u8 {
+    let them = !colour;
     let mut count = 0u8;
     for role in [Role::Bishop, Role::Rook, Role::Queen] {
-        for slider in scan.role_units[i][role.index()] {
+        for slider in scan.role_units.of(colour)[role.index()] {
             let attacks = scan.attacks_from[slider.index()];
-            for front in attacks & scan.units[them] {
-                let xray = attacks_of(
-                    role,
-                    slider,
-                    scan.colour(side),
-                    scan.occupied - front.to_set(),
-                );
-                let behind = (xray - attacks) & line(slider, front) & scan.units[them];
+            for front in attacks & scan.units.of(them) {
+                let xray = attacks_of(role, slider, colour, scan.occupied - front.to_set());
+                let behind = (xray - attacks) & line(slider, front) & scan.units.of(them);
                 if !behind.is_empty() {
                     count = count.saturating_add(1);
                 }
@@ -110,17 +103,15 @@ fn xrays_through_enemy(scan: &Scan, side: Side) -> u8 {
     count
 }
 
-/// `side`'s batteries, and whether one of their lines holds a square of the
+/// `colour`'s batteries, and whether one of their lines holds a square of the
 /// enemy king ring.
-fn batteries(position: &Position, scan: &Scan, side: Side) -> (u8, bool) {
-    let i = side.index();
-    let colour = scan.colour(side);
-    let sliders = scan.role_units[i][Role::Bishop.index()]
-        | scan.role_units[i][Role::Rook.index()]
-        | scan.role_units[i][Role::Queen.index()];
+fn batteries(position: &Position, scan: &Scan, colour: Colour) -> (u8, bool) {
+    let sliders = scan.role_units.of(colour)[Role::Bishop.index()]
+        | scan.role_units.of(colour)[Role::Rook.index()]
+        | scan.role_units.of(colour)[Role::Queen.index()];
     let ring = attacks_of(
         Role::King,
-        scan.kings[(!side).index()],
+        scan.kings.of(!colour),
         !colour,
         SquareSet::EMPTY,
     );

@@ -24,7 +24,7 @@ def test_a_position_round_trips_through_its_fen() -> None:
     position = esca.Position.from_fen(START)
     assert position.fen == START
     assert position.epd == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"
-    assert position.side_to_move == "w"
+    assert position.side_to_move == "white"
     assert position.castling_rights == "KQkq"
     assert position.en_passant is None
     assert position.clocks_known

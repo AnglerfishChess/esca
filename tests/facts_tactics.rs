@@ -7,8 +7,8 @@
 
 mod common;
 
-use common::{facts_of, facts_under, files};
-use esca::{CHESS960, Side, TacticsFacts};
+use common::{by_colour, facts_of, facts_under, files};
+use esca::{CHESS960, Colour, TacticsFacts};
 use rstest::rstest;
 
 /// The untouched array: twenty moves a side, and not a tactic among them.
@@ -131,9 +131,44 @@ const FREE_PROMOTION: &str = "8/5P2/7k/8/7K/8/8/8 w - - 0 1";
 /// The same board with Black to move.
 const FREE_PROMOTION_THEIRS: &str = "8/5P2/7k/8/7K/8/8/8 b - - 0 1";
 
-/// The two blocks of `fen` under classic chess, us first.
-fn blocks(fen: &str) -> [TacticsFacts; 2] {
+/// The `tactics` group of `fen` under classic chess.
+fn blocks(fen: &str) -> TacticsFacts {
     facts_of(fen).tactics
+}
+
+/// The five checking flags of `colour`, in the order `roles` writes them.
+fn check_roles(tactics: &TacticsFacts, colour: Colour) -> [bool; 5] {
+    [
+        tactics.check_by_pawn,
+        tactics.check_by_knight,
+        tactics.check_by_bishop,
+        tactics.check_by_rook,
+        tactics.check_by_queen,
+    ]
+    .map(|flag| flag.of(colour))
+}
+
+/// The same for the checks whose destination is safe.
+fn safe_check_roles(tactics: &TacticsFacts, colour: Colour) -> [bool; 5] {
+    [
+        tactics.safe_check_by_pawn,
+        tactics.safe_check_by_knight,
+        tactics.safe_check_by_bishop,
+        tactics.safe_check_by_rook,
+        tactics.safe_check_by_queen,
+    ]
+    .map(|flag| flag.of(colour))
+}
+
+/// The four promotion flags of `colour`, queen first.
+fn promotion_roles(tactics: &TacticsFacts, colour: Colour) -> [bool; 4] {
+    [
+        tactics.promotes_to_queen,
+        tactics.promotes_to_rook,
+        tactics.promotes_to_bishop,
+        tactics.promotes_to_knight,
+    ]
+    .map(|flag| flag.of(colour))
 }
 
 /// The five counted roles, named by their letters in the order the schema
@@ -149,7 +184,7 @@ fn roles(letters: &str) -> [bool; 5] {
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::mate(MATE, [true, false])]
-#[case::mate_theirs(MATE_THEIRS, [false, true])]
+#[case::mate_theirs(MATE_THEIRS, [true, false])]
 #[case::checks(CHECKS, [true, true])]
 #[case::discovery(DISCOVERY, [true, false])]
 fn a_check_is_available_when_a_legal_move_leaves_the_enemy_king_attacked(
@@ -157,21 +192,21 @@ fn a_check_is_available_when_a_legal_move_leaves_the_enemy_king_attacked(
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].check_available(), available[0]);
-    assert_eq!(tactics[Side::Them.index()].check_available(), available[1]);
+    assert_eq!(tactics.check_available().white, available[0]);
+    assert_eq!(tactics.check_available().black, available[1]);
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::mate(MATE, [1, 0])]
 #[case::checks(CHECKS, [3, 2])]
-#[case::checks_theirs(CHECKS_THEIRS, [2, 3])]
+#[case::checks_theirs(CHECKS_THEIRS, [3, 2])]
 #[case::promotions(PROMOTIONS, [4, 0])]
 #[case::discovery(DISCOVERY, [7, 0])]
 fn every_checking_move_is_counted_once(#[case] fen: &str, #[case] checks: [u16; 2]) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].check_count, checks[0]);
-    assert_eq!(tactics[Side::Them.index()].check_count, checks[1]);
+    assert_eq!(tactics.check_count.white, checks[0]);
+    assert_eq!(tactics.check_count.black, checks[1]);
 }
 
 #[rstest]
@@ -183,12 +218,12 @@ fn every_checking_move_is_counted_once(#[case] fen: &str, #[case] checks: [u16; 
 #[case::pins(PINS, "b", "q")]
 fn a_checking_move_is_recorded_against_the_role_that_makes_it(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].check_by_role, roles(us));
-    assert_eq!(tactics[Side::Them.index()].check_by_role, roles(them));
+    assert_eq!(check_roles(&tactics, Colour::White), roles(white));
+    assert_eq!(check_roles(&tactics, Colour::Black), roles(black));
 }
 
 #[rstest]
@@ -202,14 +237,8 @@ fn a_safe_check_is_a_check_whose_destination_the_enemy_cannot_profitably_take(
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].safe_check_available(),
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].safe_check_available(),
-        available[1]
-    );
+    assert_eq!(tactics.safe_check_available().white, available[0]);
+    assert_eq!(tactics.safe_check_available().black, available[1]);
 }
 
 #[rstest]
@@ -224,8 +253,8 @@ fn only_the_checks_with_a_safe_destination_are_counted_safe(
     #[case] checks: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].safe_check_count, checks[0]);
-    assert_eq!(tactics[Side::Them.index()].safe_check_count, checks[1]);
+    assert_eq!(tactics.safe_check_count.white, checks[0]);
+    assert_eq!(tactics.safe_check_count.black, checks[1]);
 }
 
 #[rstest]
@@ -237,32 +266,26 @@ fn only_the_checks_with_a_safe_destination_are_counted_safe(
 #[case::pins(PINS, "b", "q")]
 fn a_safe_check_is_recorded_against_the_role_that_makes_it(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].safe_check_by_role, roles(us));
-    assert_eq!(tactics[Side::Them.index()].safe_check_by_role, roles(them));
+    assert_eq!(safe_check_roles(&tactics, Colour::White), roles(white));
+    assert_eq!(safe_check_roles(&tactics, Colour::Black), roles(black));
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::checks(CHECKS, [false, false])]
 #[case::discovery(DISCOVERY, [true, false])]
-#[case::discovery_theirs(DISCOVERY_THEIRS, [false, true])]
+#[case::discovery_theirs(DISCOVERY_THEIRS, [true, false])]
 fn a_double_check_is_a_move_that_leaves_two_units_giving_check(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].double_check_available,
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].double_check_available,
-        available[1]
-    );
+    assert_eq!(tactics.double_check_available.white, available[0]);
+    assert_eq!(tactics.double_check_available.black, available[1]);
 }
 
 #[rstest]
@@ -270,20 +293,14 @@ fn a_double_check_is_a_move_that_leaves_two_units_giving_check(
 #[case::checks(CHECKS, [false, false])]
 #[case::forks(FORKS, [false, false])]
 #[case::discovery(DISCOVERY, [true, false])]
-#[case::discovery_theirs(DISCOVERY_THEIRS, [false, true])]
+#[case::discovery_theirs(DISCOVERY_THEIRS, [true, false])]
 fn a_discovered_check_comes_from_a_unit_that_did_not_move(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].discovered_check_available,
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].discovered_check_available,
-        available[1]
-    );
+    assert_eq!(tactics.discovered_check_available.white, available[0]);
+    assert_eq!(tactics.discovered_check_available.black, available[1]);
 }
 
 #[rstest]
@@ -291,14 +308,14 @@ fn a_discovered_check_comes_from_a_unit_that_did_not_move(
 #[case::stalemate(STALEMATE, [false, false])]
 #[case::checks(CHECKS, [false, false])]
 #[case::mate(MATE, [true, false])]
-#[case::mate_theirs(MATE_THEIRS, [false, true])]
+#[case::mate_theirs(MATE_THEIRS, [true, false])]
 fn a_mate_in_1_is_a_legal_move_that_leaves_the_opponent_checkmated(
     #[case] fen: &str,
     #[case] mate: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].mate_in_1, mate[0]);
-    assert_eq!(tactics[Side::Them.index()].mate_in_1, mate[1]);
+    assert_eq!(tactics.mate_in_1.white, mate[0]);
+    assert_eq!(tactics.mate_in_1.black, mate[1]);
 }
 
 #[rstest]
@@ -312,8 +329,8 @@ fn a_stalemate_in_1_is_a_legal_move_that_leaves_the_opponent_without_one(
     #[case] stalemate: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].stalemate_in_1, stalemate[0]);
-    assert_eq!(tactics[Side::Them.index()].stalemate_in_1, stalemate[1]);
+    assert_eq!(tactics.stalemate_in_1.white, stalemate[0]);
+    assert_eq!(tactics.stalemate_in_1.black, stalemate[1]);
 }
 
 #[rstest]
@@ -326,14 +343,8 @@ fn a_promotion_is_available_when_a_legal_move_makes_one(
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].promotion_available(),
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].promotion_available(),
-        available[1]
-    );
+    assert_eq!(tactics.promotion_available().white, available[0]);
+    assert_eq!(tactics.promotion_available().black, available[1]);
 }
 
 #[rstest]
@@ -343,12 +354,12 @@ fn a_promotion_is_available_when_a_legal_move_makes_one(
 #[case::promotion_captures(PROMOTION_CAPTURES, "ab", "fg")]
 fn a_promotion_is_filed_under_the_file_it_lands_on(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].promotion_files, files(us));
-    assert_eq!(tactics[Side::Them.index()].promotion_files, files(them));
+    assert_eq!(tactics.promotion_files.white, files(white));
+    assert_eq!(tactics.promotion_files.black, files(black));
 }
 
 #[rstest]
@@ -358,12 +369,12 @@ fn a_promotion_is_filed_under_the_file_it_lands_on(
 #[case::promotion_captures(PROMOTION_CAPTURES, [true; 4], [true; 4])]
 fn every_promotion_piece_is_obtainable_wherever_a_pawn_may_promote(
     #[case] fen: &str,
-    #[case] us: [bool; 4],
-    #[case] them: [bool; 4],
+    #[case] white: [bool; 4],
+    #[case] black: [bool; 4],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].promotion_roles, us);
-    assert_eq!(tactics[Side::Them.index()].promotion_roles, them);
+    assert_eq!(promotion_roles(&tactics, Colour::White), white);
+    assert_eq!(promotion_roles(&tactics, Colour::Black), black);
 }
 
 #[rstest]
@@ -376,14 +387,8 @@ fn a_safe_promotion_is_one_whose_destination_is_a_safe_destination(
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].safe_promotion_available(),
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].safe_promotion_available(),
-        available[1]
-    );
+    assert_eq!(tactics.safe_promotion_available().white, available[0]);
+    assert_eq!(tactics.safe_promotion_available().black, available[1]);
 }
 
 #[rstest]
@@ -393,15 +398,12 @@ fn a_safe_promotion_is_one_whose_destination_is_a_safe_destination(
 #[case::promotion_captures(PROMOTION_CAPTURES, "a", "f")]
 fn a_guarded_promotion_square_is_left_out_of_the_safe_files(
     #[case] fen: &str,
-    #[case] us: &str,
-    #[case] them: &str,
+    #[case] white: &str,
+    #[case] black: &str,
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].safe_promotion_files, files(us));
-    assert_eq!(
-        tactics[Side::Them.index()].safe_promotion_files,
-        files(them)
-    );
+    assert_eq!(tactics.safe_promotion_files.white, files(white));
+    assert_eq!(tactics.safe_promotion_files.black, files(black));
 }
 
 #[rstest]
@@ -416,11 +418,8 @@ fn a_capture_is_available_when_a_legal_move_takes_a_unit(
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].capture_available(), available[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].capture_available(),
-        available[1]
-    );
+    assert_eq!(tactics.capture_available().white, available[0]);
+    assert_eq!(tactics.capture_available().black, available[1]);
 }
 
 #[rstest]
@@ -434,8 +433,8 @@ fn each_capturing_move_counts_for_itself_so_four_promotions_count_four(
     #[case] captures: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].capture_count, captures[0]);
-    assert_eq!(tactics[Side::Them.index()].capture_count, captures[1]);
+    assert_eq!(tactics.capture_count.white, captures[0]);
+    assert_eq!(tactics.capture_count.black, captures[1]);
 }
 
 #[rstest]
@@ -444,7 +443,7 @@ fn each_capturing_move_counts_for_itself_so_four_promotions_count_four(
 #[case::forks(FORKS, [false, false])]
 #[case::checks(CHECKS, [true, true])]
 #[case::mate(MATE, [true, false])]
-#[case::mate_theirs(MATE_THEIRS, [false, true])]
+#[case::mate_theirs(MATE_THEIRS, [true, false])]
 #[case::promotion_captures(PROMOTION_CAPTURES, [true, true])]
 #[case::discovery(DISCOVERY, [true, false])]
 fn a_capture_wins_when_the_exchange_it_starts_wins_material(
@@ -452,14 +451,8 @@ fn a_capture_wins_when_the_exchange_it_starts_wins_material(
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].winning_capture_available,
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].winning_capture_available,
-        available[1]
-    );
+    assert_eq!(tactics.winning_capture_available.white, available[0]);
+    assert_eq!(tactics.winning_capture_available.black, available[1]);
 }
 
 #[rstest]
@@ -467,7 +460,7 @@ fn a_capture_wins_when_the_exchange_it_starts_wins_material(
 #[case::pins(PINS, [0, 0])]
 #[case::checks(CHECKS, [5, 3])]
 #[case::mate(MATE, [5, 0])]
-#[case::mate_theirs(MATE_THEIRS, [0, 5])]
+#[case::mate_theirs(MATE_THEIRS, [5, 0])]
 #[case::promotion_captures(PROMOTION_CAPTURES, [13, 13])]
 #[case::in_check(IN_CHECK, [5, 0])]
 #[case::discovery(DISCOVERY, [3, 0])]
@@ -476,11 +469,8 @@ fn the_max_gain_is_the_best_see_over_the_captures_and_never_below_zero(
     #[case] gain: [i32; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].winning_capture_max_gain, gain[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].winning_capture_max_gain,
-        gain[1]
-    );
+    assert_eq!(tactics.winning_capture_max_gain.white, gain[0]);
+    assert_eq!(tactics.winning_capture_max_gain.black, gain[1]);
 }
 
 #[rstest]
@@ -488,21 +478,21 @@ fn the_max_gain_is_the_best_see_over_the_captures_and_never_below_zero(
 #[case::forks(FORKS, [false, false])]
 #[case::checks(CHECKS, [true, true])]
 #[case::discovery(DISCOVERY, [true, false])]
-#[case::mate_theirs(MATE_THEIRS, [false, true])]
+#[case::mate_theirs(MATE_THEIRS, [true, false])]
 fn a_hanging_victim_is_one_the_owner_leaves_undefended_under_attack(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].captures_hanging, available[0]);
-    assert_eq!(tactics[Side::Them.index()].captures_hanging, available[1]);
+    assert_eq!(tactics.captures_hanging.white, available[0]);
+    assert_eq!(tactics.captures_hanging.black, available[1]);
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::forks(FORKS, [0, 0])]
 #[case::checks(CHECKS, [5, 3])]
-#[case::checks_theirs(CHECKS_THEIRS, [3, 5])]
+#[case::checks_theirs(CHECKS_THEIRS, [5, 3])]
 #[case::promotion_captures(PROMOTION_CAPTURES, [5, 5])]
 #[case::discovery(DISCOVERY, [3, 0])]
 fn the_hanging_victims_are_ranked_by_value_and_the_largest_is_kept(
@@ -510,72 +500,66 @@ fn the_hanging_victims_are_ranked_by_value_and_the_largest_is_kept(
     #[case] value: [i32; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].hanging_victim_max_value, value[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].hanging_victim_max_value,
-        value[1]
-    );
+    assert_eq!(tactics.hanging_victim_max_value.white, value[0]);
+    assert_eq!(tactics.hanging_victim_max_value.black, value[1]);
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::promotion_captures(PROMOTION_CAPTURES, [0, 0])]
 #[case::checks(CHECKS, [0, 1])]
-#[case::checks_theirs(CHECKS_THEIRS, [1, 0])]
+#[case::checks_theirs(CHECKS_THEIRS, [0, 1])]
 #[case::discovery(DISCOVERY, [0, 1])]
-#[case::discovery_theirs(DISCOVERY_THEIRS, [1, 0])]
+#[case::discovery_theirs(DISCOVERY_THEIRS, [0, 1])]
 #[case::trade(TRADE, [1, 0])]
-#[case::trade_theirs(TRADE_THEIRS, [0, 1])]
+#[case::trade_theirs(TRADE_THEIRS, [1, 0])]
 fn an_equal_capture_is_one_whose_exchange_comes_out_level(
     #[case] fen: &str,
     #[case] captures: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].equal_capture_count, captures[0]);
-    assert_eq!(tactics[Side::Them.index()].equal_capture_count, captures[1]);
+    assert_eq!(tactics.equal_capture_count.white, captures[0]);
+    assert_eq!(tactics.equal_capture_count.black, captures[1]);
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::checks(CHECKS, [0, 0])]
 #[case::mate(MATE, [0, 1])]
-#[case::mate_theirs(MATE_THEIRS, [1, 0])]
+#[case::mate_theirs(MATE_THEIRS, [0, 1])]
 #[case::forks(FORKS, [0, 1])]
 #[case::pins(PINS, [1, 0])]
-#[case::pins_theirs(PINS_THEIRS, [0, 1])]
+#[case::pins_theirs(PINS_THEIRS, [1, 0])]
 #[case::losing_take(LOSING_TAKE, [1, 0])]
-#[case::losing_take_theirs(LOSING_TAKE_THEIRS, [0, 1])]
+#[case::losing_take_theirs(LOSING_TAKE_THEIRS, [1, 0])]
 fn a_losing_capture_is_one_whose_exchange_costs_material(
     #[case] fen: &str,
     #[case] captures: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].losing_capture_count, captures[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].losing_capture_count,
-        captures[1]
-    );
+    assert_eq!(tactics.losing_capture_count.white, captures[0]);
+    assert_eq!(tactics.losing_capture_count.black, captures[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::pins(PINS, [false, false])]
 #[case::checks(CHECKS, [true, false])]
-#[case::checks_theirs(CHECKS_THEIRS, [false, true])]
+#[case::checks_theirs(CHECKS_THEIRS, [true, false])]
 #[case::forks(FORKS, [true, true])]
 fn a_fork_leaves_the_mover_attacking_two_units_it_may_take(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].fork_available(), available[0]);
-    assert_eq!(tactics[Side::Them.index()].fork_available(), available[1]);
+    assert_eq!(tactics.fork_available().white, available[0]);
+    assert_eq!(tactics.fork_available().black, available[1]);
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::checks(CHECKS, [2, 0])]
-#[case::checks_theirs(CHECKS_THEIRS, [0, 2])]
+#[case::checks_theirs(CHECKS_THEIRS, [2, 0])]
 #[case::promotions(PROMOTIONS, [3, 0])]
 #[case::forks(FORKS, [1, 1])]
 fn every_forking_move_is_counted_once_however_many_units_it_forks(
@@ -583,59 +567,50 @@ fn every_forking_move_is_counted_once_however_many_units_it_forks(
     #[case] forks: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].fork_count, forks[0]);
-    assert_eq!(tactics[Side::Them.index()].fork_count, forks[1]);
+    assert_eq!(tactics.fork_count.white, forks[0]);
+    assert_eq!(tactics.fork_count.black, forks[1]);
 }
 
 #[rstest]
 #[case::start(START, [0, 0])]
 #[case::forks(FORKS, [5, 5])]
 #[case::checks(CHECKS, [9, 0])]
-#[case::checks_theirs(CHECKS_THEIRS, [0, 9])]
+#[case::checks_theirs(CHECKS_THEIRS, [9, 0])]
 #[case::promotions(PROMOTIONS, [9, 0])]
 fn the_forked_value_is_the_largest_single_target_a_forking_king_counting_nine(
     #[case] fen: &str,
     #[case] value: [i32; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].fork_max_value, value[0]);
-    assert_eq!(tactics[Side::Them.index()].fork_max_value, value[1]);
+    assert_eq!(tactics.fork_max_value.white, value[0]);
+    assert_eq!(tactics.fork_max_value.black, value[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::pins(PINS, [false, false])]
 #[case::checks(CHECKS, [true, false])]
-#[case::checks_theirs(CHECKS_THEIRS, [false, true])]
+#[case::checks_theirs(CHECKS_THEIRS, [true, false])]
 #[case::forks(FORKS, [true, false])]
 fn a_knight_fork_is_one_the_knight_itself_makes(#[case] fen: &str, #[case] available: [bool; 2]) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].knight_fork_available,
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].knight_fork_available,
-        available[1]
-    );
+    assert_eq!(tactics.knight_fork_available.white, available[0]);
+    assert_eq!(tactics.knight_fork_available.black, available[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::forks(FORKS, [false, false])]
 #[case::checks(CHECKS, [true, false])]
-#[case::checks_theirs(CHECKS_THEIRS, [false, true])]
+#[case::checks_theirs(CHECKS_THEIRS, [true, false])]
 #[case::promotions(PROMOTIONS, [true, false])]
 fn a_royal_fork_is_a_fork_one_of_whose_targets_is_the_king(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].royal_fork_available, available[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].royal_fork_available,
-        available[1]
-    );
+    assert_eq!(tactics.royal_fork_available.white, available[0]);
+    assert_eq!(tactics.royal_fork_available.black, available[1]);
 }
 
 #[rstest]
@@ -644,20 +619,14 @@ fn a_royal_fork_is_a_fork_one_of_whose_targets_is_the_king(
 #[case::forks(FORKS, [true, false])]
 #[case::mate(MATE, [false, true])]
 #[case::pins(PINS, [true, false])]
-#[case::pins_theirs(PINS_THEIRS, [false, true])]
+#[case::pins_theirs(PINS_THEIRS, [true, false])]
 fn a_pin_is_created_when_the_mover_traps_a_unit_in_front_of_a_dearer_one(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].pin_creation_available(),
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].pin_creation_available(),
-        available[1]
-    );
+    assert_eq!(tactics.pin_creation_available().white, available[0]);
+    assert_eq!(tactics.pin_creation_available().black, available[1]);
 }
 
 #[rstest]
@@ -665,15 +634,15 @@ fn a_pin_is_created_when_the_mover_traps_a_unit_in_front_of_a_dearer_one(
 #[case::forks(FORKS, [1, 0])]
 #[case::mate(MATE, [0, 1])]
 #[case::pins(PINS, [3, 0])]
-#[case::pins_theirs(PINS_THEIRS, [0, 3])]
+#[case::pins_theirs(PINS_THEIRS, [3, 0])]
 #[case::discovery(DISCOVERY, [0, 1])]
 fn every_move_that_pins_is_counted_once_however_many_pins_it_makes(
     #[case] fen: &str,
     #[case] pins: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].pin_creation_count, pins[0]);
-    assert_eq!(tactics[Side::Them.index()].pin_creation_count, pins[1]);
+    assert_eq!(tactics.pin_creation_count.white, pins[0]);
+    assert_eq!(tactics.pin_creation_count.black, pins[1]);
 }
 
 #[rstest]
@@ -681,41 +650,29 @@ fn every_move_that_pins_is_counted_once_however_many_pins_it_makes(
 #[case::forks(FORKS, [false, false])]
 #[case::mate(MATE, [true, true])]
 #[case::pins(PINS, [true, false])]
-#[case::pins_theirs(PINS_THEIRS, [false, true])]
+#[case::pins_theirs(PINS_THEIRS, [true, false])]
 fn a_skewer_puts_the_dearer_unit_in_front_of_the_cheaper_one(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].skewer_creation_available,
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].skewer_creation_available,
-        available[1]
-    );
+    assert_eq!(tactics.skewer_creation_available.white, available[0]);
+    assert_eq!(tactics.skewer_creation_available.black, available[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::forks(FORKS, [false, false])]
 #[case::pins(PINS, [false, true])]
-#[case::pins_theirs(PINS_THEIRS, [true, false])]
+#[case::pins_theirs(PINS_THEIRS, [false, true])]
 #[case::discovery(DISCOVERY, [true, false])]
 fn a_discovered_attack_uncovers_a_slider_onto_a_piece_worth_three_or_more(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].discovered_attack_available,
-        available[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].discovered_attack_available,
-        available[1]
-    );
+    assert_eq!(tactics.discovered_attack_available.white, available[0]);
+    assert_eq!(tactics.discovered_attack_available.black, available[1]);
 }
 
 #[rstest]
@@ -730,8 +687,8 @@ fn the_legal_moves_are_counted_for_us_and_for_them_after_the_null_move(
     #[case] moves: [u16; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].legal_move_count, moves[0]);
-    assert_eq!(tactics[Side::Them.index()].legal_move_count, moves[1]);
+    assert_eq!(tactics.legal_move_count.white, moves[0]);
+    assert_eq!(tactics.legal_move_count.black, moves[1]);
 }
 
 #[rstest]
@@ -745,8 +702,8 @@ fn a_side_is_down_to_only_moves_with_at_most_two_of_them_to_choose_from(
     #[case] only: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].only_moves(), only[0]);
-    assert_eq!(tactics[Side::Them.index()].only_moves(), only[1]);
+    assert_eq!(tactics.only_moves().white, only[0]);
+    assert_eq!(tactics.only_moves().black, only[1]);
 }
 
 #[rstest]
@@ -754,15 +711,16 @@ fn a_side_is_down_to_only_moves_with_at_most_two_of_them_to_choose_from(
 #[case::stalemate(STALEMATE, [true, true])]
 #[case::discovery(DISCOVERY, [true, true])]
 #[case::in_check(IN_CHECK, [true, false])]
-fn their_block_is_unavailable_and_empty_when_the_null_move_does_not_exist(
+fn the_side_not_to_move_is_unread_when_the_null_move_does_not_exist(
     #[case] fen: &str,
     #[case] available: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].available, available[0]);
-    assert_eq!(tactics[Side::Them.index()].available, available[1]);
+    assert_eq!(tactics.available, by_colour(available));
     if !available[1] {
-        assert_eq!(tactics[Side::Them.index()], TacticsFacts::default());
+        assert_eq!(tactics.legal_move_count.black, 0);
+        assert_eq!(tactics.capture_count.black, 0);
+        assert_eq!(tactics.check_count.black, 0);
     }
 }
 
@@ -770,7 +728,7 @@ fn their_block_is_unavailable_and_empty_when_the_null_move_does_not_exist(
 #[case::start(START, [false, false])]
 #[case::mate(MATE, [false, false])]
 #[case::safe_check_capture(SAFE_CHECK_CAPTURE, [true, false])]
-#[case::safe_check_capture_theirs(SAFE_CHECK_CAPTURE_THEIRS, [false, true])]
+#[case::safe_check_capture_theirs(SAFE_CHECK_CAPTURE_THEIRS, [true, false])]
 #[case::unsafe_check_capture(UNSAFE_CHECK_CAPTURE, [false, true])]
 #[case::discovery(DISCOVERY, [true, false])]
 fn a_capturing_check_is_reported_only_when_its_destination_is_safe(
@@ -778,18 +736,15 @@ fn a_capturing_check_is_reported_only_when_its_destination_is_safe(
     #[case] capturing: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].safe_check_capturing, capturing[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].safe_check_capturing,
-        capturing[1]
-    );
+    assert_eq!(tactics.safe_check_capturing.white, capturing[0]);
+    assert_eq!(tactics.safe_check_capturing.black, capturing[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::discovered_queen(DISCOVERED_QUEEN, [true, false])]
-#[case::discovered_queen_theirs(DISCOVERED_QUEEN_THEIRS, [false, true])]
-#[case::mirrored_queen(MIRRORED_QUEEN, [true, false])]
+#[case::discovered_queen_theirs(DISCOVERED_QUEEN_THEIRS, [true, false])]
+#[case::mirrored_queen(MIRRORED_QUEEN, [false, true])]
 #[case::mirrored_queen_theirs(MIRRORED_QUEEN_THEIRS, [false, true])]
 #[case::discovered_rook(DISCOVERED_ROOK, [false, false])]
 fn a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
@@ -797,24 +752,20 @@ fn a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
     #[case] uncovered: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].discovered_attack_on_queen,
-        uncovered[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].discovered_attack_on_queen,
-        uncovered[1]
-    );
-    for side in [Side::Us, Side::Them] {
-        let block = tactics[side.index()];
-        assert!(block.discovered_attack_available || !block.discovered_attack_on_queen);
+    assert_eq!(tactics.discovered_attack_on_queen.white, uncovered[0]);
+    assert_eq!(tactics.discovered_attack_on_queen.black, uncovered[1]);
+    for colour in Colour::ALL {
+        assert!(
+            tactics.discovered_attack_available.of(colour)
+                || !tactics.discovered_attack_on_queen.of(colour)
+        );
     }
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::mate(MATE, [true, false])]
-#[case::mate_theirs(MATE_THEIRS, [false, true])]
+#[case::mate_theirs(MATE_THEIRS, [true, false])]
 #[case::back_rank_luft(BACK_RANK_LUFT, [false, false])]
 #[case::back_rank_one_sided(BACK_RANK_ONE_SIDED, [true, false])]
 #[case::back_rank_blocked(BACK_RANK_BLOCKED, [false, true])]
@@ -823,14 +774,14 @@ fn a_back_rank_mate_threat_is_a_rook_or_queen_check_on_a_sealed_back_rank(
     #[case] threat: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].back_rank_mate_threat, threat[0]);
-    assert_eq!(tactics[Side::Them.index()].back_rank_mate_threat, threat[1]);
+    assert_eq!(tactics.back_rank_mate_threat.white, threat[0]);
+    assert_eq!(tactics.back_rank_mate_threat.black, threat[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::quiet_threat(QUIET_THREAT, [true, false])]
-#[case::quiet_threat_theirs(QUIET_THREAT_THEIRS, [false, true])]
+#[case::quiet_threat_theirs(QUIET_THREAT_THEIRS, [true, false])]
 #[case::threat_stands(THREAT_STANDS, [false, true])]
 #[case::promotion_captures(PROMOTION_CAPTURES, [false, false])]
 #[case::mate(MATE, [false, true])]
@@ -840,27 +791,24 @@ fn a_quiet_threat_leaves_more_to_be_won_than_stands_to_be_won_now(
     #[case] threat: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].quiet_threat_available, threat[0]);
-    assert_eq!(
-        tactics[Side::Them.index()].quiet_threat_available,
-        threat[1]
-    );
+    assert_eq!(tactics.quiet_threat_available.white, threat[0]);
+    assert_eq!(tactics.quiet_threat_available.black, threat[1]);
 }
 
 #[rstest]
 #[case::start(START, [false, false])]
 #[case::mate(MATE, [false, false])]
 #[case::boxed_in(BOXED_IN, [true, false])]
-#[case::boxed_in_theirs(BOXED_IN_THEIRS, [false, true])]
-#[case::boxed_in_mirrored(BOXED_IN_MIRRORED, [true, false])]
+#[case::boxed_in_theirs(BOXED_IN_THEIRS, [true, false])]
+#[case::boxed_in_mirrored(BOXED_IN_MIRRORED, [false, true])]
 #[case::stalemate(STALEMATE, [false, true])]
 fn a_side_has_no_safe_moves_when_every_legal_move_lands_where_it_can_be_taken(
     #[case] fen: &str,
     #[case] boxed: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(tactics[Side::Us.index()].no_safe_moves, boxed[0]);
-    assert_eq!(tactics[Side::Them.index()].no_safe_moves, boxed[1]);
+    assert_eq!(tactics.no_safe_moves.white, boxed[0]);
+    assert_eq!(tactics.no_safe_moves.black, boxed[1]);
 }
 
 #[rstest]
@@ -869,57 +817,48 @@ fn a_side_has_no_safe_moves_when_every_legal_move_lands_where_it_can_be_taken(
 #[case::guarded_promotion(GUARDED_PROMOTION, [false, false])]
 #[case::promotion_captures(PROMOTION_CAPTURES, [true, true])]
 #[case::free_promotion(FREE_PROMOTION, [true, false])]
-#[case::free_promotion_theirs(FREE_PROMOTION_THEIRS, [false, true])]
+#[case::free_promotion_theirs(FREE_PROMOTION_THEIRS, [true, false])]
 fn a_promotion_is_see_positive_when_the_exchange_on_its_square_wins_material(
     #[case] fen: &str,
     #[case] positive: [bool; 2],
 ) {
     let tactics = blocks(fen);
-    assert_eq!(
-        tactics[Side::Us.index()].promotion_see_positive,
-        positive[0]
-    );
-    assert_eq!(
-        tactics[Side::Them.index()].promotion_see_positive,
-        positive[1]
-    );
+    assert_eq!(tactics.promotion_see_positive.white, positive[0]);
+    assert_eq!(tactics.promotion_see_positive.black, positive[1]);
 }
 
 /// A block with no side to move states no tactic, `no_safe_moves` included:
 /// zero there says the block was not computed, not that a safe move exists.
 #[test]
 fn a_block_the_null_move_does_not_allow_states_no_tactic_of_its_own() {
-    let theirs = blocks(IN_CHECK)[Side::Them.index()];
-    assert!(!theirs.available);
-    assert!(!theirs.safe_check_capturing);
-    assert!(!theirs.discovered_attack_on_queen);
-    assert!(!theirs.back_rank_mate_threat);
-    assert!(!theirs.quiet_threat_available);
-    assert!(!theirs.no_safe_moves);
-    assert!(!theirs.promotion_see_positive);
+    let tactics = blocks(IN_CHECK);
+    assert!(!tactics.available.black);
+    assert!(!tactics.safe_check_capturing.black);
+    assert!(!tactics.discovered_attack_on_queen.black);
+    assert!(!tactics.back_rank_mate_threat.black);
+    assert!(!tactics.quiet_threat_available.black);
+    assert!(!tactics.no_safe_moves.black);
+    assert!(!tactics.promotion_see_positive.black);
 }
 
-/// No `tactics` fact is among the four `features.md` §4 keeps for classic chess
-/// only, and the group reads a Chess960 castling by the square its king lands
-/// on: Black is checked by the rook the castling brings to d1, and the mover is
-/// a king, so no `check_by_role` bit is set.
+/// The group reads a Chess960 castling by the square its king lands on: Black
+/// is checked by the rook the castling brings to d1, and the mover is a king,
+/// so no checking-role flag is set for it.
 #[test]
 fn the_tactics_of_a_chess960_position_read_a_castling_by_the_kings_landing_square() {
-    let facts = facts_under(&CHESS960, NINE_SIXTY);
-    let ours = &facts.tactics[Side::Us.index()];
-    let theirs = &facts.tactics[Side::Them.index()];
+    let tactics = facts_under(&CHESS960, NINE_SIXTY).tactics;
 
-    assert_eq!(ours.legal_move_count, 12);
-    assert_eq!(ours.check_count, 2);
-    assert_eq!(ours.check_by_role, roles("r"));
-    assert_eq!(ours.safe_check_count, 2);
-    assert!(!ours.discovered_check_available);
-    assert!(!ours.fork_available());
-    assert!(ours.skewer_creation_available);
-    assert!(!ours.pin_creation_available());
+    assert_eq!(tactics.legal_move_count.white, 12);
+    assert_eq!(tactics.check_count.white, 2);
+    assert_eq!(check_roles(&tactics, Colour::White), roles("r"));
+    assert_eq!(tactics.safe_check_count.white, 2);
+    assert!(!tactics.discovered_check_available.white);
+    assert!(!tactics.fork_available().white);
+    assert!(tactics.skewer_creation_available.white);
+    assert!(!tactics.pin_creation_available().white);
 
-    assert_eq!(theirs.legal_move_count, 15);
-    assert_eq!(theirs.check_count, 1);
-    assert_eq!(theirs.check_by_role, roles("r"));
-    assert!(theirs.skewer_creation_available);
+    assert_eq!(tactics.legal_move_count.black, 15);
+    assert_eq!(tactics.check_count.black, 1);
+    assert_eq!(check_roles(&tactics, Colour::Black), roles("r"));
+    assert!(tactics.skewer_creation_available.black);
 }

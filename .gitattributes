@@ -1,3 +1,4 @@
 data/** text eol=lf
 tests/data/** text eol=lf
 *.bin binary
+docs/features.md text eol=lf

@@ -103,7 +103,7 @@ def test_a_tool_called_over_the_wire_answers_structured_content(client):
     assert answer["legal_move_count"] == 20
 
 
-def test_the_facts_schema_is_served_as_a_resource(client):
+def test_the_facts_catalogue_is_served_as_a_resource(client):
     client.send(
         "initialize",
         {"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}},
@@ -111,12 +111,12 @@ def test_the_facts_schema_is_served_as_a_resource(client):
     client.notify("notifications/initialized")
 
     listed = client.send("resources/list")
-    assert [resource["uri"] for resource in listed["result"]["resources"]] == ["esca://facts-schema"]
+    assert [resource["uri"] for resource in listed["result"]["resources"]] == ["esca://facts-catalogue"]
 
-    read = client.send("resources/read", {"uri": "esca://facts-schema"})
-    schema = json.loads(read["result"]["contents"][0]["text"])
-    assert schema["schema_id"]
-    assert {group["name"] for group in schema["groups"]} >= {"material", "tactics"}
+    read = client.send("resources/read", {"uri": "esca://facts-catalogue"})
+    catalogue = json.loads(read["result"]["contents"][0]["text"])
+    assert {group["name"] for group in catalogue["groups"]} >= {"material", "tactics"}
+    assert catalogue["move"]
 
 
 def test_the_analysis_prompt_is_served(client):

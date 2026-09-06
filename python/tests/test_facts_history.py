@@ -37,8 +37,6 @@ SHUFFLE = "k6r/8/8/8/8/8/8/K7 w - - 0 1"
 #: Chess960: kings on g between rooks on f and h, and a pawn just past b5.
 NINE_SIXTY = "bqnb1rkr/pp1ppppp/8/1Pp5/8/8/P1PPPPPP/BQNB1RKR w HFhf c6 0 3"
 
-#: The `halfmove_bucket` one-hot opens the `history` row (`features.md` §2.13).
-HALFMOVE_BUCKET_AT = 0
 
 #: The helper `conftest.py` hands over.
 FactsOf = Callable[..., esca.Facts]
@@ -50,57 +48,6 @@ def game_of(fen: str, moves: Sequence[str]) -> esca.Game:
     for uci in moves:
         game.play(uci)
     return game
-
-
-def halfmove_bucket(fen: str) -> int:
-    """The bucket the encoded `history` row's one-hot sets for `fen`."""
-    row = esca.encode([fen], groups=["history"])[0]
-    return list(row[HALFMOVE_BUCKET_AT : HALFMOVE_BUCKET_AT + 8]).index(1.0)
-
-
-@pytest.mark.parametrize(
-    ("clock", "bucket"),
-    [
-        (0, 0),
-        (1, 1),
-        (3, 1),
-        (4, 2),
-        (9, 2),
-        (10, 3),
-        (19, 3),
-        (20, 4),
-        (39, 4),
-        (40, 5),
-        (69, 5),
-        (70, 6),
-        (89, 6),
-        (90, 7),
-        (100, 7),
-    ],
-    ids=[
-        "clock_0",
-        "clock_1",
-        "clock_3",
-        "clock_4",
-        "clock_9",
-        "clock_10",
-        "clock_19",
-        "clock_20",
-        "clock_39",
-        "clock_40",
-        "clock_69",
-        "clock_70",
-        "clock_89",
-        "clock_90",
-        "clock_100",
-    ],
-)
-def test_the_halfmove_clock_falls_in_the_bucket_whose_range_holds_it(
-    clock: int, bucket: int, facts_of: FactsOf
-) -> None:
-    fen = f"{NO_CLOCKS} {clock} 60"
-    assert facts_of(fen).history.halfmove_clock == clock
-    assert halfmove_bucket(fen) == bucket
 
 
 @pytest.mark.parametrize(
@@ -317,15 +264,15 @@ def test_the_quiet_plies_are_those_since_the_last_capture_or_check(fen: str, mov
     [
         (START, [], 0),
         (START, QUIET, 0),
-        (START, SCANDI3, -1),
+        (START, SCANDI3, 1),
         (START, SCANDI4, 0),
         (START, SCANDI8, 1),
         (START, SCANDI12, 0),
-        (ROOK_TAKES, ROOK_TAKES_MOVES, -5),
+        (ROOK_TAKES, ROOK_TAKES_MOVES, 5),
     ],
     ids=["fresh", "quiet", "scandi3", "scandi4", "scandi8", "scandi12", "rook_takes"],
 )
-def test_the_material_trend_is_what_the_last_eight_plies_have_won_or_lost(
+def test_the_material_trend_is_what_the_last_eight_plies_won_or_lost_white_less_black(
     fen: str, moves: Sequence[str], trend: int
 ) -> None:
     assert game_of(fen, moves).facts().history.material_trend == trend

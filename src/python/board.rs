@@ -22,6 +22,7 @@ use super::explain::{
     PySkewer, claims,
 };
 use super::facts::{PyAnnotatedMove, PyFacts};
+use super::values::PyFileSet;
 
 /// One set of chess rules.
 #[pyclass(frozen, eq, hash, from_py_object, module = "esca", name = "Variant")]
@@ -106,11 +107,6 @@ impl PySquareSet {
     pub(crate) fn new(inner: SquareSet) -> PySquareSet {
         PySquareSet { inner }
     }
-
-    /// The two sets of a side-paired fact, us first.
-    pub(crate) fn pair(sets: [SquareSet; 2]) -> (PySquareSet, PySquareSet) {
-        (PySquareSet::new(sets[0]), PySquareSet::new(sets[1]))
-    }
 }
 
 #[pymethods]
@@ -175,6 +171,12 @@ impl PySquareSet {
 
     fn __invert__(&self) -> PySquareSet {
         PySquareSet::new(!self.inner)
+    }
+
+    /// The files the members stand on.
+    #[getter]
+    fn files(&self) -> PyFileSet {
+        PyFileSet::new(self.inner.files())
     }
 
     /// Whether every member is a member of `other`.

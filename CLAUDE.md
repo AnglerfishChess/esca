@@ -1,16 +1,21 @@
 # esca
 
-`docs/features.md` defines every fact and decides every dispute about one.
+A fact is declared once, in the `facts_group!` block that defines its group in
+`src/facts/mod.rs`: the field, its type and the doc comment that is its
+meaning. `docs/features.md` is generated from those blocks
+(`cargo run --example catalogue`) and a test fails when it is stale.
 
 ## A fact exists only with all of these
 
-1. Its entry in `docs/features.md`.
-2. Its Rust implementation under `src/facts/`.
-3. Its Python reference in `tests/reference/features.py`, at the repo root.
-4. Hand-derived parameterized cases in **both** `tests/facts_<group>.rs`
+1. Its field, type and doc comment in the group's `facts_group!` block.
+2. Its computation under `src/facts/`, written by colour, never by
+   side-to-move.
+3. Hand-derived parameterized cases in **both** `tests/facts_<group>.rs`
    (`#[rstest]`) and `python/tests/test_facts_<group>.py` (`parametrize`),
-   mirrored case for case, at least three per fact and per side, plus a
-   Chess960 case for each fact `features.md` §4 marks variant-sensitive.
+   mirrored case for case, at least three per fact and per colour, a case with
+   Black to move for anything a mover's view could have flipped, and a Chess960
+   case for anything that reads the back rank.
+4. `docs/features.md` regenerated.
 
 Cases state what the definition requires; a value read off the implementation
 tests nothing. Positions are named constants with a one-line note on what they
@@ -26,15 +31,16 @@ and readable as usage examples, independent and parallel-safe.
 
 ## Changing what a fact computes
 
-Fix the Rust and the Python reference together, bump that group's `version` in
-`src/schema.rs`, regenerate with `cargo run --release --example fixtures`, and
-read the fixture diff: every changed value is a changed trained contract.
+Fix the computation and the cases that pin it in both languages, regenerate
+`docs/features.md`, and say in `CHANGELOG.md` what now answers differently: a
+consumer reads these by name, so a changed meaning is a changed contract.
 
 ## Repo layout and commands
 
-The crate is the repository: `src/`, `tests/` and `benches/` at the root,
-`data/` for the bundled ECO catalogue, `python/` for the maturin project
-(`python/esca` the package, `python/tests` its suite), `docs/` for the spec.
+The crate is the repository: `src/`, `tests/`, `benches/` and `examples/` at
+the root, `data/` for the bundled ECO catalogue, `python/` for the maturin
+project (`python/esca` the package, `python/tests` its suite), `docs/` for the
+spec, `mcp/` for the MCP server.
 
 ```sh
 uv sync --all-groups            # builds the extension in place, editable

@@ -25,7 +25,7 @@ defined before it is used.
 | **occupancy** | The set of squares carrying a unit, of either colour or of one. |
 | **back rank** | The rank a colour's king and rooks start on: rank 1 for White, rank 8 for Black. |
 | **relative rank** | A rank counted from the owner's own back rank: relative rank 1 is that colour's back rank, relative rank 8 is where its pawns promote. |
-| **mover's view** | The board as seen by the side to move: when Black is to move, ranks are flipped (rank *r* becomes rank 9−*r*) and colours are swapped. Files are not mirrored. |
+| **counted from a side's own back rank** | A rank read from the owner's side of the board: rank 1 is that colour's back rank and rank 8 the rank its pawns promote on. White's rank 5 is rank 5; Black's is rank 4. |
 | **promotion** | Replacing a pawn that reaches its relative rank 8 with another piece of the same colour. |
 | **material** | The units a side has, or their summed conventional value (P=1, N=B=3, R=5, Q=9). |
 
@@ -112,17 +112,14 @@ defined before it is used.
 | **Round** | Not an esca type. `Game` is one played game; a match, round or tournament is a sequence of `Game`s with pairing and scoring data, which callers keep themselves. "Round" is also not used for a full move — that is *full move*. |
 | **Move** (esca type) | One legal action, stored as origin, destination, optional promotion role, and kind (quiet, capture, castling, en passant). Castling is stored king-to-rook so it is unambiguous in every variant; its text form is produced by the `Variant`. |
 | **MoveList** | An ordered list sized inline for the largest legal move count and filled without allocating. It holds plain moves or annotated ones. |
-| **Side** | `Us` or `Them`, relative to the side to move. Facts are expressed in these terms, so no fact distinguishes actual White from actual Black. |
+| **ByColour** | One value for White and one for Black: `.white`, `.black`, `.of(colour)`. Every fact that differs between the two sides is one, so a fact never has to be read against whose turn it is. |
 | **SquareSet** | A typed set of squares — one bit per square — supporting union, intersection, difference, membership, count and iteration. The idiomatic name for what engines call a *bitboard*. |
 | **FileSet** | The same for the eight files. |
-| **Facts** | esca's word for cheap, position-derived features: everything true about a position that follows from the position plus at most one ply of lookahead. Grouped into plain structs with public fields (`facts.pawns.passed[Us]`). |
+| **Facts** | esca's word for cheap, position-derived answers: everything true about a position that follows from the position plus at most one ply of lookahead. Grouped into plain structs with public fields (`facts.pawns.passed.white`). |
 | **MoveFacts** | The same for one legal move: what it captures, whether it checks, whether its destination is safe. |
 | **annotated legal move** | A `Move` paired with its `MoveFacts`. |
 | **Scratch** | Reusable buffers — attack maps, pawn spans, the move list — that let repeated fact extraction run without allocating. |
-| **Schema** | A versioned, ordered list of feature groups with their widths and offsets: the contract between the extractor that writes a feature vector and the net that consumes one. |
-| **SchemaId** | A 128-bit hash over a schema's canonical text. It changes when any group name, order, width or encoding changes, and only then. |
-| **GroupSet** | A subset of a schema's groups, selecting which of them an encoding emits. |
-| **FeatureSet** | A subset of a schema's features, e.g. those whose definitions hold under one variant. A feature outside the set is encoded as zeros, so widths and offsets are unaffected. |
+| **catalogue** | Every group, field, type and meaning as data. `docs/features.md` is generated from it, and a consumer that must walk the facts without knowing them reads it. |
 | **summary** | A human-readable rendering of a position or its facts, for reading and for diagnostics. Its exact text is not a stable format. |
 | **explain** (esca module) | The layer that answers a rules question with the evidence behind it: not "you may not castle" but the right, the rook, the check, the covered squares and the units covering them. Every reason that applies is answered at once. |
 | **Wing** (esca type) | Which castling: `Short`, the king landing on the g-file, or `Long`, the king landing on the c-file. Named by where the king lands, because a shuffled back rank can put either rook on either side of the centre. |
@@ -132,15 +129,13 @@ defined before it is used.
 
 ---
 
-## 6. Features and facts
+## 6. The facts themselves
 
 | Term | Definition |
 |---|---|
-| **feature** | One named value inside a schema group, with a fixed width and encoding. |
-| **group** | A named, independently versioned block of features, e.g. `pawns` or `king`. |
-| **width** | How many `f32` values a feature, a group or a whole schema occupies. |
-| **one-hot** | A width-*k* encoding carrying exactly one 1.0, or all zeros when the feature is absent. |
-| **plane** | A 64-value feature, one per square, in the mover's view. |
+| **fact** | One named value of one group: a name, a type and one sentence of meaning. |
+| **group** | A named block of facts about one aspect of a position, e.g. `pawns` or `king`. |
+| **field** | A fact as the API spells it: an attribute of a group. |
 | **attack** | Side X attacks square *s* if some unit of X could capture a unit standing on *s*, ignoring pins and ignoring whether X's own king would be exposed. Pawns attack diagonally only; sliders stop at the first occupied square. |
 | **attack map** | The union of a side's attacked squares, kept per role as well. |
 | **defend** | A unit of X is defended when the square it stands on is attacked by X. A unit never defends itself. |
@@ -157,7 +152,7 @@ defined before it is used.
 | **fork** | A move after which the moved unit attacks two or more enemy units that are each more valuable than it or undefended. A *royal fork* has the king among the targets. |
 | **king ring** | The up-to-8 squares adjacent to a king. |
 | **tropism** | How close a side's units are to the enemy king, as a distance average. |
-| **phase** | How far from the opening a position is, from material: 1.0 for a full set of pieces, 0.0 for a pawn endgame. |
+| **phase points** | How much is left of a full opening set, counted 4 for a queen, 2 for a rook and 1 for a minor over both sides: 24 at the opening array, 0 in a pawn endgame. |
 | **passed pawn** | A pawn with no enemy pawn ahead of it on its own or an adjacent file. |
 | **doubled / isolated / backward pawn** | Two or more of a colour on one file / no friendly pawn on either adjacent file / unable to advance safely and unsupported by a friendly pawn beside or behind it. |
 | **open / semi-open file** | No pawn of either colour on it / no pawn of one named colour, but at least one of the other. |
