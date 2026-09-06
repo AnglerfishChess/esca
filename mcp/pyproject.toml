@@ -1,0 +1,72 @@
+[project]
+name = "chess-esca-mcp"
+version = "0.3.0"
+description = "An MCP server over the esca chess library: rules, facts, explanations, openings and PGN, with no engine"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Alexander Myodov", email = "amyodov@gmail.com" },
+]
+keywords = ["chess", "chess960", "fen", "pgn", "MCP", "model context protocol", "esca"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment :: Board Games",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    # The version this server is released with; one tag ships both.
+    "esca==0.3.0",
+    "mcp>=1.28.1,<2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/AnglerfishChess/esca"
+Repository = "https://github.com/AnglerfishChess/esca"
+Documentation = "https://github.com/AnglerfishChess/esca/blob/main/mcp/README.md"
+Changelog = "https://github.com/AnglerfishChess/esca/blob/main/CHANGELOG.md"
+Issues = "https://github.com/AnglerfishChess/esca/issues"
+
+[project.scripts]
+chess-esca-mcp = "chess_esca_mcp.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["chess_esca_mcp"]
+
+# Development takes esca from the crate beside this project, so a change to the
+# library is served without a release; an installed wheel resolves `esca` from
+# PyPI, which is what the dependency above names.
+[tool.uv.sources]
+esca = { path = "..", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-xdist>=3.6",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PT", "RUF"]
+
+[tool.pyrefly]
+project-includes = ["chess_esca_mcp", "tests"]
+search-path = ["."]
+python-version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -ra"

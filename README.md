@@ -90,6 +90,15 @@ encoded batches with their targets.
 - Polyglot opening books: the format's own key on every `Position`, books read, drawn from and
   built, and an ECO code and name for some 3,800 named positions.
 
+## MCP server
+
+`mcp/` is a second distribution from this repository: `chess-esca-mcp`, an MCP server that hands
+esca's answers to an LLM as JSON — the whole state of a position, whether a move is legal and
+every reason it is not, the named facts, the ECO name, opening-book moves, and PGN read and
+written. It carries no engine and does no search. It runs as `uvx chess-esca-mcp`, is versioned
+with the library and pins the matching `esca`, and is documented in
+[`mcp/README.md`](https://github.com/AnglerfishChess/esca/blob/main/mcp/README.md).
+
 ## Documentation
 
 - [`docs/esca-api.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-api.md) —
@@ -108,9 +117,9 @@ encoded batches with their targets.
 - [AnglerfishChess/chess-uci-mcp](https://github.com/AnglerfishChess/chess-uci-mcp) — an MCP server
   that drives UCI engines from an LLM, so an esca position can be handed to Stockfish for a number
   and a line to go with the facts esca reads off it.
-- `chess-esca-mcp` — planned: an MCP server and plugin serving esca's explanations, so an LLM can
-  ask why a move is legal or a draw claimable and get the squares behind the answer. Not yet
-  published.
+- [AnglerfishChess/plugins](https://github.com/AnglerfishChess/plugins) — the agent-plugin
+  marketplace, where `chess-esca-mcp` ships with a skill that teaches an agent which of its tools
+  answers which question.
 
 ## License
 

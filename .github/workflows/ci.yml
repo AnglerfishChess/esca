@@ -94,3 +94,53 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
           cargo metadata --format-version 1 --all-features | python3 check_licences.py
+
+  mcp:
+    # `mcp/` takes esca from the crate beside it, so its sync builds the
+    # extension and this job needs the toolchain the wheels are built with.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.85.1"
+      - uses: Swatinem/rust-cache@v2
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # One release ships the crate and the server, so five copies of the
+      # version have to agree before a tag freezes any of them.
+      - name: The crate's version, the server's, its pin and the registry entry
+        working-directory: .
+        run: |
+          python3 - <<'PY'
+          import json, re, sys, tomllib
+
+          want = tomllib.load(open("Cargo.toml", "rb"))["package"]["version"]
+          project = tomllib.load(open("mcp/pyproject.toml", "rb"))["project"]
+          listing = json.load(open("mcp/server.json"))
+          pinned = next(name for name in project["dependencies"] if name.startswith("esca"))
+          module = open("mcp/chess_esca_mcp/__init__.py").read()
+
+          found = {
+              "mcp/pyproject.toml version": project["version"],
+              "mcp/pyproject.toml esca pin": pinned.removeprefix("esca=="),
+              "mcp/server.json version": listing["version"],
+              "mcp/server.json package version": listing["packages"][0]["version"],
+              "chess_esca_mcp.__version__": re.search(r'__version__ = "([^"]+)"', module).group(1),
+          }
+          drifted = {where: value for where, value in found.items() if value != want}
+          print("\n".join(f"{where}: {value}, not {want}" for where, value in drifted.items())
+                or f"every copy of the version reads {want}")
+          sys.exit(1 if drifted else 0)
+          PY
+
+      - run: uv sync --all-groups
+      - run: uv run --no-sync pytest
+      - run: uvx ruff check .
+      - run: uvx ruff format --check .
+      - run: uvx pyrefly check
