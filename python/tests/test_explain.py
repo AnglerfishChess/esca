@@ -201,7 +201,7 @@ def material_config(status: explain.DrawStatus) -> str | None:
 def stalemate_detail(status: explain.DrawStatus) -> explain.StalemateDetail:
     """The stalemate detail a draw status carries."""
     for draw in status.automatic:
-        if draw.kind == "stalemate":
+        if draw.kind == "stalemate" and draw.stalemate is not None:
             return draw.stalemate
     raise AssertionError("the position is not a stalemate")
 
@@ -454,12 +454,14 @@ def test_an_illegal_en_passant_names_what_forbids_it(fen: str, origin: str, kind
 def test_the_rank_pin_names_the_slider_the_two_pawns_hide() -> None:
     """The rank pin binds neither pawn on its own, so it names the slider."""
     obstacle = ep_capture(EP_RANK_PIN, "e5").forbidden_by
+    assert obstacle is not None
     assert obstacle.kind == "exposes_king"
     assert obstacle.attacker == "a5"
 
 
 def test_a_pinned_pawn_names_its_pinner_and_the_ray_it_may_not_leave() -> None:
     obstacle = ep_capture(EP_PINNED, "e5").forbidden_by
+    assert obstacle is not None
     assert obstacle.kind == "pinned"
     assert obstacle.pinner == "b2"
     assert set(obstacle.ray) == {"c3", "d4", "e5", "f6"}
@@ -467,6 +469,7 @@ def test_a_pinned_pawn_names_its_pinner_and_the_ray_it_may_not_leave() -> None:
 
 def test_an_en_passant_that_leaves_a_check_standing_names_the_checkers() -> None:
     obstacle = ep_capture(EP_IN_CHECK, "e5").forbidden_by
+    assert obstacle is not None
     assert obstacle.kind == "in_check"
     assert set(obstacle.by) == {"a7"}
 
@@ -822,11 +825,13 @@ def test_a_claimable_draw_carries_the_evidence_for_the_claim() -> None:
     """A claim carries the count or the clock that earns it."""
     threefold = game_of(" ".join([SHUFFLE] * 2)).draw_status().claimable[0]
     assert threefold.kind == "threefold"
+    assert threefold.repetition is not None
     assert threefold.repetition.count == 3
     assert threefold.repetition.plies == [0, 4, 8]
 
     fifty = game_from(CLOCK_AT_99, "Kd1").draw_status().claimable[0]
     assert fifty.kind == "fifty_moves"
+    assert fifty.fifty_move is not None
     assert fifty.fifty_move.clock == 100
 
 
@@ -862,6 +867,18 @@ def test_a_move_of_another_position_claims_nothing() -> None:
 # ---------------------------------------------------------------------- prose
 
 
+def forbidden(capture: explain.EpCapture) -> explain.EpObstacle:
+    """What forbids `capture`, which the case says there is."""
+    assert capture.forbidden_by is not None
+    return capture.forbidden_by
+
+
+def last_reset(status: explain.FiftyMove) -> explain.Reset:
+    """The ply that last reset the clock, which the case says there was one."""
+    assert status.last_reset is not None
+    return status.last_reset
+
+
 def sentences() -> dict[str, str]:
     """Every value the layer answers with, by the case that produces it."""
     stalemate = game_from(SMOTHERED_STALEMATE, "").draw_status()
@@ -878,17 +895,17 @@ def sentences() -> dict[str, str]:
         "en_passant_no_taker": position(EP_NO_TAKER).en_passant_status().describe(),
         "en_passant_forbidden": position(EP_PINNED).en_passant_status().describe(),
         "ep_capture_legal": ep_capture(EP_PLAIN, "e5").describe(),
-        "ep_obstacle_pinned": ep_capture(EP_PINNED, "e5").forbidden_by.describe(),
-        "ep_obstacle_exposes_king": ep_capture(EP_RANK_PIN, "e5").forbidden_by.describe(),
-        "ep_obstacle_in_check": ep_capture(EP_IN_CHECK, "e5").forbidden_by.describe(),
+        "ep_obstacle_pinned": forbidden(ep_capture(EP_PINNED, "e5")).describe(),
+        "ep_obstacle_exposes_king": forbidden(ep_capture(EP_RANK_PIN, "e5")).describe(),
+        "ep_obstacle_in_check": forbidden(ep_capture(EP_IN_CHECK, "e5")).describe(),
         "pin": position(TWO_PINS).pins("w")[0].describe(),
         "skewer": position(SKEWERED_QUEEN).skewers("b")[0].describe(),
         "near_miss": triangulated.near_misses[0].describe(),
         "repetition": game_of(SHUFFLE).repetition_status().describe(),
         "repetition_with_near_misses": triangulated.describe(),
         "fifty_move": game_from(CLOCK_AT_99, "").fifty_move_status().describe(),
-        "reset_pawn_move": game_of("e4").fifty_move_status().last_reset.describe(),
-        "reset_capture": game_of("e4 d5 exd5").fifty_move_status().last_reset.describe(),
+        "reset_pawn_move": last_reset(game_of("e4").fifty_move_status()).describe(),
+        "reset_capture": last_reset(game_of("e4 d5 exd5").fifty_move_status()).describe(),
         "draw_status_none": game_of("").draw_status().describe(),
         "draw_status_stalemate": stalemate.describe(),
         "draw_status_two_draws": game_from(BISHOP_STALEMATE, "").draw_status().describe(),

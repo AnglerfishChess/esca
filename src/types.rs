@@ -899,6 +899,187 @@ impl IntoIterator for SquareSet {
     }
 }
 
+/// One value per file, file a first.
+///
+/// Read a file's value with `[file]` or [`PerFile::of`]; iterate to walk a to
+/// h. The order is part of the type, so a value read out of one carries the
+/// file it belongs to without a separate note.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct PerFile<T>([T; 8]);
+
+impl<T> PerFile<T> {
+    /// The eight values, file a first.
+    #[inline]
+    pub const fn new(values: [T; 8]) -> PerFile<T> {
+        PerFile(values)
+    }
+
+    /// The values as an array, file a first.
+    #[inline]
+    pub fn into_array(self) -> [T; 8] {
+        self.0
+    }
+
+    /// The values, file a first.
+    #[inline]
+    pub fn iter(&self) -> core::slice::Iter<'_, T> {
+        self.0.iter()
+    }
+
+    /// `f` applied to every value, file order kept.
+    #[inline]
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerFile<U> {
+        PerFile(self.0.map(f))
+    }
+}
+
+impl<T: Copy> PerFile<T> {
+    /// The value of `file`.
+    #[inline]
+    pub const fn of(&self, file: File) -> T {
+        self.0[file as usize]
+    }
+
+    /// The eight values, with `f(file)` for each file.
+    #[inline]
+    pub fn from_fn(mut f: impl FnMut(File) -> T) -> PerFile<T>
+    where
+        T: Default,
+    {
+        let mut values = [T::default(); 8];
+        for file in File::ALL {
+            values[file.index()] = f(file);
+        }
+        PerFile(values)
+    }
+}
+
+impl<T> Index<File> for PerFile<T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, file: File) -> &T {
+        &self.0[file as usize]
+    }
+}
+
+impl<T> IndexMut<File> for PerFile<T> {
+    #[inline]
+    fn index_mut(&mut self, file: File) -> &mut T {
+        &mut self.0[file as usize]
+    }
+}
+
+impl<T> IntoIterator for PerFile<T> {
+    type Item = T;
+    type IntoIter = core::array::IntoIter<T, 8>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a PerFile<T> {
+    type Item = &'a T;
+    type IntoIter = core::slice::Iter<'a, T>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+/// One value per rank, rank 1 first.
+///
+/// Where the fact is counted from a side's own back rank, its own meaning says
+/// so, and rank 1 is then that side's first rank.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct PerRank<T>([T; 8]);
+
+impl<T> PerRank<T> {
+    /// The eight values, rank 1 first.
+    #[inline]
+    pub const fn new(values: [T; 8]) -> PerRank<T> {
+        PerRank(values)
+    }
+
+    /// The values as an array, rank 1 first.
+    #[inline]
+    pub fn into_array(self) -> [T; 8] {
+        self.0
+    }
+
+    /// The values, rank 1 first.
+    #[inline]
+    pub fn iter(&self) -> core::slice::Iter<'_, T> {
+        self.0.iter()
+    }
+
+    /// `f` applied to every value, rank order kept.
+    #[inline]
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerRank<U> {
+        PerRank(self.0.map(f))
+    }
+}
+
+impl<T: Copy> PerRank<T> {
+    /// The value of `rank`.
+    #[inline]
+    pub const fn of(&self, rank: Rank) -> T {
+        self.0[rank as usize]
+    }
+
+    /// The eight values, with `f(rank)` for each rank.
+    #[inline]
+    pub fn from_fn(mut f: impl FnMut(Rank) -> T) -> PerRank<T>
+    where
+        T: Default,
+    {
+        let mut values = [T::default(); 8];
+        for rank in Rank::ALL {
+            values[rank.index()] = f(rank);
+        }
+        PerRank(values)
+    }
+}
+
+impl<T> Index<Rank> for PerRank<T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, rank: Rank) -> &T {
+        &self.0[rank as usize]
+    }
+}
+
+impl<T> IndexMut<Rank> for PerRank<T> {
+    #[inline]
+    fn index_mut(&mut self, rank: Rank) -> &mut T {
+        &mut self.0[rank as usize]
+    }
+}
+
+impl<T> IntoIterator for PerRank<T> {
+    type Item = T;
+    type IntoIter = core::array::IntoIter<T, 8>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a PerRank<T> {
+    type Item = &'a T;
+    type IntoIter = core::slice::Iter<'a, T>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// One value for White and one for Black.
 ///
 /// Read a side's value by name — `.white`, `.black` — or by colour, with
@@ -977,7 +1158,9 @@ impl<T> IndexMut<Colour> for ByColour<T> {
 mod serde_impls {
     use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
 
-    use super::{ByColour, Colour, File, FileSet, Piece, Rank, Role, Square, SquareSet};
+    use super::{
+        ByColour, Colour, File, FileSet, PerFile, PerRank, Piece, Rank, Role, Square, SquareSet,
+    };
 
     impl Serialize for Colour {
         fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
@@ -1033,6 +1216,26 @@ mod serde_impls {
             let mut seq = out.serialize_seq(Some(self.len() as usize))?;
             for file in *self {
                 seq.serialize_element(&file)?;
+            }
+            seq.end()
+        }
+    }
+
+    impl<T: Serialize> Serialize for PerFile<T> {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            let mut seq = out.serialize_seq(Some(8))?;
+            for value in self.iter() {
+                seq.serialize_element(value)?;
+            }
+            seq.end()
+        }
+    }
+
+    impl<T: Serialize> Serialize for PerRank<T> {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            let mut seq = out.serialize_seq(Some(8))?;
+            for value in self.iter() {
+                seq.serialize_element(value)?;
             }
             seq.end()
         }

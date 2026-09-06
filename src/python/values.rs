@@ -1,14 +1,16 @@
 //! The Python spellings of the values a fact can hold: a pair by colour, a set
-//! of files, and the plain-data form every one of them takes in `to_dict`.
+//! of files, a fixed run as a tuple, and the plain data `to_dict` answers in.
+
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple, PyType};
 
 use crate::types::{ByColour, Colour, FileSet};
 
-use super::board::PySquareSet;
-use super::convert::{colour_from, colour_name, file_from, file_name};
+use super::convert::{colour_from, file_from, file_name};
 
 /// One value for White and one for Black.
 ///
@@ -39,6 +41,23 @@ impl PyByColour {
 
 #[pymethods]
 impl PyByColour {
+    /// The attributes a positional pattern reads, White first.
+    #[classattr]
+    #[pyo3(name = "__match_args__")]
+    const MATCH_ARGS: (&'static str, &'static str) = ("white", "black");
+
+    /// `ByColour[T]`, so that the pair can be written as the type it holds.
+    #[classmethod]
+    fn __class_getitem__<'py>(
+        cls: &Bound<'py, PyType>,
+        item: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        cls.py()
+            .import("types")?
+            .getattr("GenericAlias")?
+            .call1((cls, item))
+    }
+
     #[new]
     fn py_new(white: Py<PyAny>, black: Py<PyAny>) -> PyByColour {
         PyByColour { white, black }
@@ -159,66 +178,65 @@ impl PyFileSet {
         (self.files(),)
     }
 }
+/// A fixed run of values, handed over as a tuple so that its length is part of
+/// what a reader sees. The order is the one the fact's type or its own meaning
+/// states.
+pub(crate) struct Fixed<T>(pub Vec<T>);
 
-/// The plain-data form of a fact: a square set becomes the list of its squares,
-/// a file set the list of its files, a pair by colour an object keyed by
-/// colour, and everything else is already plain.
-pub(crate) fn jsonable<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py = value.py();
-    if let Ok(set) = value.cast::<PySquareSet>() {
-        return PyList::new(
-            py,
-            set.get().inner.into_iter().map(|square| square.to_string()),
-        )?
-        .into_bound_py_any(py);
+impl<'py, T> IntoPyObject<'py> for Fixed<T>
+where
+    T: IntoPyObject<'py>,
+{
+    type Target = PyTuple;
+    type Output = Bound<'py, PyTuple>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        PyTuple::new(py, self.0)
     }
-    if let Ok(set) = value.cast::<PyFileSet>() {
-        return PyList::new(py, set.get().inner.into_iter().map(file_name))?.into_bound_py_any(py);
-    }
-    if let Ok(pair) = value.cast::<PyByColour>() {
-        let pair = pair.get();
-        let out = PyDict::new(py);
-        out.set_item(colour_name(Colour::White), jsonable(pair.white.bind(py))?)?;
-        out.set_item(colour_name(Colour::Black), jsonable(pair.black.bind(py))?)?;
-        return out.into_bound_py_any(py);
-    }
-    if let Ok(items) = value.cast::<PyList>() {
-        let out = PyList::empty(py);
-        for item in items.iter() {
-            out.append(jsonable(&item)?)?;
-        }
-        return out.into_bound_py_any(py);
-    }
-    if let Ok(items) = value.cast::<PyTuple>() {
-        let out = PyList::empty(py);
-        for item in items.iter() {
-            out.append(jsonable(&item)?)?;
-        }
-        return out.into_bound_py_any(py);
-    }
-    Ok(value.clone())
 }
 
-/// The named attributes of `owner`, in the order `names` gives them.
-pub(crate) fn fields_of<'py>(
-    owner: &Bound<'py, PyAny>,
-    names: &[&'static str],
+/// The plain data of `value`, in the one JSON form the facts are written in.
+///
+/// The crate serialises it and Python parses that text back, so the two
+/// surfaces cannot answer differently.
+pub(crate) fn plain<'py, T: serde::Serialize>(
+    py: Python<'py>,
+    value: &T,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let out = PyDict::new(owner.py());
-    for name in names {
-        out.set_item(name, owner.getattr(*name)?)?;
+    let text = serde_json::to_string(value).map_err(super::convert::value_error)?;
+    Ok(py
+        .import("json")?
+        .call_method1("loads", (text,))?
+        .cast_into::<PyDict>()?)
+}
+
+/// `Class(name=value, ...)`, every fact of the group with the value it holds.
+pub(crate) fn repr_of(
+    owner: &Bound<'_, PyAny>,
+    class: &str,
+    names: &[&'static str],
+) -> PyResult<String> {
+    let mut out = String::from(class);
+    out.push('(');
+    for (index, name) in names.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(name);
+        out.push('=');
+        out.push_str(&owner.getattr(*name)?.repr()?.to_string());
     }
+    out.push(')');
     Ok(out)
 }
 
-/// The same, with every value in its plain-data form.
-pub(crate) fn dict_of<'py>(
-    owner: &Bound<'py, PyAny>,
-    names: &[&'static str],
-) -> PyResult<Bound<'py, PyDict>> {
-    let out = PyDict::new(owner.py());
-    for name in names {
-        out.set_item(name, jsonable(&owner.getattr(*name)?)?)?;
-    }
-    Ok(out)
+/// A hash of `value`, read off its JSON form so that two groups holding the
+/// same facts hash alike.
+pub(crate) fn hash_of<T: serde::Serialize>(value: &T) -> u64 {
+    let mut hash = DefaultHasher::new();
+    serde_json::to_string(value)
+        .unwrap_or_default()
+        .hash(&mut hash);
+    hash.finish()
 }

@@ -1,6 +1,6 @@
 //! Pawn structure.
 
-use crate::types::{Colour, File, Role, Square, SquareSet};
+use crate::types::{Colour, File, Rank, Role, Square, SquareSet};
 
 use super::PawnFacts;
 use super::king::shield_files;
@@ -47,8 +47,9 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
         let theirs = facts.pawns.of(them);
 
         for square in ours {
-            facts.count_by_file[colour][square.file().index()] += 1;
-            facts.count_by_rank[colour][scan.relative_rank(square, colour) as usize - 1] += 1;
+            facts.count_by_file[colour][square.file()] += 1;
+            facts.count_by_rank[colour]
+                [Rank::ALL[scan.relative_rank(square, colour) as usize - 1]] += 1;
         }
 
         for square in ours {
@@ -103,7 +104,7 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
         // Islands: maximal runs of adjacent files carrying a pawn.
         let mut previous = false;
         for file in File::ALL {
-            let occupied = facts.count_by_file.of(colour)[file.index()] > 0;
+            let occupied = facts.count_by_file.of(colour).of(file) > 0;
             if occupied && !previous {
                 facts.islands[colour] += 1;
             }
@@ -128,8 +129,8 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
     }
 
     for file in File::ALL {
-        let white = facts.count_by_file.white[file.index()] > 0;
-        let black = facts.count_by_file.black[file.index()] > 0;
+        let white = facts.count_by_file.white.of(file) > 0;
+        let black = facts.count_by_file.black.of(file) > 0;
         if !white && !black {
             facts.open_files.insert(file);
         }

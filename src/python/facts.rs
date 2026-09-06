@@ -1,8 +1,10 @@
 //! The facts of a position, as read-only attribute objects.
 //!
 //! Every value that differs between the two sides is a [`PyByColour`]: read it
-//! as `.white`, `.black` or `.of(colour)`. `fields()` and `to_dict()` walk a
-//! group in the order [`crate::facts::catalogue`] declares it.
+//! as `.white`, `.black` or `.of(colour)`, and a fixed run of values is a
+//! tuple in the order its type or its meaning states. `to_dict()` writes a
+//! group as the crate's own JSON, parsed back, so the two surfaces cannot
+//! answer differently.
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -13,11 +15,12 @@ use crate::position::Position;
 
 use super::board::{PyMove, PySquareSet, PyVariant};
 use super::convert::{colour_name, file_name, role_name, square_name};
-use super::values::{PyByColour, PyFileSet, dict_of, fields_of};
+use super::values::{Fixed, PyByColour, PyFileSet, hash_of, plain, repr_of};
 
-/// Counts widened out of `u8`, which Python would otherwise read as bytes.
-fn counts(values: [u8; 8]) -> Vec<u16> {
-    values.iter().copied().map(u16::from).collect()
+/// A run of eight counts, widened out of `u8`, which Python would otherwise
+/// read as bytes.
+fn counts<I: IntoIterator<Item = u8>>(values: I) -> Fixed<u16> {
+    Fixed(values.into_iter().map(u16::from).collect())
 }
 
 /// What a group's `__reduce__` returns: the callable and its arguments.
@@ -95,18 +98,27 @@ impl PyPlacementFacts {
 
 #[pymethods]
 impl PyPlacementFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_PLACEMENT)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_PLACEMENT)
+        plain(slf.py(), &slf.get().parent.get().inner.placement)
     }
 
-    fn __repr__(&self) -> String {
-        "<PlacementFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "PlacementFacts", FIELDS_PLACEMENT)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => {
+                self.parent.get().inner.placement == other.get().parent.get().inner.placement
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.placement)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -162,18 +174,25 @@ impl PyStateFacts {
 
 #[pymethods]
 impl PyStateFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_STATE)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_STATE)
+        plain(slf.py(), &slf.get().parent.get().inner.state)
     }
 
-    fn __repr__(&self) -> String {
-        "<StateFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "StateFacts", FIELDS_STATE)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.state == other.get().parent.get().inner.state,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.state)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -249,18 +268,25 @@ impl PyHistoryFacts {
 
 #[pymethods]
 impl PyHistoryFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_HISTORY)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_HISTORY)
+        plain(slf.py(), &slf.get().parent.get().inner.history)
     }
 
-    fn __repr__(&self) -> String {
-        "<HistoryFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "HistoryFacts", FIELDS_HISTORY)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.history == other.get().parent.get().inner.history,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.history)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -336,18 +362,27 @@ impl PyMaterialFacts {
 
 #[pymethods]
 impl PyMaterialFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_MATERIAL)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_MATERIAL)
+        plain(slf.py(), &slf.get().parent.get().inner.material)
     }
 
-    fn __repr__(&self) -> String {
-        "<MaterialFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "MaterialFacts", FIELDS_MATERIAL)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => {
+                self.parent.get().inner.material == other.get().parent.get().inner.material
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.material)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -537,18 +572,25 @@ impl PyPawnFacts {
 
 #[pymethods]
 impl PyPawnFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_PAWNS)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_PAWNS)
+        plain(slf.py(), &slf.get().parent.get().inner.pawns)
     }
 
-    fn __repr__(&self) -> String {
-        "<PawnFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "PawnFacts", FIELDS_PAWNS)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.pawns == other.get().parent.get().inner.pawns,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.pawns)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -697,18 +739,25 @@ impl PyPieceFacts {
 
 #[pymethods]
 impl PyPieceFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_PIECES)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_PIECES)
+        plain(slf.py(), &slf.get().parent.get().inner.pieces)
     }
 
-    fn __repr__(&self) -> String {
-        "<PieceFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "PieceFacts", FIELDS_PIECES)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.pieces == other.get().parent.get().inner.pieces,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.pieces)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -817,16 +866,19 @@ impl PyKingFacts {
                     py,
                     facts
                         .shield_files
-                        .map(|files| files.map(file_name).to_vec()),
+                        .map(|files| Fixed(files.map(file_name).to_vec())),
                 )?,
             )?,
             shield: Py::new(
                 py,
-                PyByColour::pair(py, facts.shield.map(|values| values.to_vec()))?,
+                PyByColour::pair(py, facts.shield.map(|values| Fixed(values.to_vec())))?,
             )?,
             shield_file_open: Py::new(
                 py,
-                PyByColour::pair(py, facts.shield_file_open.map(|values| values.to_vec()))?,
+                PyByColour::pair(
+                    py,
+                    facts.shield_file_open.map(|values| Fixed(values.to_vec())),
+                )?,
             )?,
             shield_file_semi_open_for_enemy: Py::new(
                 py,
@@ -834,12 +886,12 @@ impl PyKingFacts {
                     py,
                     facts
                         .shield_file_semi_open_for_enemy
-                        .map(|values| values.to_vec()),
+                        .map(|values| Fixed(values.to_vec())),
                 )?,
             )?,
             storm: Py::new(
                 py,
-                PyByColour::pair(py, facts.storm.map(|values| values.to_vec()))?,
+                PyByColour::pair(py, facts.storm.map(|values| Fixed(values.to_vec())))?,
             )?,
             ring: Py::new(py, PyByColour::pair(py, facts.ring.map(PySquareSet::new))?)?,
             ring_attackers: Py::new(py, PyByColour::pair(py, facts.ring_attackers)?)?,
@@ -875,18 +927,25 @@ impl PyKingFacts {
         PyByColour::pair(py, self.inner.ring_attacker_surplus())
     }
 
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_KING)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_KING)
+        plain(slf.py(), &slf.get().parent.get().inner.king)
     }
 
-    fn __repr__(&self) -> String {
-        "<KingFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "KingFacts", FIELDS_KING)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.king == other.get().parent.get().inner.king,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.king)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -981,18 +1040,27 @@ impl PyMobilityFacts {
 
 #[pymethods]
 impl PyMobilityFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_MOBILITY)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_MOBILITY)
+        plain(slf.py(), &slf.get().parent.get().inner.mobility)
     }
 
-    fn __repr__(&self) -> String {
-        "<MobilityFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "MobilityFacts", FIELDS_MOBILITY)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => {
+                self.parent.get().inner.mobility == other.get().parent.get().inner.mobility
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.mobility)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1132,18 +1200,25 @@ impl PyAttackFacts {
 
 #[pymethods]
 impl PyAttackFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_ATTACKS)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_ATTACKS)
+        plain(slf.py(), &slf.get().parent.get().inner.attacks)
     }
 
-    fn __repr__(&self) -> String {
-        "<AttackFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "AttackFacts", FIELDS_ATTACKS)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.attacks == other.get().parent.get().inner.attacks,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.attacks)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1197,18 +1272,27 @@ impl PyExchangeFacts {
 
 #[pymethods]
 impl PyExchangeFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_EXCHANGE)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_EXCHANGE)
+        plain(slf.py(), &slf.get().parent.get().inner.exchange)
     }
 
-    fn __repr__(&self) -> String {
-        "<ExchangeFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "ExchangeFacts", FIELDS_EXCHANGE)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => {
+                self.parent.get().inner.exchange == other.get().parent.get().inner.exchange
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.exchange)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1306,18 +1390,25 @@ impl PyThreatFacts {
 
 #[pymethods]
 impl PyThreatFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_THREATS)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_THREATS)
+        plain(slf.py(), &slf.get().parent.get().inner.threats)
     }
 
-    fn __repr__(&self) -> String {
-        "<ThreatFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "ThreatFacts", FIELDS_THREATS)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.threats == other.get().parent.get().inner.threats,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.threats)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1380,18 +1471,25 @@ impl PyMapFacts {
 
 #[pymethods]
 impl PyMapFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_MAPS)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_MAPS)
+        plain(slf.py(), &slf.get().parent.get().inner.maps)
     }
 
-    fn __repr__(&self) -> String {
-        "<MapFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "MapFacts", FIELDS_MAPS)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.maps == other.get().parent.get().inner.maps,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.maps)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1447,18 +1545,25 @@ impl PyEndgameFacts {
 
 #[pymethods]
 impl PyEndgameFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_ENDGAME)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_ENDGAME)
+        plain(slf.py(), &slf.get().parent.get().inner.endgame)
     }
 
-    fn __repr__(&self) -> String {
-        "<EndgameFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "EndgameFacts", FIELDS_ENDGAME)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.endgame == other.get().parent.get().inner.endgame,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.endgame)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1752,18 +1857,25 @@ impl PyTacticsFacts {
         PyByColour::pair(py, self.inner.only_moves())
     }
 
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_TACTICS)
-    }
-
-    /// The same, as plain data.
+    /// The group as plain data, in the one JSON form `docs/features.md`
+    /// describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_TACTICS)
+        plain(slf.py(), &slf.get().parent.get().inner.tactics)
     }
 
-    fn __repr__(&self) -> String {
-        "<TacticsFacts>".to_string()
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "TacticsFacts", FIELDS_TACTICS)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.parent.get().inner.tactics == other.get().parent.get().inner.tactics,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.parent.get().inner.tactics)
     }
 
     fn __reduce__<'py>(slf: &Bound<'py, Self>) -> GroupReduce<'py> {
@@ -1778,6 +1890,7 @@ impl PyTacticsFacts {
 /// What one legal move does, beyond what the move itself says. The mover is the side to move; the enemy is the other side.
 #[pyclass(frozen, skip_from_py_object, module = "esca", name = "MoveFacts")]
 pub struct PyMoveFacts {
+    inner: facts::MoveFacts,
     /// The role captured, the pawn for an en-passant capture.
     #[pyo3(get)]
     victim: Option<String>,
@@ -1864,6 +1977,7 @@ pub struct PyMoveFacts {
 impl PyMoveFacts {
     pub(crate) fn of(_py: Python<'_>, facts: &facts::MoveFacts) -> PyResult<PyMoveFacts> {
         Ok(PyMoveFacts {
+            inner: *facts,
             victim: facts.victim.map(role_name),
             mover: role_name(facts.mover),
             promotion: facts.promotion.map(role_name),
@@ -1897,18 +2011,25 @@ impl PyMoveFacts {
 
 #[pymethods]
 impl PyMoveFacts {
-    /// Every fact of the group, by name, in declaration order.
-    fn fields<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        fields_of(slf.as_any(), FIELDS_MOVE)
-    }
-
-    /// The same, as plain data.
+    /// What the move does, as plain data, in the one JSON form
+    /// `docs/features.md` describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        dict_of(slf.as_any(), FIELDS_MOVE)
+        plain(slf.py(), &slf.get().inner)
     }
 
-    fn __repr__(&self) -> String {
-        format!("<MoveFacts mover={}>", self.mover)
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        repr_of(slf.as_any(), "MoveFacts", FIELDS_MOVE)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => self.inner == other.get().inner,
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&self.inner)
     }
 }
 
@@ -2020,14 +2141,10 @@ impl PyFacts {
         slf.getattr(name)
     }
 
-    /// Every group, by name, each as the plain data of its own `to_dict`.
+    /// Every group, by name, as the plain data of the one JSON form
+    /// `docs/features.md` describes.
     fn to_dict<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
-        let out = PyDict::new(slf.py());
-        for group in facts::catalogue() {
-            let value = slf.getattr(group.name)?;
-            out.set_item(group.name, value.call_method0("to_dict")?)?;
-        }
-        Ok(out)
+        plain(slf.py(), &slf.get().inner)
     }
 
     #[getter]
@@ -2118,7 +2235,26 @@ impl PyFacts {
     }
 
     fn __repr__(&self) -> String {
-        format!("<Facts {} {}>", self.variant.rules().name(), self.text)
+        format!(
+            "Facts({:?}, variant={})",
+            self.text,
+            self.variant.rules().name()
+        )
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<Self>() {
+            Ok(other) => {
+                let other = other.get();
+                self.variant.rules().name() == other.variant.rules().name()
+                    && self.inner == other.inner
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash_of(&(self.variant.rules().name(), &self.text, &self.inner))
     }
 
     fn __getnewargs_ex__(&self) -> ((String,), std::collections::HashMap<String, PyVariant>) {
@@ -2151,6 +2287,24 @@ pub(crate) fn facts_catalogue(py: Python<'_>) -> PyResult<Vec<Py<PyDict>>> {
         groups.push(entry.unbind());
     }
     Ok(groups)
+}
+
+/// The tensor layout: one entry per fact, in the order the groups declare
+/// them.
+///
+/// Each entry carries the array's `name` (`group.field`), its `dtype` and
+/// `shape` with the batch axis left off, an `order` note naming every axis,
+/// the `packed_dtype` and `packed_shape` of the packed form, the fact's
+/// `meaning`, and the `kind` tree of the type it was declared with.
+#[pyfunction]
+pub(crate) fn facts_layout(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    let entries: Vec<serde_json::Value> = facts::tensors::layout()
+        .entries
+        .iter()
+        .map(facts::tensors::Entry::to_json)
+        .collect();
+    let text = serde_json::to_string(&entries).map_err(super::convert::value_error)?;
+    py.import("json")?.call_method1("loads", (text,))
 }
 
 /// The fields of `MoveFacts`, each with its type and meaning.

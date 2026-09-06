@@ -102,11 +102,6 @@ OPPOSITE_BISHOPS_AND_KNIGHT = "8/3k4/4p3/4b3/3P4/3B4/5N2/3K4 w - - 0 1"
 FactsOf = Callable[..., esca.Facts]
 
 
-def endgame_row(fen: str) -> list[float]:
-    """The 15 values of the `endgame` row of `fen`."""
-    return list(esca.encode([fen], groups=["endgame"])[0])
-
-
 @pytest.mark.parametrize(
     ("fen", "distance"),
     [

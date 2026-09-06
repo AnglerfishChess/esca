@@ -46,9 +46,9 @@ def test_the_groups_are_walked_by_name() -> None:
     facts = esca.Position.from_fen(START).facts()
     assert facts.groups()[:3] == ["placement", "state", "history"]
     assert facts.group("pawns").pawns == facts.pawns.pawns
-    fields = facts.pawns.fields()
-    assert list(fields)[:2] == ["pawns", "passed"]
-    assert fields["rams"] == 0
+    written = facts.pawns.to_dict()
+    assert list(written)[:2] == ["pawns", "passed"]
+    assert written["rams"] == 0
 
 
 def test_a_group_becomes_plain_data() -> None:
@@ -71,7 +71,7 @@ def test_the_catalogue_names_every_field_of_every_group() -> None:
     for group in catalogue:
         assert group["meaning"]
         value = facts.group(group["name"])
-        assert list(value.fields()) == [field["name"] for field in group["fields"]]
+        assert list(value.to_dict()) == [field["name"] for field in group["fields"]]
         for field in group["fields"]:
             assert field["type"]
             assert field["meaning"]
@@ -82,7 +82,7 @@ def test_the_move_catalogue_names_every_field_of_a_move() -> None:
     facts = esca.Position.from_fen(START).facts()
     names = [field["name"] for field in esca.move_facts_catalogue()]
     move = facts.moves[0].facts
-    assert list(move.fields()) == names
+    assert list(move.to_dict()) == names
     assert move.to_dict()["mover"] in {"p", "n"}
 
 
@@ -108,3 +108,31 @@ def test_chess960_facts_use_the_chess960_rules() -> None:
     facts = position.facts(esca.CHESS960)
     assert facts.variant == esca.CHESS960
     assert facts.tactics.legal_move_count.white == 20
+
+
+def test_a_group_reads_as_its_values_and_compares_by_them() -> None:
+    facts = esca.Position.from_fen(START).facts()
+    same = esca.Position.from_fen(START).facts()
+    assert facts.pawns == same.pawns
+    assert hash(facts.pawns) == hash(same.pawns)
+    assert facts.pawns != facts.pieces
+    assert facts == same
+    assert repr(facts.material).startswith("MaterialFacts(pawns=ByColour(white=8, black=8)")
+    assert "passed=ByColour(white=SquareSet([]), black=SquareSet([]))" in repr(facts.pawns)
+
+
+def test_a_pair_by_colour_is_read_positionally_too() -> None:
+    facts = esca.Position.from_fen(START).facts()
+    match facts.material.pawns:
+        case esca.ByColour(white, black):
+            assert (white, black) == (8, 8)
+        case _:  # pragma: no cover - the pattern above always matches
+            raise AssertionError("a ByColour matches on white and black")
+
+
+def test_a_run_of_values_is_a_tuple_in_the_order_its_type_states() -> None:
+    facts = esca.Position.from_fen("8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1").facts()
+    assert facts.pawns.count_by_file.white == (1, 1, 0, 1, 0, 1, 1, 0)
+    assert facts.pawns.count_by_rank.white == (0, 4, 0, 0, 1, 0, 0, 0)
+    assert facts.king.shield_files.white == ("f", "g", "h")
+    assert facts.king.shield.white == (None, None, None)

@@ -15,9 +15,8 @@
   is a plain value that says so.
 - The facts describe themselves. A catalogue carries every group, field, type
   and meaning as data, `docs/features.md` is generated from it, and Python
-  walks a group without knowing it: `Facts.groups()`, `facts.group(name)`,
-  `fields()` and `to_dict()`. Rust serialises the same shape behind the new
-  `serde` feature.
+  walks a group without knowing it: `Facts.groups()`, `facts.group(name)` and
+  `to_dict()`. Rust serialises the same shape behind the new `serde` feature.
 - Python gains `esca.ByColour` and a first-class `esca.FileSet`, and
   `SquareSet.files` says which files a set of squares stands on. A colour is
   written `"white"` or `"black"` everywhere it is answered, and read from
@@ -26,10 +25,10 @@
   the feature manifests, `Facts::encode`, `encode_positions`, `encode_fens`,
   `MoveFacts::encode_into`, the Python `encode`, `encode_into`, `encode_moves`,
   `features_for`, `SCHEMA`, `WIDTH` and `esca.lichess.batches`, with `numpy`
-  off the dependency list. A chess library answers what is true about a
-  position; turning those answers into rows is the trainer's business, and the
-  encoder it needs is in this repository's history at `v0.3.0`. The Rust
-  `lichess` reader, which hands over typed records, stays.
+  off the dependency list. Nothing a net eats is normalised here any more; what
+  replaces it is the typed tensor export below, which keeps every fact's own
+  width and sign. The Rust `lichess` reader, which hands over typed records,
+  stays.
 - `bishops_light` and `bishops_dark` now count the square colours they name.
   They were read in the mover's view, so with Black to move they answered the
   other way round.
@@ -74,6 +73,50 @@
 - The crate lives at the root of its own repository,
   <https://github.com/AnglerfishChess/esca>; the engine and its trainer go on
   at <https://github.com/AnglerfishChess/anglerfish>.
+
+- Facts are typed for their purpose. A per-file count is a `PerFile<u8>` and a
+  per-rank count a `PerRank<u8>` — eight values whose order is in the type, not
+  in a comment — and every fact whose value is a run of positions states which
+  end is which in its own meaning, which a test enforces. The three shield
+  values keep their `[T; 3]` and now say "queenside first; `shield_files` names
+  them". `pawns.count_by_file` and `count_by_rank` are those types in Rust and
+  eight-element tuples, not lists, in Python.
+- One JSON form. Rust's `serde::Serialize` (feature `serde`) and Python's
+  `to_dict()` write exactly the same bytes: a `ByColour` keyed by colour, a
+  `SquareSet` as its square names in board order, a `FileSet` as its letters, a
+  run as a list in the order stated, an absent `Option` as `null`, a named
+  value as its name. `docs/facts.schema.json` is that format as a JSON Schema,
+  and `tests/data/facts/` holds the answer for five named positions, which both
+  suites check. `fields()` is gone; `to_dict()` is the one entry point, per
+  group and whole.
+- A typed tensor export, `esca::facts::tensors` (feature `tensors`) and
+  `esca.tensors` (extra `esca[tensors]`, NumPy). One array per fact, batch
+  first, each keeping the width and sign it was declared with: nothing is
+  scaled, normalised or cast to a float, and sub-byte only ever means bit
+  packing. `layout()` names every array, its dtype, its shape and what each
+  axis means; a batch is written and read as safetensors, which both languages
+  do by hand rather than take a dependency for.
+- The catalogue parses each declared type once into a tree, and
+  `docs/features.md` (now with `dtype` and `shape` columns), the JSON schema,
+  the tensor layout and the facts section of `python/esca/_esca.pyi` are all
+  generated from it: `cargo run --example catalogue --all-features`, with a
+  test in each language failing when any of them is stale.
+- The Python facts are typed exactly: `ByColour[SquareSet]`,
+  `ByColour[PerFile[int]]`, `Literal` unions where a value is one of a fixed
+  list of names, and a `TypedDict` per group for what `to_dict()` answers, so
+  `facts.to_dict()["pawns"]["passed"]["white"]` is a `list[str]` to a checker.
+  Every facts class gained `__eq__`, `__hash__` and a `__repr__` that shows the
+  values; `ByColour` gained `__match_args__` and `ByColour[T]` at runtime.
+- `history.last_move_victim` and the other role-valued facts keep their letter
+  spelling (`p n b r q k`); only the three named enums are snake-case names.
+- `tactics.winning_capture_max_gain` reads "the largest victim value less
+  capturer value", the same quantity said without a Unicode minus.
+- NumPy is no longer a dependency of `esca`; it is the `tensors` extra.
+- The MCP `facts` tool answers in that one JSON form, its hand-written
+  positional labels dropped, and carries a `field_notes` entry giving the
+  catalogue meaning of every field whose value is a run of positions.
+- pyrefly now checks `python/`, which the paths it had named did not; that
+  turned up a test helper still calling the encoder removed at 0.3.0.
 
 ## 0.3.0 (2026-09-04)
 

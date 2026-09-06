@@ -425,14 +425,20 @@ class TestFacts:
         assert answer["kings"]["white"] == ["e1"]
         assert answer["pawns"]["black"] == ["a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7"]
 
-    def test_a_file_indexed_list_is_labelled_by_file(self):
-        answer = server.facts(groups=["pawns"])["groups"]["pawns"]
-        assert answer["count_by_file"]["white"] == dict.fromkeys("abcdefgh", 1)
+    def test_a_run_of_values_is_a_list_in_the_order_its_note_states(self):
+        answer = server.facts(groups=["pawns"])
+        assert answer["groups"]["pawns"]["count_by_file"]["white"] == [1] * 8
+        assert answer["field_notes"]["pawns.count_by_file"] == "The side's pawns per file, file a first."
 
-    def test_the_king_shield_is_labelled_by_the_files_it_stands_on(self):
-        answer = server.facts(groups=["king"])["groups"]["king"]
-        assert answer["shield_files"]["white"] == ["d", "e", "f"]
-        assert answer["shield"]["white"] == {"d": 1, "e": 1, "f": 1}
+    def test_the_king_shield_points_at_the_files_it_stands_on(self):
+        answer = server.facts(groups=["king"])
+        assert answer["groups"]["king"]["shield_files"]["white"] == ["d", "e", "f"]
+        assert answer["groups"]["king"]["shield"]["white"] == [1, 1, 1]
+        assert "shield_files` names them" in answer["field_notes"]["king.shield"]
+
+    def test_only_the_runs_of_the_named_groups_carry_a_note(self):
+        answer = server.facts(groups=["material"])
+        assert answer["field_notes"] == {}
 
     def test_an_unknown_group_lists_the_known_ones(self):
         answer = server.facts(groups=["nope"])
@@ -690,6 +696,11 @@ class TestCatalogueAndPrompt:
         assert [field["name"] for field in described["fields"]] == list(answered)
         assert [field["name"] for field in described["fields"] if not field["type"]] == []
         assert [field["name"] for field in described["fields"] if not field["meaning"].endswith(".")] == []
+
+    def test_the_catalogue_says_how_to_read_every_shape_a_value_takes(self):
+        types = server.facts_catalogue()["types"]
+        assert set(types) == {"ByColour", "SquareSet", "FileSet", "PerFile", "PerRank", "[T; n]", "Option"}
+        assert "file a first" in types["PerFile"]
 
     def test_the_catalogue_covers_a_moves_facts_too(self):
         catalogue = server.facts_catalogue()

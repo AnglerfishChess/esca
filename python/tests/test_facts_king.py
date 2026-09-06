@@ -170,18 +170,18 @@ def test_the_king_files_are_the_kings_own_clamped_to_b_to_g_and_its_neighbours(
 @pytest.mark.parametrize(
     ("fen", "white", "black"),
     [
-        (START, [1, 1, 1], [1, 1, 1]),
-        (STORM, [1, None, 3], [1, 2, 3]),
-        (BOXED, [1, 1, 1], [1, 2, 1]),
-        (CORNERS, [None, 1, None], [None, 1, None]),
-        (UNCASTLED, [None, None, 1], [1, 1, 1]),
-        (ENDGAME, [1, None, None], [None, None, None]),
-        (BARE_KINGS, [None, None, None], [None, None, None]),
+        (START, (1, 1, 1), (1, 1, 1)),
+        (STORM, (1, None, 3), (1, 2, 3)),
+        (BOXED, (1, 1, 1), (1, 2, 1)),
+        (CORNERS, (None, 1, None), (None, 1, None)),
+        (UNCASTLED, (None, None, 1), (1, 1, 1)),
+        (ENDGAME, (1, None, None), (None, None, None)),
+        (BARE_KINGS, (None, None, None), (None, None, None)),
     ],
     ids=["start", "storm", "boxed", "corners", "uncastled", "endgame", "bare_kings"],
 )
 def test_a_pawn_shield_is_how_far_ahead_the_nearest_friendly_pawn_of_a_king_file_is(
-    fen: str, white: list[int | None], black: list[int | None], facts_of: FactsOf
+    fen: str, white: tuple[int | None, ...], black: tuple[int | None, ...], facts_of: FactsOf
 ) -> None:
     shield = facts_of(fen).king.shield
     assert shield.white == white
@@ -191,40 +191,40 @@ def test_a_pawn_shield_is_how_far_ahead_the_nearest_friendly_pawn_of_a_king_file
 @pytest.mark.parametrize(
     ("fen", "white_open", "white_semi_open", "black_open", "black_semi_open"),
     [
-        (START, [False] * 3, [False] * 3, [False] * 3, [False] * 3),
+        (START, (False,) * 3, (False,) * 3, (False,) * 3, (False,) * 3),
         (
             CORNERS,
-            [True, False, True],
-            [False, True, False],
-            [True, False, True],
-            [False, True, False],
+            (True, False, True),
+            (False, True, False),
+            (True, False, True),
+            (False, True, False),
         ),
         (
             OPEN_FILES,
-            [True, False, False],
-            [False, True, False],
-            [True, False, False],
-            [False, False, True],
+            (True, False, False),
+            (False, True, False),
+            (True, False, False),
+            (False, False, True),
         ),
-        (UNCASTLED, [True, True, False], [False] * 3, [False] * 3, [False] * 3),
-        (HOLES, [False, True, True], [True, False, False], [True] * 3, [False] * 3),
+        (UNCASTLED, (True, True, False), (False,) * 3, (False,) * 3, (False,) * 3),
+        (HOLES, (False, True, True), (True, False, False), (True,) * 3, (False,) * 3),
         (
             ENDGAME,
-            [False, False, True],
-            [True, False, False],
-            [True, False, False],
-            [False, False, True],
+            (False, False, True),
+            (True, False, False),
+            (True, False, False),
+            (False, False, True),
         ),
-        (SIEGE, [False] * 3, [True] * 3, [False] * 3, [True] * 3),
+        (SIEGE, (False,) * 3, (True,) * 3, (False,) * 3, (True,) * 3),
     ],
     ids=["start", "corners", "open_files", "uncastled", "holes", "endgame", "siege"],
 )
 def test_a_king_file_is_open_when_bare_and_semi_open_when_only_the_enemy_has_left_it(
     fen: str,
-    white_open: list[bool],
-    white_semi_open: list[bool],
-    black_open: list[bool],
-    black_semi_open: list[bool],
+    white_open: tuple[bool, ...],
+    white_semi_open: tuple[bool, ...],
+    black_open: tuple[bool, ...],
+    black_semi_open: tuple[bool, ...],
     facts_of: FactsOf,
 ) -> None:
     king = facts_of(fen).king
@@ -237,18 +237,18 @@ def test_a_king_file_is_open_when_bare_and_semi_open_when_only_the_enemy_has_lef
 @pytest.mark.parametrize(
     ("fen", "white", "black"),
     [
-        (START, [6, 6, 6], [6, 6, 6]),
-        (STORM, [2, 3, 4], [5, 4, None]),
-        (OPEN_FILES, [None, None, 6], [None, 4, None]),
-        (ENDGAME, [None, 2, None], [None, 1, None]),
-        (BOXED, [6, 5, 6], [6, 6, 6]),
-        (UNCASTLED, [None, None, 6], [6, 6, 6]),
-        (CORNERS, [None, None, None], [None, None, None]),
+        (START, (6, 6, 6), (6, 6, 6)),
+        (STORM, (2, 3, 4), (5, 4, None)),
+        (OPEN_FILES, (None, None, 6), (None, 4, None)),
+        (ENDGAME, (None, 2, None), (None, 1, None)),
+        (BOXED, (6, 5, 6), (6, 6, 6)),
+        (UNCASTLED, (None, None, 6), (6, 6, 6)),
+        (CORNERS, (None, None, None), (None, None, None)),
     ],
     ids=["start", "storm", "open_files", "endgame", "boxed", "uncastled", "corners"],
 )
 def test_a_pawn_storm_is_how_far_ahead_the_nearest_enemy_pawn_of_a_king_file_is(
-    fen: str, white: list[int | None], black: list[int | None], facts_of: FactsOf
+    fen: str, white: tuple[int | None, ...], black: tuple[int | None, ...], facts_of: FactsOf
 ) -> None:
     storm = facts_of(fen).king.storm
     assert storm.white == white

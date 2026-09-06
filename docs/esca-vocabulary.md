@@ -115,6 +115,7 @@ defined before it is used.
 | **ByColour** | One value for White and one for Black: `.white`, `.black`, `.of(colour)`. Every fact that differs between the two sides is one, so a fact never has to be read against whose turn it is. |
 | **SquareSet** | A typed set of squares — one bit per square — supporting union, intersection, difference, membership, count and iteration. The idiomatic name for what engines call a *bitboard*. |
 | **FileSet** | The same for the eight files. |
+| **PerFile / PerRank** | Eight values, one per file (file a first) or one per rank (rank 1 first). The order is part of the type, so a value read out of one carries the file or rank it belongs to without a separate note. |
 | **Facts** | esca's word for cheap, position-derived answers: everything true about a position that follows from the position plus at most one ply of lookahead. Grouped into plain structs with public fields (`facts.pawns.passed.white`). |
 | **MoveFacts** | The same for one legal move: what it captures, whether it checks, whether its destination is safe. |
 | **annotated legal move** | A `Move` paired with its `MoveFacts`. |

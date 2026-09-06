@@ -6,7 +6,7 @@
 mod common;
 
 use common::{by_colour, facts_of, facts_under, files, squares};
-use esca::CHESS960;
+use esca::{CHESS960, PerFile, PerRank};
 use rstest::rstest;
 
 /// The untouched array: one island a side and nothing else true of it.
@@ -208,8 +208,8 @@ fn pawns_are_counted_by_file_from_a(
     #[case] black: [u8; 8],
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.pawns.count_by_file.white, white);
-    assert_eq!(facts.pawns.count_by_file.black, black);
+    assert_eq!(facts.pawns.count_by_file.white, PerFile::new(white));
+    assert_eq!(facts.pawns.count_by_file.black, PerFile::new(black));
 }
 
 #[rstest]
@@ -225,8 +225,8 @@ fn pawns_are_counted_by_the_rank_their_owner_reads(
     #[case] black: [u8; 8],
 ) {
     let facts = facts_of(fen);
-    assert_eq!(facts.pawns.count_by_rank.white, white);
-    assert_eq!(facts.pawns.count_by_rank.black, black);
+    assert_eq!(facts.pawns.count_by_rank.white, PerRank::new(white));
+    assert_eq!(facts.pawns.count_by_rank.black, PerRank::new(black));
 }
 
 #[rstest]
@@ -581,8 +581,14 @@ fn the_pawn_facts_of_a_chess960_position_are_the_classic_ones() {
     assert_eq!(pawns.doubled.black, squares("d6 d7"));
     assert_eq!(pawns.defended.white, squares("e3 f3"));
     assert_eq!(pawns.defended.black, squares("d6"));
-    assert_eq!(pawns.count_by_file.black, [1, 1, 0, 2, 1, 1, 1, 1]);
-    assert_eq!(pawns.count_by_rank.white, [0, 3, 2, 3, 0, 0, 0, 0]);
+    assert_eq!(
+        pawns.count_by_file.black,
+        PerFile::new([1, 1, 0, 2, 1, 1, 1, 1])
+    );
+    assert_eq!(
+        pawns.count_by_rank.white,
+        PerRank::new([0, 3, 2, 3, 0, 0, 0, 0])
+    );
     assert_eq!(pawns.islands, by_colour([1, 2]));
     assert_eq!(pawns.levers, by_colour([2, 2]));
     assert_eq!(pawns.rams, 2);

@@ -15,14 +15,21 @@ mod king;
 mod pawns;
 mod pieces;
 pub(crate) mod scan;
+#[cfg(feature = "serde")]
+pub mod schema;
+#[cfg(feature = "serde")]
+pub mod stub;
 mod tactics;
+#[cfg(feature = "tensors")]
+pub mod tensors;
 mod threats;
+pub mod types;
 
 use core::fmt;
 
 use crate::moves::{Move, MoveList};
 use crate::position::Position;
-use crate::types::{ByColour, Colour, File, FileSet, Role, Square, SquareSet};
+use crate::types::{ByColour, Colour, File, FileSet, PerFile, PerRank, Role, Square, SquareSet};
 use crate::variant::Variant;
 
 use catalogue::{Group, facts_group};
@@ -176,10 +183,10 @@ facts_group! {
         /// The side's pawns defended by a pawn of their own colour.
         pub defended: ByColour<SquareSet>,
         /// The side's pawns per file, file a first.
-        pub count_by_file: ByColour<[u8; 8]>,
+        pub count_by_file: ByColour<PerFile<u8>>,
         /// The side's pawns per rank counted from its own back rank, rank 1
         /// first.
-        pub count_by_rank: ByColour<[u8; 8]>,
+        pub count_by_rank: ByColour<PerRank<u8>>,
         /// Files carrying no pawn of either colour.
         pub open_files: FileSet,
         /// Files carrying no pawn of the side and at least one of the other.
@@ -330,16 +337,19 @@ facts_group! {
         pub castled_queenside: ByColour<bool>,
         /// It stands on files f to h.
         pub castled_kingside: ByColour<bool>,
-        /// The three files the king's shelter is read on, in ascending order.
+        /// The three files the king's shelter is read on, queenside first.
         pub shield_files: ByColour<[File; 3]>,
-        /// Ranks to the nearest friendly pawn ahead of the king, per shield
-        /// file.
+        /// Ranks to the nearest friendly pawn ahead of the king, one per file of
+        /// the three around the king, queenside first; `shield_files` names them.
         pub shield: ByColour<[Option<u8>; 3]>,
-        /// Each shield file carries no pawn of either colour.
+        /// Whether each of the three files around the king carries no pawn of
+        /// either colour, queenside first; `shield_files` names them.
         pub shield_file_open: ByColour<[bool; 3]>,
-        /// Each shield file is semi-open for the enemy of that king.
+        /// Whether each of those three files is semi-open for the enemy of that
+        /// king, queenside first; `shield_files` names them.
         pub shield_file_semi_open_for_enemy: ByColour<[bool; 3]>,
-        /// Ranks to the nearest enemy pawn ahead of the king, per shield file.
+        /// Ranks to the nearest enemy pawn ahead of the king, one per file of the
+        /// three around the king, queenside first; `shield_files` names them.
         pub storm: ByColour<[Option<u8>; 3]>,
         /// The squares adjacent to the king.
         pub ring: ByColour<SquareSet>,
@@ -673,7 +683,8 @@ facts_group! {
         /// One of them takes a unit that outvalues the capturer or is
         /// undefended.
         pub winning_capture_available: ByColour<bool>,
-        /// The largest `victim − capturer` over the captures, at least 0.
+        /// The largest victim value less capturer value over the captures, at
+        /// least 0.
         pub winning_capture_max_gain: ByColour<i32>,
         /// A capture takes a hanging unit.
         pub captures_hanging: ByColour<bool>,

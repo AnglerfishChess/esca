@@ -615,7 +615,8 @@ def test_a_class_is_its_name_and_compares_equal_to_it() -> None:
     assert class_.name == "krp_v_kr"
     assert class_ == "krp_v_kr"
     assert class_ != "kr_v_kr"
-    assert {class_: "seen"}["krp_v_kr"] == "seen"
+    seen: dict[object, str] = {class_: "seen"}
+    assert seen["krp_v_kr"] == "seen"
 
 
 def test_a_class_says_in_one_sentence_what_the_ending_is() -> None:

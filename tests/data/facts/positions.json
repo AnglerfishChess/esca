@@ -1,0 +1,32 @@
+[
+  {
+    "name": "start",
+    "variant": "chess",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "shows": "the opening array"
+  },
+  {
+    "name": "start_black_to_move",
+    "variant": "chess",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1",
+    "shows": "the same placement with the other side to move: every fact reads the same"
+  },
+  {
+    "name": "kiwipete",
+    "variant": "chess",
+    "fen": "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+    "shows": "a middlegame busy with attacks, pins and castling rights"
+  },
+  {
+    "name": "passer",
+    "variant": "chess",
+    "fen": "8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1",
+    "shows": "one white passer on d5 and nothing else but kings and pawns"
+  },
+  {
+    "name": "chess960",
+    "variant": "chess960",
+    "fen": "bqnbnrkr/pppppppp/8/8/8/8/PPPPPPPP/BQNBNRKR w HFhf - 0 1",
+    "shows": "a Chess960 start, where the back rank is not the classic one"
+  }
+]

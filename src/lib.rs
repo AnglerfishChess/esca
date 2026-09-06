@@ -66,8 +66,8 @@ pub use game::Game;
 pub use moves::{MAX_MOVES, Move, MoveKind, MoveList};
 pub use position::{CastlingRights, Key, Position, Score};
 pub use types::{
-    ByColour, Colour, File, FileSet, FileSetIter, Piece, Rank, Role, Square, SquareParseError,
-    SquareSet, SquareSetIter,
+    ByColour, Colour, File, FileSet, FileSetIter, PerFile, PerRank, Piece, Rank, Role, Square,
+    SquareParseError, SquareSet, SquareSetIter,
 };
 pub use variant::{
     CHESS960, CLASSIC, CastlingOutput, Chess960, Classic, DrawClaim, Outcome, Variant, chess960,

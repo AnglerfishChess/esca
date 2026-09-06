@@ -20,7 +20,8 @@ Cargo features:
 | `tokio` | no | `uci::tokio`: the same client on a tokio runtime. Implies `uci`. |
 | `polyglot` | no | The `polyglot` module: opening books read, picked from and built. |
 | `openings` | no | The `openings` module: the bundled ECO code and name of a position. |
-| `serde` | no | `Serialize` for the facts and the board vocabulary, `Serialize`/`Deserialize` for `Position` and `Move`. |
+| `serde` | no | `Serialize` for the facts and the board vocabulary, `Serialize`/`Deserialize` for `Position` and `Move`, and `facts::schema::json_schema()`. |
+| `tensors` | no | `facts::tensors`: a run of positions as one typed array per fact. Implies `serde`. |
 
 `Position::polyglot_key` needs no feature: the key is part of the position,
 and the `polyglot` and `openings` modules are indexed by it.
@@ -318,15 +319,37 @@ pub struct IllegalMove;
 Grouped plain structs with public fields; the accessor *is* the field. Every
 value that differs between the two sides is a `ByColour<T>` — `.white`,
 `.black`, `.of(colour)` or `[colour]`. Where a fact is about the side to move
-rather than about a colour it is a plain value, and its meaning says so. Every
-field, its type and its meaning are in [`features.md`](features.md), which is
-generated from these definitions.
+rather than about a colour it is a plain value, and its meaning says so.
+
+Each fact is typed for what it is *for*, not reduced to the plainest type that
+would hold it: a set of squares stays a `SquareSet`, a per-file count is a
+`PerFile<u8>` whose order is in its type, and a run whose order the type cannot
+carry — the three files around a king — states it in its own meaning.
+[`features.md`](features.md) has every field, its type, its `dtype`, its
+`shape` and its meaning, and is generated from these definitions.
 
 ```rust
 pub struct ByColour<T> {
     pub white: T,
     pub black: T,
 }
+
+/// Eight values, file a first; `PerRank<T>` is the same, rank 1 first.
+pub struct PerFile<T>(/* [T; 8] */);
+
+impl<T> PerFile<T> {
+    pub const fn new(values: [T; 8]) -> PerFile<T>;
+    pub fn into_array(self) -> [T; 8];
+    pub fn iter(&self) -> impl Iterator<Item = &T>;
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerFile<U>;
+}
+
+impl<T: Copy> PerFile<T> {
+    pub const fn of(&self, file: File) -> T;
+}
+
+impl<T> Index<File> for PerFile<T> { /* … */ }
+impl<T> IndexMut<File> for PerFile<T> { /* … */ }
 
 impl<T> ByColour<T> {
     pub const fn new(white: T, black: T) -> ByColour<T>;
@@ -505,16 +528,162 @@ pub fn markdown() -> String;
 
 Each group type carries its own entry, so a field and its documentation cannot
 disagree: `PawnFacts::GROUP`, `PawnFacts::FIELDS` and `PawnFacts::ENTRY`, and
-`MoveFacts::FIELDS` for a move. `cargo run --example catalogue` rewrites
-`docs/features.md`; a test fails when it is stale.
+`MoveFacts::FIELDS` for a move.
 
-With the `serde` feature every group serialises to the same shape the Python
-`to_dict()` writes: a `ByColour` as an object keyed by colour, a square or file
-set as a list of names, and an enum as its snake-case name.
+`Field::kind()` parses the declared type into a tree, and everything generated
+about the facts is read off that one tree:
+
+```rust
+pub mod types {
+    pub enum FieldType {
+        Bool,
+        Int { signed: bool, bits: u32 },
+        Float,
+        Named(Named),          // Role, File, Square, CastledSide, Opposition, DrawishMaterial
+        SquareSet,
+        FileSet,
+        Optional(Box<FieldType>),
+        Fixed { len: usize, item: Box<FieldType>, run: Run },  // [T; n], PerFile, PerRank
+        ByColour(Box<FieldType>),
+    }
+
+    impl FieldType {
+        pub fn dtype(&self) -> Dtype;
+        pub fn shape(&self) -> Vec<usize>;
+        pub fn order(&self) -> String;      // what each axis means
+        pub fn encoding(&self) -> Option<String>;  // the codes, and that −1 is absent
+    }
+}
+
+impl Field {
+    pub fn kind(&self) -> FieldType;
+    pub fn dtype(&self) -> Dtype;
+    pub fn shape(&self) -> Vec<usize>;
+}
+```
+
+`cargo run --example catalogue --all-features` rewrites all of it:
+`docs/features.md`, `docs/facts.schema.json`, the generated section of
+`python/esca/_esca.pyi`, the golden JSON of `tests/data/facts/` and the golden
+tensor batch beside it. A test in each language fails when any of them is
+stale.
 
 ---
 
-## 7. `lichess` — evaluation dump reader (feature `lichess`)
+## 7. The JSON form
+
+One wire format, written by Rust's `serde::Serialize` (feature `serde`) and by
+Python's `to_dict()`, byte for byte the same:
+
+| value | written as |
+|---|---|
+| a group, `Facts`, `MoveFacts` | an object, keys in declaration order |
+| `ByColour<T>` | `{"white": …, "black": …}` |
+| `SquareSet` | the list of square names in board order: a1, b1 … h1, then a2 |
+| `FileSet` | the list of file letters, file a first |
+| `PerFile<T>`, `PerRank<T>`, `[T; n]` | a list of `n`, in the order stated |
+| `Option<T>` | `null` when absent |
+| `Role`, `File` | the letter; `Square` its name |
+| `Opposition`, `DrawishMaterial`, `CastledSide` | the snake-case name |
+
+`docs/facts.schema.json` is that format as a JSON Schema (draft 2020-12),
+generated from the same catalogue. `tests/data/facts/<name>.json` holds the
+answer for each position `tests/data/facts/positions.json` names; the Rust
+suite writes and compares them, the Python suite compares its own `to_dict()`
+against the very same files and validates both against the schema.
+
+```rust
+let facts = position.facts(&CLASSIC);
+let text = serde_json::to_string_pretty(&facts)?;
+```
+
+```python
+facts.to_dict()["pawns"]["passed"]  # {"white": ["d5"], "black": []}
+facts.pawns.to_dict()["count_by_file"]  # {"white": [1, 1, 0, 1, 0, 1, 1, 0], …}
+```
+
+---
+
+## 8. Tensors (feature `tensors` in Rust, extra `tensors` in Python)
+
+One typed array per fact, batch axis first. A fact keeps the width and sign it
+was declared with; nothing is scaled, normalised or cast to a float, and no
+value is written in the mover's view.
+
+| fact type | dtype | shape |
+|---|---|---|
+| `bool` | `bool` | `()` |
+| `u8`, `i8`, `u16`, `u32`, `i32` | the same width and sign | `()` |
+| `f32` (only `king.tropism`) | `float32` | `()` |
+| `Option<T>` | `int16`, −1 where absent | `()` |
+| `[T; n]`, `PerFile<T>`, `PerRank<T>` | as `T` | `(n,)` |
+| `FileSet` | `bool` | `(8,)`, file a first |
+| `SquareSet` | `bool` | `(64,)`, a1 first |
+| a named value | `uint8`, its code | `()` |
+| `ByColour<T>` | as `T` | `(2, …)`, White then Black |
+
+A named value's code is its position in the list `features.md` gives:
+`p` is 0 and `k` is 5, `direct` is 0 and `distant` is 1. The packed form keeps
+the same facts as bits: a `SquareSet` is one `uint64` bitboard with a1 as bit
+0, a `FileSet` one `uint8` mask with file a as bit 0, and every other flag one
+bit, eight to a byte over the array flattened in C order.
+
+```rust
+use esca::facts::tensors::{Batch, Form, layout};
+
+pub fn layout() -> &'static Layout;      // one Entry per fact, in declaration order
+
+pub struct Entry {
+    pub name: String,          // "pawns.passed"
+    pub group: &'static str,
+    pub field: &'static str,
+    pub declared: String,      // "ByColour<SquareSet>"
+    pub dtype: Dtype,
+    pub shape: Vec<usize>,     // batch axis left off
+    pub order: String,         // "axis 0: white, black; axis 1: the 64 squares, a1 first, …"
+    pub encoding: Option<String>,
+    pub packed_dtype: Dtype,
+    pub packed_shape: Option<Vec<usize>>,
+    pub meaning: String,
+}
+
+impl Batch {
+    pub fn from_positions(positions: &[Position], variant: &dyn Variant) -> Batch;
+    pub fn from_games(games: &[Game]) -> Batch;
+    pub fn layout(&self) -> &'static Layout;
+    pub fn buffer(&self, name: &str) -> Option<&Buffer>;
+    pub fn packed(&self) -> Batch;
+    pub fn expanded(&self) -> Batch;
+    pub fn to_safetensors(&self) -> Vec<u8>;
+}
+```
+
+```python
+import esca.tensors as tensors
+
+tensors.layout()  # the same entries, as dicts, each with its `kind` type tree
+arrays = tensors.facts(fens_or_games, groups=["pawns"], layout="expanded")
+arrays["pawns.passed"].shape  # (n, 2, 64), dtype bool
+arrays["pawns.count_by_file"][0, 0]  # array([1, 1, 0, 1, 0, 1, 1, 0], dtype=uint8)
+
+packed = tensors.facts(fens, layout="packed")
+packed["pawns.passed"].dtype  # uint64, one bitboard per side
+tensors.expand(packed, len(fens))  # back to one value per element
+
+tensors.save(arrays, path, metadata={"count": "2", "form": "expanded"})
+tensors.load(path)  # {name: ndarray}
+tensors.metadata(path)
+```
+
+The safetensors writing and reading are the format itself — an eight-byte
+header length, a JSON header, then the raw bytes — written by hand on both
+sides, so neither the crate nor the wheel takes a dependency for it. A Rust
+test writes `tests/data/facts/batch.safetensors` and the Python suite reads it
+back and recomputes it, so the two agree on every byte.
+
+---
+
+## 9. `lichess` — evaluation dump reader (feature `lichess`)
 
 ```rust
 pub mod lichess {
@@ -549,7 +718,7 @@ can reach, and `Record::position` returns `FenError::Position` for those.
 
 ---
 
-## 8. Adding a variant
+## 10. Adding a variant
 
 A variant is one more `Variant` implementation. `Position`, `Facts` and
 `MoveFacts` are untouched, because `Position` is data and every fact derives
@@ -576,7 +745,7 @@ colours, one unit per square. Rules beyond that need the model widened first.
 
 ---
 
-## 9. Python surface
+## 11. Python surface
 
 Built from the same crate with feature `python`; distributed with `.pyi` stubs,
 so every signature below is typed and checkable. Squares, roles, colours,
@@ -588,7 +757,8 @@ case. The classes are `Variant`, `SquareSet`, `Move`,
 `Builder`, `openings.Opening`, `endings.Ending` with its class, verdict, technique and
 evidence, `uci.Engine` and `uci.AsyncEngine` with their
 `Limits`, `Option`, `Info` and `Answer`, and `uci.protocol` with `Command`,
-`Message` and `Session`.
+`Message` and `Session`. `esca.tensors` is a module of its own, behind the
+`tensors` extra.
 
 ```python
 import esca
@@ -630,13 +800,28 @@ f.king.ring_attack_weight.white  # int
 list(f.pawns.open_files)  # FileSet, iterated as ["c", "e", "h"]
 print(f.summary())
 
+f.pawns.count_by_file.white  # PerFile: (1, 1, 0, 1, 0, 1, 1, 0), file a first
+f.king.shield.white  # three values, queenside first; f.king.shield_files names them
+f.pawns == other.pawns  # groups compare and hash by the facts they hold
+repr(f.pawns)  # PawnFacts(pawns=ByColour(white=SquareSet([…]), …), …)
+
 # Walking the groups without knowing them
 f.groups()  # ["placement", "state", …]
-f.group("pawns").fields()  # {"pawns": ByColour, "passed": ByColour, …}
-f.pawns.to_dict()  # the same as plain data
-f.to_dict()  # {group: {field: value}} for every group
+f.group("pawns").to_dict()  # {"pawns": {"white": [...], …}, "passed": …}
+f.to_dict()  # {group: {field: value}} for every group, the one JSON form
 esca.facts_catalogue()  # [{"name", "meaning", "fields": [{"name", "type", "meaning"}]}]
 esca.move_facts_catalogue()  # the same for a move's facts
+
+# Typed all the way down: the facts section of `_esca.pyi` is generated from
+# the catalogue, so a stub cannot claim a type the extension does not answer.
+f.pawns.passed  # ByColour[SquareSet]
+f.pawns.count_by_file.white[0]  # int
+f.to_dict()["pawns"]["passed"]["white"]  # list[str]
+
+# Typed arrays, with `pip install esca[tensors]`
+import esca.tensors as tensors
+
+tensors.facts([fen], groups=["pawns"])["pawns.passed"]  # (1, 2, 64) of bool
 
 # PGN
 for pg in esca.pgn.read(path):  # or read_string(text); skip_errors=True drops bad games
@@ -734,7 +919,7 @@ session.state  # "idle"
 
 ---
 
-## 10. `pgn` — games as text (feature `pgn`)
+## 12. `pgn` — games as text (feature `pgn`)
 
 ```rust
 pub mod pgn {
@@ -856,7 +1041,7 @@ break never falls between them.
 
 ---
 
-## 11. `uci` — talking to an engine (feature `uci`)
+## 13. `uci` — talking to an engine (feature `uci`)
 
 Three layers: the protocol as values, which does no I/O; the engine as a
 subprocess, which bounds every wait; and the variant handling that keeps
@@ -980,7 +1165,7 @@ pub mod uci {
 
 ---
 
-## 12. `explain` — the evidence behind a rules answer
+## 14. `explain` — the evidence behind a rules answer
 
 Where `Facts` answers *what is true*, `explain` answers *why*, and hands over
 the squares the answer was read off. Every categorical answer is an enum,
@@ -1285,7 +1470,7 @@ own.
 
 ---
 
-## 13. `endings` — named endings, no feature
+## 15. `endings` — named endings, no feature
 
 The books' name for the material on the board, what theory says the result is,
 and the method it is played by. Everything here is the general case adjusted
@@ -1481,7 +1666,7 @@ is a Python keyword.
 
 ---
 
-## 14. `polyglot` — opening books (feature `polyglot`)
+## 16. `polyglot` — opening books (feature `polyglot`)
 
 The Polyglot book format: a file of 16-byte entries sorted by a key that the
 format fixes, so a book written by one program is read by every other.
@@ -1591,7 +1776,7 @@ pub mod polyglot {
 
 ---
 
-## 15. `openings` — the ECO catalogue (feature `openings`)
+## 17. `openings` — the ECO catalogue (feature `openings`)
 
 The [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings)
 data set, bundled under CC0-1.0 as `data/openings/`: an ECO

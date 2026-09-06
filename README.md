@@ -43,8 +43,9 @@ println!("{}", facts.summary());
 
 Cargo features, none on by default: `lichess` (streaming reader for the Lichess evaluation
 dump), `pgn` (reading and writing games as PGN), `polyglot` (opening books), `openings` (the
-bundled ECO catalogue) and `python` (the PyO3 module the wheel is built from).
-`Position::polyglot_key` needs no feature.
+bundled ECO catalogue), `serde` (the one JSON form of the facts, and the JSON Schema for it),
+`tensors` (a run of positions as one typed array per fact) and `python` (the PyO3 module the
+wheel is built from). `Position::polyglot_key` needs no feature.
 
 ## Python
 
@@ -63,10 +64,11 @@ print(game.position.fen)
 facts = game.facts()
 print(facts.tactics.legal_move_count.white)
 print(list(facts.pawns.passed.black.files))
-print(facts.to_dict()["material"])  # every group as plain JSON-able data
+print(facts.to_dict()["material"])  # every group in the one JSON form
 ```
 
-Wheels are abi3 for Python 3.12 and up.
+Wheels are abi3 for Python 3.12 and up. `pip install esca[tensors]` adds NumPy and
+`esca.tensors`, which turns a run of positions into one typed array per fact.
 
 ## What it covers
 
@@ -81,8 +83,14 @@ Wheels are abi3 for Python 3.12 and up.
   material, pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics, endgame
   and the attack maps side by side — plus `MoveFacts` for every legal move. Every value that
   differs between the two sides is a `ByColour`, read as `.white`, `.black` or `.of(colour)`.
-- A catalogue of those facts as data — name, type and meaning — which `docs/features.md` is
-  generated from, and which the MCP server serves.
+- A catalogue of those facts as data — name, type, dtype, shape and meaning — which
+  `docs/features.md`, `docs/facts.schema.json`, the Python type stubs and the tensor layout are
+  all generated from, and which the MCP server serves.
+- One JSON form for the facts, written by Rust's `serde::Serialize` and by Python's `to_dict()`,
+  byte for byte the same and described by `docs/facts.schema.json`.
+- A typed tensor export: one array per fact, batch first, each keeping the width and sign it was
+  declared with — nothing scaled, normalised or cast to a float — expanded or bit-packed, and
+  written as safetensors.
 - Polyglot opening books: the format's own key on every `Position`, books read, drawn from and
   built, and an ECO code and name for some 3,800 named positions.
 - Named endings with theory verdicts and technique names, and a one-line English `describe()`

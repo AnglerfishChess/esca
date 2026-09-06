@@ -76,6 +76,7 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(facts::facts_group, module)?)?;
     module.add_function(wrap_pyfunction!(facts::facts_catalogue, module)?)?;
     module.add_function(wrap_pyfunction!(facts::move_facts_catalogue, module)?)?;
+    module.add_function(wrap_pyfunction!(facts::facts_layout, module)?)?;
 
     #[cfg(feature = "pgn")]
     {

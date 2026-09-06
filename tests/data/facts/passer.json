@@ -1,0 +1,1095 @@
+{
+  "placement": {
+    "units": {
+      "white": [
+        "a2",
+        "b2",
+        "f2",
+        "g2",
+        "h2",
+        "d5"
+      ],
+      "black": [
+        "a7",
+        "b7",
+        "f7",
+        "g7",
+        "h7"
+      ]
+    },
+    "pawns": {
+      "white": [
+        "a2",
+        "b2",
+        "f2",
+        "g2",
+        "d5"
+      ],
+      "black": [
+        "a7",
+        "b7",
+        "f7",
+        "g7"
+      ]
+    },
+    "knights": {
+      "white": [],
+      "black": []
+    },
+    "bishops": {
+      "white": [],
+      "black": []
+    },
+    "rooks": {
+      "white": [],
+      "black": []
+    },
+    "queens": {
+      "white": [],
+      "black": []
+    },
+    "kings": {
+      "white": [
+        "h2"
+      ],
+      "black": [
+        "h7"
+      ]
+    }
+  },
+  "state": {
+    "in_check": false,
+    "double_check": false,
+    "can_castle_short": {
+      "white": false,
+      "black": false
+    },
+    "can_castle_long": {
+      "white": false,
+      "black": false
+    },
+    "en_passant": null,
+    "en_passant_capture_legal": false
+  },
+  "history": {
+    "known": false,
+    "halfmove_clock": 0,
+    "halfmove_known": true,
+    "repetition_seen": false,
+    "repetition_available": false,
+    "captures_in_last_8": 0,
+    "checks_in_last_8": 0,
+    "quiet_plies": 0,
+    "material_trend": 0,
+    "last_move_victim": null,
+    "last_move_mover": null
+  },
+  "material": {
+    "pawns": {
+      "white": 5,
+      "black": 4
+    },
+    "knights": {
+      "white": 0,
+      "black": 0
+    },
+    "bishops": {
+      "white": 0,
+      "black": 0
+    },
+    "rooks": {
+      "white": 0,
+      "black": 0
+    },
+    "queens": {
+      "white": 0,
+      "black": 0
+    },
+    "non_pawn_value": {
+      "white": 0,
+      "black": 0
+    },
+    "value": {
+      "white": 5,
+      "black": 4
+    },
+    "phase_points": 0,
+    "both_queens": false,
+    "pawns_only": true,
+    "insufficient_material": {
+      "white": false,
+      "black": false
+    }
+  },
+  "pawns": {
+    "pawns": {
+      "white": [
+        "a2",
+        "b2",
+        "f2",
+        "g2",
+        "d5"
+      ],
+      "black": [
+        "a7",
+        "b7",
+        "f7",
+        "g7"
+      ]
+    },
+    "passed": {
+      "white": [
+        "d5"
+      ],
+      "black": []
+    },
+    "candidates": {
+      "white": [],
+      "black": []
+    },
+    "doubled": {
+      "white": [],
+      "black": []
+    },
+    "isolated": {
+      "white": [
+        "d5"
+      ],
+      "black": []
+    },
+    "backward": {
+      "white": [],
+      "black": []
+    },
+    "defended": {
+      "white": [],
+      "black": []
+    },
+    "count_by_file": {
+      "white": [
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0
+      ],
+      "black": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ]
+    },
+    "count_by_rank": {
+      "white": [
+        0,
+        4,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "black": [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "open_files": [
+      "c",
+      "e",
+      "h"
+    ],
+    "semi_open_files": {
+      "white": [],
+      "black": [
+        "d"
+      ]
+    },
+    "islands": {
+      "white": 3,
+      "black": 2
+    },
+    "levers": {
+      "white": 0,
+      "black": 0
+    },
+    "rams": 0,
+    "passer_lead_rank": {
+      "white": 5,
+      "black": null
+    },
+    "passer_protected": {
+      "white": 0,
+      "black": 0
+    },
+    "passers_connected": {
+      "white": false,
+      "black": false
+    },
+    "passer_unstoppable": {
+      "white": true,
+      "black": false
+    },
+    "chain_max_length": {
+      "white": 1,
+      "black": 1
+    },
+    "chain_base_attacked": {
+      "white": false,
+      "black": false
+    },
+    "queenside_majority": {
+      "white": true,
+      "black": false
+    },
+    "kingside_majority": {
+      "white": false,
+      "black": false
+    },
+    "holes": {
+      "white": [
+        "d3",
+        "d4",
+        "d5",
+        "d6"
+      ],
+      "black": [
+        "d3",
+        "d4",
+        "d5",
+        "d6"
+      ]
+    },
+    "holes_occupied": {
+      "white": 0,
+      "black": 0
+    },
+    "fixed_pawns": {
+      "white": 0,
+      "black": 0
+    },
+    "blocked_passers": {
+      "white": 0,
+      "black": 0
+    },
+    "passer_distance": {
+      "white": 3,
+      "black": null
+    },
+    "passer_own_king_distance": {
+      "white": 6,
+      "black": null
+    },
+    "passer_enemy_king_distance": {
+      "white": 4,
+      "black": null
+    },
+    "passer_in_square": {
+      "white": false,
+      "black": false
+    },
+    "passer_free_path": {
+      "white": 1,
+      "black": 0
+    },
+    "half_open_at_enemy_king": {
+      "white": 0,
+      "black": 0
+    },
+    "backward_on_semi_open": {
+      "white": 0,
+      "black": 0
+    }
+  },
+  "pieces": {
+    "bishop_pair": {
+      "white": false,
+      "black": false
+    },
+    "knight_pair": {
+      "white": false,
+      "black": false
+    },
+    "bishops_light": {
+      "white": 0,
+      "black": 0
+    },
+    "bishops_dark": {
+      "white": 0,
+      "black": 0
+    },
+    "opposite_coloured_bishops": false,
+    "pawns_on_bishop_colour": {
+      "white": 0,
+      "black": 0
+    },
+    "rooks_connected_rank": {
+      "white": false,
+      "black": false
+    },
+    "rooks_connected_file": {
+      "white": false,
+      "black": false
+    },
+    "rooks_on_open_file": {
+      "white": 0,
+      "black": 0
+    },
+    "rooks_on_semi_open_file": {
+      "white": 0,
+      "black": 0
+    },
+    "rooks_on_seventh_rank": {
+      "white": 0,
+      "black": 0
+    },
+    "rook_behind_own_passer": {
+      "white": 0,
+      "black": 0
+    },
+    "rook_behind_enemy_passer": {
+      "white": 0,
+      "black": 0
+    },
+    "trapped_rook": {
+      "white": false,
+      "black": false
+    },
+    "outposts": {
+      "white": [],
+      "black": []
+    },
+    "minors_on_outpost": {
+      "white": 0,
+      "black": 0
+    },
+    "outpost_squares_free": {
+      "white": 0,
+      "black": 0
+    },
+    "knights_on_rim": {
+      "white": 0,
+      "black": 0
+    },
+    "minors_undeveloped": {
+      "white": 0,
+      "black": 0
+    },
+    "queen_developed": {
+      "white": false,
+      "black": false
+    },
+    "fixed_pawns_on_bishop_colour": {
+      "white": 0,
+      "black": 0
+    },
+    "rook_on_seventh_with_king_on_eighth": {
+      "white": false,
+      "black": false
+    },
+    "trapped_pieces": {
+      "white": 0,
+      "black": 0
+    },
+    "trapped_value": {
+      "white": 0,
+      "black": 0
+    }
+  },
+  "king": {
+    "square": {
+      "white": "h2",
+      "black": "h7"
+    },
+    "on_home_square": {
+      "white": false,
+      "black": false
+    },
+    "castled_queenside": {
+      "white": false,
+      "black": false
+    },
+    "castled_kingside": {
+      "white": true,
+      "black": true
+    },
+    "shield_files": {
+      "white": [
+        "f",
+        "g",
+        "h"
+      ],
+      "black": [
+        "f",
+        "g",
+        "h"
+      ]
+    },
+    "shield": {
+      "white": [
+        null,
+        null,
+        null
+      ],
+      "black": [
+        null,
+        null,
+        null
+      ]
+    },
+    "shield_file_open": {
+      "white": [
+        false,
+        false,
+        true
+      ],
+      "black": [
+        false,
+        false,
+        true
+      ]
+    },
+    "shield_file_semi_open_for_enemy": {
+      "white": [
+        false,
+        false,
+        false
+      ],
+      "black": [
+        false,
+        false,
+        false
+      ]
+    },
+    "storm": {
+      "white": [
+        5,
+        5,
+        null
+      ],
+      "black": [
+        5,
+        5,
+        null
+      ]
+    },
+    "ring": {
+      "white": [
+        "g1",
+        "h1",
+        "g2",
+        "g3",
+        "h3"
+      ],
+      "black": [
+        "g6",
+        "h6",
+        "g7",
+        "g8",
+        "h8"
+      ]
+    },
+    "ring_attackers": {
+      "white": 0,
+      "black": 0
+    },
+    "ring_attack_weight": {
+      "white": 0,
+      "black": 0
+    },
+    "ring_defended": {
+      "white": 2,
+      "black": 2
+    },
+    "ring_holes": {
+      "white": 0,
+      "black": 0
+    },
+    "escape_squares": {
+      "white": 4,
+      "black": 4
+    },
+    "back_rank_risk": {
+      "white": false,
+      "black": false
+    },
+    "distance": 5,
+    "tropism": {
+      "white": 0.0,
+      "black": 0.0
+    },
+    "virtual_mobility": {
+      "white": 14,
+      "black": 14
+    },
+    "ring_defenders": {
+      "white": 0,
+      "black": 0
+    },
+    "ring_defence_weight": {
+      "white": 0,
+      "black": 0
+    },
+    "open_rays": {
+      "white": 3,
+      "black": 3
+    },
+    "luft": {
+      "white": false,
+      "black": false
+    },
+    "castled_side": {
+      "white": "short",
+      "black": "short"
+    },
+    "opposite_side_castling": false
+  },
+  "mobility": {
+    "pawns": {
+      "white": 9,
+      "black": 7
+    },
+    "knights": {
+      "white": 0,
+      "black": 0
+    },
+    "bishops": {
+      "white": 0,
+      "black": 0
+    },
+    "rooks": {
+      "white": 0,
+      "black": 0
+    },
+    "queens": {
+      "white": 0,
+      "black": 0
+    },
+    "safe_pawns": {
+      "white": 7,
+      "black": 5
+    },
+    "safe_knights": {
+      "white": 0,
+      "black": 0
+    },
+    "safe_bishops": {
+      "white": 0,
+      "black": 0
+    },
+    "safe_rooks": {
+      "white": 0,
+      "black": 0
+    },
+    "safe_queens": {
+      "white": 0,
+      "black": 0
+    },
+    "total": {
+      "white": 9,
+      "black": 7
+    },
+    "space": {
+      "white": 2,
+      "black": 0
+    },
+    "centre_control": {
+      "white": 0,
+      "black": 0
+    },
+    "extended_centre_control": {
+      "white": 5,
+      "black": 3
+    },
+    "immobile_pieces": {
+      "white": 0,
+      "black": 0
+    }
+  },
+  "attacks": {
+    "controlled": {
+      "white": [
+        "g1",
+        "h1",
+        "g2",
+        "a3",
+        "b3",
+        "c3",
+        "e3",
+        "f3",
+        "g3",
+        "h3",
+        "c6",
+        "e6"
+      ],
+      "black": [
+        "a6",
+        "b6",
+        "c6",
+        "e6",
+        "f6",
+        "g6",
+        "h6",
+        "g7",
+        "g8",
+        "h8"
+      ]
+    },
+    "by_pawns": {
+      "white": [
+        "a3",
+        "b3",
+        "c3",
+        "e3",
+        "f3",
+        "g3",
+        "h3",
+        "c6",
+        "e6"
+      ],
+      "black": [
+        "a6",
+        "b6",
+        "c6",
+        "e6",
+        "f6",
+        "g6",
+        "h6"
+      ]
+    },
+    "by_knights": {
+      "white": [],
+      "black": []
+    },
+    "by_bishops": {
+      "white": [],
+      "black": []
+    },
+    "by_rooks": {
+      "white": [],
+      "black": []
+    },
+    "by_queens": {
+      "white": [],
+      "black": []
+    },
+    "by_kings": {
+      "white": [
+        "g1",
+        "h1",
+        "g2",
+        "g3",
+        "h3"
+      ],
+      "black": [
+        "g6",
+        "h6",
+        "g7",
+        "g8",
+        "h8"
+      ]
+    },
+    "attacked": {
+      "white": [],
+      "black": []
+    },
+    "hanging": {
+      "white": [],
+      "black": []
+    },
+    "en_prise": {
+      "white": [],
+      "black": []
+    },
+    "pinned": {
+      "white": [],
+      "black": []
+    },
+    "defended": {
+      "white": [
+        "g2"
+      ],
+      "black": [
+        "g7"
+      ]
+    },
+    "attacked_value": {
+      "white": 0,
+      "black": 0
+    },
+    "hanging_value": {
+      "white": 0,
+      "black": 0
+    },
+    "en_prise_value": {
+      "white": 0,
+      "black": 0
+    },
+    "en_prise_max_value": {
+      "white": 0,
+      "black": 0
+    },
+    "pinned_value": {
+      "white": 0,
+      "black": 0
+    },
+    "skewer_candidates": {
+      "white": 0,
+      "black": 0
+    }
+  },
+  "exchange": {
+    "see_best_capture": {
+      "white": 0,
+      "black": 0
+    },
+    "see_positive_capture_count": {
+      "white": 0,
+      "black": 0
+    },
+    "see_equal_capture_count": {
+      "white": 0,
+      "black": 0
+    },
+    "see_positive_total": {
+      "white": 0,
+      "black": 0
+    }
+  },
+  "threats": {
+    "threatened": {
+      "white": [],
+      "black": []
+    },
+    "threatened_value": {
+      "white": 0,
+      "black": 0
+    },
+    "threat_max_gain": {
+      "white": 0,
+      "black": 0
+    },
+    "attacked_by_lesser": {
+      "white": [],
+      "black": []
+    },
+    "queen_attacked_by_lesser": {
+      "white": false,
+      "black": false
+    },
+    "overloaded_defenders": {
+      "white": [],
+      "black": []
+    },
+    "removable_defenders": {
+      "white": [],
+      "black": []
+    },
+    "loose": {
+      "white": [
+        "a2",
+        "b2",
+        "f2",
+        "d5"
+      ],
+      "black": [
+        "a7",
+        "b7",
+        "f7"
+      ]
+    },
+    "attacker_surplus": {
+      "white": [],
+      "black": []
+    },
+    "xray_through_enemy": {
+      "white": 0,
+      "black": 0
+    },
+    "battery_count": {
+      "white": 0,
+      "black": 0
+    },
+    "battery_at_king": {
+      "white": false,
+      "black": false
+    }
+  },
+  "tactics": {
+    "available": {
+      "white": true,
+      "black": true
+    },
+    "check_count": {
+      "white": 0,
+      "black": 0
+    },
+    "check_by_pawn": {
+      "white": false,
+      "black": false
+    },
+    "check_by_knight": {
+      "white": false,
+      "black": false
+    },
+    "check_by_bishop": {
+      "white": false,
+      "black": false
+    },
+    "check_by_rook": {
+      "white": false,
+      "black": false
+    },
+    "check_by_queen": {
+      "white": false,
+      "black": false
+    },
+    "safe_check_count": {
+      "white": 0,
+      "black": 0
+    },
+    "safe_check_by_pawn": {
+      "white": false,
+      "black": false
+    },
+    "safe_check_by_knight": {
+      "white": false,
+      "black": false
+    },
+    "safe_check_by_bishop": {
+      "white": false,
+      "black": false
+    },
+    "safe_check_by_rook": {
+      "white": false,
+      "black": false
+    },
+    "safe_check_by_queen": {
+      "white": false,
+      "black": false
+    },
+    "double_check_available": {
+      "white": false,
+      "black": false
+    },
+    "discovered_check_available": {
+      "white": false,
+      "black": false
+    },
+    "mate_in_1": {
+      "white": false,
+      "black": false
+    },
+    "stalemate_in_1": {
+      "white": false,
+      "black": false
+    },
+    "promotion_files": {
+      "white": [],
+      "black": []
+    },
+    "promotes_to_queen": {
+      "white": false,
+      "black": false
+    },
+    "promotes_to_rook": {
+      "white": false,
+      "black": false
+    },
+    "promotes_to_bishop": {
+      "white": false,
+      "black": false
+    },
+    "promotes_to_knight": {
+      "white": false,
+      "black": false
+    },
+    "safe_promotion_files": {
+      "white": [],
+      "black": []
+    },
+    "capture_count": {
+      "white": 0,
+      "black": 0
+    },
+    "winning_capture_available": {
+      "white": false,
+      "black": false
+    },
+    "winning_capture_max_gain": {
+      "white": 0,
+      "black": 0
+    },
+    "captures_hanging": {
+      "white": false,
+      "black": false
+    },
+    "hanging_victim_max_value": {
+      "white": 0,
+      "black": 0
+    },
+    "equal_capture_count": {
+      "white": 0,
+      "black": 0
+    },
+    "losing_capture_count": {
+      "white": 0,
+      "black": 0
+    },
+    "fork_count": {
+      "white": 0,
+      "black": 0
+    },
+    "fork_max_value": {
+      "white": 0,
+      "black": 0
+    },
+    "knight_fork_available": {
+      "white": false,
+      "black": false
+    },
+    "royal_fork_available": {
+      "white": false,
+      "black": false
+    },
+    "pin_creation_count": {
+      "white": 0,
+      "black": 0
+    },
+    "skewer_creation_available": {
+      "white": false,
+      "black": false
+    },
+    "discovered_attack_available": {
+      "white": false,
+      "black": false
+    },
+    "legal_move_count": {
+      "white": 13,
+      "black": 12
+    },
+    "safe_check_capturing": {
+      "white": false,
+      "black": false
+    },
+    "discovered_attack_on_queen": {
+      "white": false,
+      "black": false
+    },
+    "back_rank_mate_threat": {
+      "white": false,
+      "black": false
+    },
+    "quiet_threat_available": {
+      "white": false,
+      "black": false
+    },
+    "no_safe_moves": {
+      "white": false,
+      "black": false
+    },
+    "promotion_see_positive": {
+      "white": false,
+      "black": false
+    }
+  },
+  "endgame": {
+    "king_centralisation": {
+      "white": 3,
+      "black": 3
+    },
+    "race_plies": {
+      "white": 2,
+      "black": 8
+    },
+    "opposition": null,
+    "key_square_occupied": {
+      "white": false,
+      "black": false
+    },
+    "wrong_colour_bishop": {
+      "white": false,
+      "black": false
+    },
+    "drawish_material": null
+  },
+  "maps": {
+    "controlled": {
+      "white": [
+        "g1",
+        "h1",
+        "g2",
+        "a3",
+        "b3",
+        "c3",
+        "e3",
+        "f3",
+        "g3",
+        "h3",
+        "c6",
+        "e6"
+      ],
+      "black": [
+        "a6",
+        "b6",
+        "c6",
+        "e6",
+        "f6",
+        "g6",
+        "h6",
+        "g7",
+        "g8",
+        "h8"
+      ]
+    },
+    "by_pawns": {
+      "white": [
+        "a3",
+        "b3",
+        "c3",
+        "e3",
+        "f3",
+        "g3",
+        "h3",
+        "c6",
+        "e6"
+      ],
+      "black": [
+        "a6",
+        "b6",
+        "c6",
+        "e6",
+        "f6",
+        "g6",
+        "h6"
+      ]
+    },
+    "hanging": {
+      "white": [],
+      "black": []
+    },
+    "pinned": {
+      "white": [],
+      "black": []
+    },
+    "threatened": {
+      "white": [],
+      "black": []
+    }
+  }
+}

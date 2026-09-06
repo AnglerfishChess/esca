@@ -2,8 +2,13 @@
 
 A fact is declared once, in the `facts_group!` block that defines its group in
 `src/facts/mod.rs`: the field, its type and the doc comment that is its
-meaning. `docs/features.md` is generated from those blocks
-(`cargo run --example catalogue`) and a test fails when it is stale.
+meaning. The type is the one that fits the purpose — `PerFile<T>`, `SquareSet`,
+`Option<u8>` — and a run of positions whose order the type cannot carry states
+it in the meaning. Everything else is generated from those blocks by
+`cargo run --example catalogue --all-features`: `docs/features.md`,
+`docs/facts.schema.json`, the facts section of `python/esca/_esca.pyi`, and the
+golden JSON and tensor batches under `tests/data/facts/`. A test in each
+language fails when any of them is stale.
 
 ## A fact exists only with all of these
 
@@ -15,7 +20,7 @@ meaning. `docs/features.md` is generated from those blocks
    mirrored case for case, at least three per fact and per colour, a case with
    Black to move for anything a mover's view could have flipped, and a Chess960
    case for anything that reads the back rank.
-4. `docs/features.md` regenerated.
+4. Every generated artefact regenerated, in one commit with the field.
 
 Cases state what the definition requires; a value read off the implementation
 tests nothing. Positions are named constants with a one-line note on what they
@@ -31,9 +36,9 @@ and readable as usage examples, independent and parallel-safe.
 
 ## Changing what a fact computes
 
-Fix the computation and the cases that pin it in both languages, regenerate
-`docs/features.md`, and say in `CHANGELOG.md` what now answers differently: a
-consumer reads these by name, so a changed meaning is a changed contract.
+Fix the computation and the cases that pin it in both languages, regenerate the
+artefacts, and say in `CHANGELOG.md` what now answers differently: a consumer
+reads these by name, so a changed meaning is a changed contract.
 
 ## Repo layout and commands
 
@@ -43,7 +48,7 @@ project (`python/esca` the package, `python/tests` its suite), `docs/` for the
 spec, `mcp/` for the MCP server.
 
 ```sh
-uv sync --all-groups            # builds the extension in place, editable
+uv sync --all-groups --all-extras   # builds the extension in place, editable
 uv run --no-sync pytest
 cargo test --all-features
 ```

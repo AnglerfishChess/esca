@@ -2,7 +2,11 @@
 
 Squares, roles, colours and files are text here; every fact that differs
 between the two sides is an `esca.ByColour`, read as `.white`, `.black` or
-`.of(colour)`.
+`.of(colour)`. `Facts.to_dict()` writes any of it as plain data, in the one
+JSON form `docs/facts.schema.json` describes.
+
+`esca.tensors` turns a run of positions into one typed array per fact; it needs
+NumPy, which the base install leaves out: `pip install esca[tensors]`.
 """
 
 from . import endings, explain, openings, pgn, polyglot, uci

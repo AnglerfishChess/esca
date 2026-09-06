@@ -210,8 +210,8 @@ impl Before<'_> {
                 king::shield_files(self.scan.kings.of(enemy).file())
                     .into_iter()
                     .any(|file| {
-                        self.pawns.count_by_file.of(mover)[file.index()] > 0
-                            && structure.count_by_file.of(mover)[file.index()] == 0
+                        self.pawns.count_by_file.of(mover).of(file) > 0
+                            && structure.count_by_file.of(mover).of(file) == 0
                     })
             }),
             enemy_king_attackers_delta: ring_attackers(&scan, enemy)

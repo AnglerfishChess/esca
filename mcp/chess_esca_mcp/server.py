@@ -492,11 +492,14 @@ def facts(
 
     Every fact is labelled by its own name, and a value that differs between
     the two sides is written `{"white": …, "black": …}`, so nothing has to be
-    read against whose turn it is. The groups are `state`, `history`,
-    `material`, `pawns`, `pieces`, `king`, `mobility`, `attacks`, `exchange`,
-    `threats`, `tactics`, `endgame`, and the two that restate others,
-    `placement` and `maps`. `esca://facts-catalogue` says what every field
-    means.
+    read against whose turn it is. A set of squares is the list of its square
+    names in board order, a set of files the list of its letters, and a value
+    that may be absent is `null`. Where a value is a run of eight or three,
+    `field_notes` says once which end is which. The groups are `state`,
+    `history`, `material`, `pawns`, `pieces`, `king`, `mobility`, `attacks`,
+    `exchange`, `threats`, `tactics`, `endgame`, and the two that restate
+    others, `placement` and `maps`. `esca://facts-catalogue` says what every
+    field means.
 
     Args:
         fen: the position as FEN or EPD; the start position when omitted.
@@ -507,7 +510,8 @@ def facts(
 
     Returns:
         dict: `fen`, `side_to_move`, `groups` keyed by group name, each holding
-        `{field: value}`, `groups_available` and `prose` — or `error`.
+        `{field: value}`, `field_notes` for the fields whose value is a run of
+        positions, `groups_available` and `prose` — or `error`.
     """
     if groups:
         unknown = facts_module.unknown_groups(groups)

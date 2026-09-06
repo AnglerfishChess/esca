@@ -2,7 +2,7 @@
 
 import os
 from collections.abc import Iterator, Sequence
-from typing import Any, Final, TypedDict, final
+from typing import Any, Final, Literal, TypedDict, final
 
 __version__: Final[str]
 
@@ -504,19 +504,6 @@ class Ending:
     def describe(self) -> str: ...
 
 @final
-class ByColour:
-    """One value for White and one for Black."""
-
-    def __new__(cls, white: Any, black: Any) -> ByColour: ...
-    @property
-    def white(self) -> Any: ...
-    @property
-    def black(self) -> Any: ...
-    def of(self, colour: str) -> Any: ...
-    def __getitem__(self, colour: str) -> Any: ...
-    def __eq__(self, other: object) -> bool: ...
-
-@final
 class FileSet:
     """A set of files."""
 
@@ -535,639 +522,1313 @@ class FileSet:
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
 
+# --- generated from the facts catalogue: do not edit by hand ---
+#
+# cargo run --example catalogue --all-features
+
+#: A file letter.
+type FileLetter = Literal["a", "b", "c", "d", "e", "f", "g", "h"]
+
+#: A role letter, as every esca surface spells a piece kind.
+type RoleLetter = Literal["p", "n", "b", "r", "q", "k"]
+
+#: The side a king's square and its spent castling rights read as.
+type CastledSide = Literal["short", "long"]
+
+#: Which opposition the kings stand in.
+type Opposition = Literal["direct", "distant"]
+
+#: A material configuration that draws although one side is ahead.
+type DrawishMaterial = Literal["two_knights", "wrong_bishop", "opposite_bishops"]
+
+#: Eight values, file a first, through file h.
+type PerFile[T] = tuple[T, T, T, T, T, T, T, T]
+
+#: Eight values, rank 1 first, through rank 8.
+type PerRank[T] = tuple[T, T, T, T, T, T, T, T]
+
+class ColourPair[T](TypedDict):
+    """One value per colour, as `to_dict()` writes a `ByColour`."""
+
+    white: T
+    black: T
+
+@final
+class ByColour[T]:
+    """One value for White and one for Black."""
+
+    __match_args__: Final[tuple[Literal["white"], Literal["black"]]]
+
+    def __new__(cls, white: T, black: T) -> ByColour[T]: ...
+    @property
+    def white(self) -> T: ...
+    @property
+    def black(self) -> T: ...
+    def of(self, colour: str) -> T: ...
+    def __getitem__(self, colour: str) -> T: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __class_getitem__(cls, item: Any) -> Any: ...
+
+class PlacementFactsDict(TypedDict):
+    """The plain data `PlacementFacts.to_dict()` answers."""
+
+    units: ColourPair[list[str]]
+    pawns: ColourPair[list[str]]
+    knights: ColourPair[list[str]]
+    bishops: ColourPair[list[str]]
+    rooks: ColourPair[list[str]]
+    queens: ColourPair[list[str]]
+    kings: ColourPair[list[str]]
+
+class StateFactsDict(TypedDict):
+    """The plain data `StateFacts.to_dict()` answers."""
+
+    in_check: bool
+    double_check: bool
+    can_castle_short: ColourPair[bool]
+    can_castle_long: ColourPair[bool]
+    en_passant: FileLetter | None
+    en_passant_capture_legal: bool
+
+class HistoryFactsDict(TypedDict):
+    """The plain data `HistoryFacts.to_dict()` answers."""
+
+    known: bool
+    halfmove_clock: int
+    halfmove_known: bool
+    repetition_seen: bool
+    repetition_available: bool
+    captures_in_last_8: int
+    checks_in_last_8: int
+    quiet_plies: int
+    material_trend: int
+    last_move_victim: RoleLetter | None
+    last_move_mover: RoleLetter | None
+
+class MaterialFactsDict(TypedDict):
+    """The plain data `MaterialFacts.to_dict()` answers."""
+
+    pawns: ColourPair[int]
+    knights: ColourPair[int]
+    bishops: ColourPair[int]
+    rooks: ColourPair[int]
+    queens: ColourPair[int]
+    non_pawn_value: ColourPair[int]
+    value: ColourPair[int]
+    phase_points: int
+    both_queens: bool
+    pawns_only: bool
+    insufficient_material: ColourPair[bool]
+
+class PawnFactsDict(TypedDict):
+    """The plain data `PawnFacts.to_dict()` answers."""
+
+    pawns: ColourPair[list[str]]
+    passed: ColourPair[list[str]]
+    candidates: ColourPair[list[str]]
+    doubled: ColourPair[list[str]]
+    isolated: ColourPair[list[str]]
+    backward: ColourPair[list[str]]
+    defended: ColourPair[list[str]]
+    count_by_file: ColourPair[list[int]]
+    count_by_rank: ColourPair[list[int]]
+    open_files: list[str]
+    semi_open_files: ColourPair[list[str]]
+    islands: ColourPair[int]
+    levers: ColourPair[int]
+    rams: int
+    passer_lead_rank: ColourPair[int | None]
+    passer_protected: ColourPair[int]
+    passers_connected: ColourPair[bool]
+    passer_unstoppable: ColourPair[bool]
+    chain_max_length: ColourPair[int]
+    chain_base_attacked: ColourPair[bool]
+    queenside_majority: ColourPair[bool]
+    kingside_majority: ColourPair[bool]
+    holes: ColourPair[list[str]]
+    holes_occupied: ColourPair[int]
+    fixed_pawns: ColourPair[int]
+    blocked_passers: ColourPair[int]
+    passer_distance: ColourPair[int | None]
+    passer_own_king_distance: ColourPair[int | None]
+    passer_enemy_king_distance: ColourPair[int | None]
+    passer_in_square: ColourPair[bool]
+    passer_free_path: ColourPair[int]
+    half_open_at_enemy_king: ColourPair[int]
+    backward_on_semi_open: ColourPair[int]
+
+class PieceFactsDict(TypedDict):
+    """The plain data `PieceFacts.to_dict()` answers."""
+
+    bishop_pair: ColourPair[bool]
+    knight_pair: ColourPair[bool]
+    bishops_light: ColourPair[int]
+    bishops_dark: ColourPair[int]
+    opposite_coloured_bishops: bool
+    pawns_on_bishop_colour: ColourPair[int]
+    rooks_connected_rank: ColourPair[bool]
+    rooks_connected_file: ColourPair[bool]
+    rooks_on_open_file: ColourPair[int]
+    rooks_on_semi_open_file: ColourPair[int]
+    rooks_on_seventh_rank: ColourPair[int]
+    rook_behind_own_passer: ColourPair[int]
+    rook_behind_enemy_passer: ColourPair[int]
+    trapped_rook: ColourPair[bool]
+    outposts: ColourPair[list[str]]
+    minors_on_outpost: ColourPair[int]
+    outpost_squares_free: ColourPair[int]
+    knights_on_rim: ColourPair[int]
+    minors_undeveloped: ColourPair[int]
+    queen_developed: ColourPair[bool]
+    fixed_pawns_on_bishop_colour: ColourPair[int]
+    rook_on_seventh_with_king_on_eighth: ColourPair[bool]
+    trapped_pieces: ColourPair[int]
+    trapped_value: ColourPair[int]
+
+class KingFactsDict(TypedDict):
+    """The plain data `KingFacts.to_dict()` answers."""
+
+    square: ColourPair[str]
+    on_home_square: ColourPair[bool]
+    castled_queenside: ColourPair[bool]
+    castled_kingside: ColourPair[bool]
+    shield_files: ColourPair[list[FileLetter]]
+    shield: ColourPair[list[int | None]]
+    shield_file_open: ColourPair[list[bool]]
+    shield_file_semi_open_for_enemy: ColourPair[list[bool]]
+    storm: ColourPair[list[int | None]]
+    ring: ColourPair[list[str]]
+    ring_attackers: ColourPair[int]
+    ring_attack_weight: ColourPair[int]
+    ring_defended: ColourPair[int]
+    ring_holes: ColourPair[int]
+    escape_squares: ColourPair[int]
+    back_rank_risk: ColourPair[bool]
+    distance: int
+    tropism: ColourPair[float]
+    virtual_mobility: ColourPair[int]
+    ring_defenders: ColourPair[int]
+    ring_defence_weight: ColourPair[int]
+    open_rays: ColourPair[int]
+    luft: ColourPair[bool]
+    castled_side: ColourPair[CastledSide | None]
+    opposite_side_castling: bool
+
+class MobilityFactsDict(TypedDict):
+    """The plain data `MobilityFacts.to_dict()` answers."""
+
+    pawns: ColourPair[int]
+    knights: ColourPair[int]
+    bishops: ColourPair[int]
+    rooks: ColourPair[int]
+    queens: ColourPair[int]
+    safe_pawns: ColourPair[int]
+    safe_knights: ColourPair[int]
+    safe_bishops: ColourPair[int]
+    safe_rooks: ColourPair[int]
+    safe_queens: ColourPair[int]
+    total: ColourPair[int]
+    space: ColourPair[int]
+    centre_control: ColourPair[int]
+    extended_centre_control: ColourPair[int]
+    immobile_pieces: ColourPair[int]
+
+class AttackFactsDict(TypedDict):
+    """The plain data `AttackFacts.to_dict()` answers."""
+
+    controlled: ColourPair[list[str]]
+    by_pawns: ColourPair[list[str]]
+    by_knights: ColourPair[list[str]]
+    by_bishops: ColourPair[list[str]]
+    by_rooks: ColourPair[list[str]]
+    by_queens: ColourPair[list[str]]
+    by_kings: ColourPair[list[str]]
+    attacked: ColourPair[list[str]]
+    hanging: ColourPair[list[str]]
+    en_prise: ColourPair[list[str]]
+    pinned: ColourPair[list[str]]
+    defended: ColourPair[list[str]]
+    attacked_value: ColourPair[int]
+    hanging_value: ColourPair[int]
+    en_prise_value: ColourPair[int]
+    en_prise_max_value: ColourPair[int]
+    pinned_value: ColourPair[int]
+    skewer_candidates: ColourPair[int]
+
+class ExchangeFactsDict(TypedDict):
+    """The plain data `ExchangeFacts.to_dict()` answers."""
+
+    see_best_capture: ColourPair[int]
+    see_positive_capture_count: ColourPair[int]
+    see_equal_capture_count: ColourPair[int]
+    see_positive_total: ColourPair[int]
+
+class ThreatFactsDict(TypedDict):
+    """The plain data `ThreatFacts.to_dict()` answers."""
+
+    threatened: ColourPair[list[str]]
+    threatened_value: ColourPair[int]
+    threat_max_gain: ColourPair[int]
+    attacked_by_lesser: ColourPair[list[str]]
+    queen_attacked_by_lesser: ColourPair[bool]
+    overloaded_defenders: ColourPair[list[str]]
+    removable_defenders: ColourPair[list[str]]
+    loose: ColourPair[list[str]]
+    attacker_surplus: ColourPair[list[str]]
+    xray_through_enemy: ColourPair[int]
+    battery_count: ColourPair[int]
+    battery_at_king: ColourPair[bool]
+
+class TacticsFactsDict(TypedDict):
+    """The plain data `TacticsFacts.to_dict()` answers."""
+
+    available: ColourPair[bool]
+    check_count: ColourPair[int]
+    check_by_pawn: ColourPair[bool]
+    check_by_knight: ColourPair[bool]
+    check_by_bishop: ColourPair[bool]
+    check_by_rook: ColourPair[bool]
+    check_by_queen: ColourPair[bool]
+    safe_check_count: ColourPair[int]
+    safe_check_by_pawn: ColourPair[bool]
+    safe_check_by_knight: ColourPair[bool]
+    safe_check_by_bishop: ColourPair[bool]
+    safe_check_by_rook: ColourPair[bool]
+    safe_check_by_queen: ColourPair[bool]
+    double_check_available: ColourPair[bool]
+    discovered_check_available: ColourPair[bool]
+    mate_in_1: ColourPair[bool]
+    stalemate_in_1: ColourPair[bool]
+    promotion_files: ColourPair[list[str]]
+    promotes_to_queen: ColourPair[bool]
+    promotes_to_rook: ColourPair[bool]
+    promotes_to_bishop: ColourPair[bool]
+    promotes_to_knight: ColourPair[bool]
+    safe_promotion_files: ColourPair[list[str]]
+    capture_count: ColourPair[int]
+    winning_capture_available: ColourPair[bool]
+    winning_capture_max_gain: ColourPair[int]
+    captures_hanging: ColourPair[bool]
+    hanging_victim_max_value: ColourPair[int]
+    equal_capture_count: ColourPair[int]
+    losing_capture_count: ColourPair[int]
+    fork_count: ColourPair[int]
+    fork_max_value: ColourPair[int]
+    knight_fork_available: ColourPair[bool]
+    royal_fork_available: ColourPair[bool]
+    pin_creation_count: ColourPair[int]
+    skewer_creation_available: ColourPair[bool]
+    discovered_attack_available: ColourPair[bool]
+    legal_move_count: ColourPair[int]
+    safe_check_capturing: ColourPair[bool]
+    discovered_attack_on_queen: ColourPair[bool]
+    back_rank_mate_threat: ColourPair[bool]
+    quiet_threat_available: ColourPair[bool]
+    no_safe_moves: ColourPair[bool]
+    promotion_see_positive: ColourPair[bool]
+
+class EndgameFactsDict(TypedDict):
+    """The plain data `EndgameFacts.to_dict()` answers."""
+
+    king_centralisation: ColourPair[int]
+    race_plies: ColourPair[int]
+    opposition: Opposition | None
+    key_square_occupied: ColourPair[bool]
+    wrong_colour_bishop: ColourPair[bool]
+    drawish_material: DrawishMaterial | None
+
+class MapFactsDict(TypedDict):
+    """The plain data `MapFacts.to_dict()` answers."""
+
+    controlled: ColourPair[list[str]]
+    by_pawns: ColourPair[list[str]]
+    hanging: ColourPair[list[str]]
+    pinned: ColourPair[list[str]]
+    threatened: ColourPair[list[str]]
+
+class MoveFactsDict(TypedDict):
+    """The plain data `MoveFacts.to_dict()` answers."""
+
+    victim: RoleLetter | None
+    mover: RoleLetter
+    promotion: RoleLetter | None
+    gives_check: bool
+    gives_safe_check: bool
+    is_safe: bool
+    captures_hanging: bool
+    escapes_attack: bool
+    to_attacked_by_pawn: bool
+    is_castling: bool
+    is_en_passant: bool
+    see: int
+    threat_created_max: int
+    moves_attacked_unit: bool
+    blocks_check: bool
+    advances_passer: bool
+    creates_passer: bool
+    creates_isolated: bool
+    creates_doubled: bool
+    creates_backward: bool
+    opens_file_at_enemy_king: bool
+    enemy_king_attackers_delta: int
+    mover_king_attackers_delta: int
+    mover_hanging_delta: int
+    enemy_hanging_delta: int
+    leaves_unit_hanging: bool
+    gives_discovered_attack: bool
+
+class FactsDict(TypedDict):
+    """The plain data `Facts.to_dict()` answers, one entry per group."""
+
+    placement: PlacementFactsDict
+    state: StateFactsDict
+    history: HistoryFactsDict
+    material: MaterialFactsDict
+    pawns: PawnFactsDict
+    pieces: PieceFactsDict
+    king: KingFactsDict
+    mobility: MobilityFactsDict
+    attacks: AttackFactsDict
+    exchange: ExchangeFactsDict
+    threats: ThreatFactsDict
+    tactics: TacticsFactsDict
+    endgame: EndgameFactsDict
+    maps: MapFactsDict
+
 @final
 class PlacementFacts:
     """Where the units stand."""
 
     @property
-    def units(self) -> ByColour: ...
+    def units(self) -> ByColour[SquareSet]:
+        """Every unit of the side."""
     @property
-    def pawns(self) -> ByColour: ...
+    def pawns(self) -> ByColour[SquareSet]:
+        """The side's pawns."""
     @property
-    def knights(self) -> ByColour: ...
+    def knights(self) -> ByColour[SquareSet]:
+        """The side's knights."""
     @property
-    def bishops(self) -> ByColour: ...
+    def bishops(self) -> ByColour[SquareSet]:
+        """The side's bishops."""
     @property
-    def rooks(self) -> ByColour: ...
+    def rooks(self) -> ByColour[SquareSet]:
+        """The side's rooks."""
     @property
-    def queens(self) -> ByColour: ...
+    def queens(self) -> ByColour[SquareSet]:
+        """The side's queens."""
     @property
-    def kings(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def kings(self) -> ByColour[SquareSet]:
+        """The side's king."""
+    def to_dict(self) -> PlacementFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class StateFacts:
     """Check, castling rights and the en-passant square."""
 
     @property
-    def in_check(self) -> bool: ...
+    def in_check(self) -> bool:
+        """The side to move stands in check."""
     @property
-    def double_check(self) -> bool: ...
+    def double_check(self) -> bool:
+        """Two or more units give check to the side to move."""
     @property
-    def can_castle_short(self) -> ByColour: ...
+    def can_castle_short(self) -> ByColour[bool]:
+        """The side may still castle short."""
     @property
-    def can_castle_long(self) -> ByColour: ...
+    def can_castle_long(self) -> ByColour[bool]:
+        """The side may still castle long."""
     @property
-    def en_passant(self) -> str | None: ...
+    def en_passant(self) -> FileLetter | None:
+        """The file the position names as the en-passant target, if any."""
     @property
-    def en_passant_capture_legal(self) -> bool: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def en_passant_capture_legal(self) -> bool:
+        """Some legal move captures en passant."""
+    def to_dict(self) -> StateFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class HistoryFacts:
-    """What the plies before this position say: the clock, repetition, and how forcing the recent play was. Everything
-    but the halfmove clock, which the position itself carries, is zero unless `known` is true.
+    """What the plies before this position say: the clock, repetition, and how forcing the recent play was.
+    Everything but the halfmove clock, which the position itself carries, is zero unless `known` is true.
     """
 
     @property
-    def known(self) -> bool: ...
+    def known(self) -> bool:
+        """A position history was supplied."""
     @property
-    def halfmove_clock(self) -> int: ...
+    def halfmove_clock(self) -> int:
+        """Plies since the last capture or pawn move."""
     @property
-    def halfmove_known(self) -> bool: ...
+    def halfmove_known(self) -> bool:
+        """The position carried a halfmove clock."""
     @property
-    def repetition_seen(self) -> bool: ...
+    def repetition_seen(self) -> bool:
+        """This position occurred before in the supplied history."""
     @property
-    def repetition_available(self) -> bool: ...
+    def repetition_available(self) -> bool:
+        """Some legal move reaches a position of the supplied history."""
     @property
-    def captures_in_last_8(self) -> int: ...
+    def captures_in_last_8(self) -> int:
+        """Captures among the last eight plies of the supplied history."""
     @property
-    def checks_in_last_8(self) -> int: ...
+    def checks_in_last_8(self) -> int:
+        """Plies among the last eight that gave check."""
     @property
-    def quiet_plies(self) -> int: ...
+    def quiet_plies(self) -> int:
+        """Plies since the last one that captured or gave check; the whole history when it holds none."""
     @property
-    def material_trend(self) -> int: ...
+    def material_trend(self) -> int:
+        """The material balance now, less the balance eight plies ago, White less Black."""
     @property
-    def last_move_victim(self) -> str | None: ...
+    def last_move_victim(self) -> RoleLetter | None:
+        """The role the last move captured, the pawn for an en-passant capture."""
     @property
-    def last_move_mover(self) -> str | None: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def last_move_mover(self) -> RoleLetter | None:
+        """The role that made the last move; for castling, the king."""
+    def to_dict(self) -> HistoryFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class MaterialFacts:
     """Material and phase."""
 
     @property
-    def pawns(self) -> ByColour: ...
+    def pawns(self) -> ByColour[int]:
+        """The side's pawns."""
     @property
-    def knights(self) -> ByColour: ...
+    def knights(self) -> ByColour[int]:
+        """The side's knights."""
     @property
-    def bishops(self) -> ByColour: ...
+    def bishops(self) -> ByColour[int]:
+        """The side's bishops."""
     @property
-    def rooks(self) -> ByColour: ...
+    def rooks(self) -> ByColour[int]:
+        """The side's rooks."""
     @property
-    def queens(self) -> ByColour: ...
+    def queens(self) -> ByColour[int]:
+        """The side's queens."""
     @property
-    def non_pawn_value(self) -> ByColour: ...
+    def non_pawn_value(self) -> ByColour[int]:
+        """The value of the side's knights, bishops, rooks and queens."""
     @property
-    def value(self) -> ByColour: ...
+    def value(self) -> ByColour[int]:
+        """The value of every unit of the side but the king."""
     @property
-    def phase_points(self) -> int: ...
+    def phase_points(self) -> int:
+        """`4·Q + 2·R + B + N` over both sides: 24 at the full opening array, 0 with nothing but kings and
+        pawns left.
+        """
     @property
-    def both_queens(self) -> bool: ...
+    def both_queens(self) -> bool:
+        """Both sides have at least one queen."""
     @property
-    def pawns_only(self) -> bool: ...
+    def pawns_only(self) -> bool:
+        """Neither side has a unit other than kings and pawns."""
     @property
-    def insufficient_material(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def insufficient_material(self) -> ByColour[bool]:
+        """The side's own material could never deliver mate."""
+    def to_dict(self) -> MaterialFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class PawnFacts:
     """Pawn structure."""
 
     @property
-    def pawns(self) -> ByColour: ...
+    def pawns(self) -> ByColour[SquareSet]:
+        """The side's pawns."""
     @property
-    def passed(self) -> ByColour: ...
+    def passed(self) -> ByColour[SquareSet]:
+        """The side's pawns with no enemy pawn ahead on their own or an adjacent file."""
     @property
-    def candidates(self) -> ByColour: ...
+    def candidates(self) -> ByColour[SquareSet]:
+        """The side's candidate passers: pawns with no enemy pawn ahead on their own file, backed by at least as
+        many friendly pawns behind on the adjacent files as there are enemy pawns ahead on them.
+        """
     @property
-    def doubled(self) -> ByColour: ...
+    def doubled(self) -> ByColour[SquareSet]:
+        """The side's pawns sharing a file with another pawn of their own colour."""
     @property
-    def isolated(self) -> ByColour: ...
+    def isolated(self) -> ByColour[SquareSet]:
+        """The side's pawns with no friendly pawn on either adjacent file."""
     @property
-    def backward(self) -> ByColour: ...
+    def backward(self) -> ByColour[SquareSet]:
+        """The side's pawns that cannot advance without being taken and cannot be defended by a pawn."""
     @property
-    def defended(self) -> ByColour: ...
+    def defended(self) -> ByColour[SquareSet]:
+        """The side's pawns defended by a pawn of their own colour."""
     @property
-    def count_by_file(self) -> ByColour: ...
+    def count_by_file(self) -> ByColour[PerFile[int]]:
+        """The side's pawns per file, file a first."""
     @property
-    def count_by_rank(self) -> ByColour: ...
+    def count_by_rank(self) -> ByColour[PerRank[int]]:
+        """The side's pawns per rank counted from its own back rank, rank 1 first."""
     @property
-    def open_files(self) -> FileSet: ...
+    def open_files(self) -> FileSet:
+        """Files carrying no pawn of either colour."""
     @property
-    def semi_open_files(self) -> ByColour: ...
+    def semi_open_files(self) -> ByColour[FileSet]:
+        """Files carrying no pawn of the side and at least one of the other."""
     @property
-    def islands(self) -> ByColour: ...
+    def islands(self) -> ByColour[int]:
+        """The side's maximal runs of adjacent files carrying a pawn."""
     @property
-    def levers(self) -> ByColour: ...
+    def levers(self) -> ByColour[int]:
+        """The side's pawns that can capture an enemy pawn."""
     @property
-    def rams(self) -> int: ...
+    def rams(self) -> int:
+        """Pawn pairs blocking each other head on."""
     @property
-    def passer_lead_rank(self) -> ByColour: ...
+    def passer_lead_rank(self) -> ByColour[int | None]:
+        """The rank, counted from the side's own back rank, of its most advanced passer."""
     @property
-    def passer_protected(self) -> ByColour: ...
+    def passer_protected(self) -> ByColour[int]:
+        """The side's passers defended by a friendly pawn."""
     @property
-    def passers_connected(self) -> ByColour: ...
+    def passers_connected(self) -> ByColour[bool]:
+        """The side has two passers on adjacent files."""
     @property
-    def passer_unstoppable(self) -> ByColour: ...
+    def passer_unstoppable(self) -> ByColour[bool]:
+        """The side has a passer the enemy king cannot catch."""
     @property
-    def chain_max_length(self) -> ByColour: ...
+    def chain_max_length(self) -> ByColour[int]:
+        """The side's longest run of pawns each defending the next."""
     @property
-    def chain_base_attacked(self) -> ByColour: ...
+    def chain_base_attacked(self) -> ByColour[bool]:
+        """An enemy unit attacks the base of one of the side's chains of two or more."""
     @property
-    def queenside_majority(self) -> ByColour: ...
+    def queenside_majority(self) -> ByColour[bool]:
+        """The side has more pawns than the enemy on files a to d."""
     @property
-    def kingside_majority(self) -> ByColour: ...
+    def kingside_majority(self) -> ByColour[bool]:
+        """The side has more pawns than the enemy on files e to h."""
     @property
-    def holes(self) -> ByColour: ...
+    def holes(self) -> ByColour[SquareSet]:
+        """Squares on the side's ranks 3 to 6 that no pawn of the side can ever attack."""
     @property
-    def holes_occupied(self) -> ByColour: ...
+    def holes_occupied(self) -> ByColour[int]:
+        """Enemy knights and bishops standing on those squares."""
     @property
-    def fixed_pawns(self) -> ByColour: ...
+    def fixed_pawns(self) -> ByColour[int]:
+        """The side's pawns whose stop square holds a unit of either colour."""
     @property
-    def blocked_passers(self) -> ByColour: ...
+    def blocked_passers(self) -> ByColour[int]:
+        """The side's passers whose stop square holds an enemy unit."""
     @property
-    def passer_distance(self) -> ByColour: ...
+    def passer_distance(self) -> ByColour[int | None]:
+        """The pushes the side's lead passer still needs."""
     @property
-    def passer_own_king_distance(self) -> ByColour: ...
+    def passer_own_king_distance(self) -> ByColour[int | None]:
+        """The distance from the side's own king to its lead passer's promotion square."""
     @property
-    def passer_enemy_king_distance(self) -> ByColour: ...
+    def passer_enemy_king_distance(self) -> ByColour[int | None]:
+        """The distance from the enemy king to that same square."""
     @property
-    def passer_in_square(self) -> ByColour: ...
+    def passer_in_square(self) -> ByColour[bool]:
+        """The enemy king stands in the square of the side's lead passer."""
     @property
-    def passer_free_path(self) -> ByColour: ...
+    def passer_free_path(self) -> ByColour[int]:
+        """The side's passers whose whole front span is empty."""
     @property
-    def half_open_at_enemy_king(self) -> ByColour: ...
+    def half_open_at_enemy_king(self) -> ByColour[int]:
+        """Files semi-open for the side among the enemy king's three shield files."""
     @property
-    def backward_on_semi_open(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def backward_on_semi_open(self) -> ByColour[int]:
+        """The side's backward pawns on a file semi-open for the enemy."""
+    def to_dict(self) -> PawnFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class PieceFacts:
     """Bishops, rooks, knights and queens."""
 
     @property
-    def bishop_pair(self) -> ByColour: ...
+    def bishop_pair(self) -> ByColour[bool]:
+        """The side holds bishops on both square colours."""
     @property
-    def knight_pair(self) -> ByColour: ...
+    def knight_pair(self) -> ByColour[bool]:
+        """The side holds two or more knights."""
     @property
-    def bishops_light(self) -> ByColour: ...
+    def bishops_light(self) -> ByColour[int]:
+        """The side's bishops on light squares."""
     @property
-    def bishops_dark(self) -> ByColour: ...
+    def bishops_dark(self) -> ByColour[int]:
+        """The side's bishops on dark squares."""
     @property
-    def opposite_coloured_bishops(self) -> bool: ...
+    def opposite_coloured_bishops(self) -> bool:
+        """Exactly one bishop each, on different square colours."""
     @property
-    def pawns_on_bishop_colour(self) -> ByColour: ...
+    def pawns_on_bishop_colour(self) -> ByColour[int]:
+        """The side's pawns standing on a square colour of one of its own bishops."""
     @property
-    def rooks_connected_rank(self) -> ByColour: ...
+    def rooks_connected_rank(self) -> ByColour[bool]:
+        """Two of the side's rooks share a rank with nothing between."""
     @property
-    def rooks_connected_file(self) -> ByColour: ...
+    def rooks_connected_file(self) -> ByColour[bool]:
+        """Two of the side's rooks share a file with nothing between."""
     @property
-    def rooks_on_open_file(self) -> ByColour: ...
+    def rooks_on_open_file(self) -> ByColour[int]:
+        """The side's rooks on an open file."""
     @property
-    def rooks_on_semi_open_file(self) -> ByColour: ...
+    def rooks_on_semi_open_file(self) -> ByColour[int]:
+        """The side's rooks on a file semi-open for their own side."""
     @property
-    def rooks_on_seventh_rank(self) -> ByColour: ...
+    def rooks_on_seventh_rank(self) -> ByColour[int]:
+        """The side's rooks on its seventh rank, counted from its own back rank."""
     @property
-    def rook_behind_own_passer(self) -> ByColour: ...
+    def rook_behind_own_passer(self) -> ByColour[int]:
+        """The side's rooks behind a passer of their own side."""
     @property
-    def rook_behind_enemy_passer(self) -> ByColour: ...
+    def rook_behind_enemy_passer(self) -> ByColour[int]:
+        """The side's rooks behind an enemy passer."""
     @property
-    def trapped_rook(self) -> ByColour: ...
+    def trapped_rook(self) -> ByColour[bool]:
+        """The side has a rook shut in by its own king with no file to leave by."""
     @property
-    def outposts(self) -> ByColour: ...
+    def outposts(self) -> ByColour[SquareSet]:
+        """The side's outpost squares: squares on its ranks 4 to 6 that a friendly pawn defends and no enemy pawn
+        can ever attack.
+        """
     @property
-    def minors_on_outpost(self) -> ByColour: ...
+    def minors_on_outpost(self) -> ByColour[int]:
+        """The side's knights and bishops standing on one of them."""
     @property
-    def outpost_squares_free(self) -> ByColour: ...
+    def outpost_squares_free(self) -> ByColour[int]:
+        """Its unoccupied outpost squares."""
     @property
-    def knights_on_rim(self) -> ByColour: ...
+    def knights_on_rim(self) -> ByColour[int]:
+        """The side's knights on file a or h, or on its rank 1 or 8."""
     @property
-    def minors_undeveloped(self) -> ByColour: ...
+    def minors_undeveloped(self) -> ByColour[int]:
+        """The side's knights and bishops still on their starting squares."""
     @property
-    def queen_developed(self) -> ByColour: ...
+    def queen_developed(self) -> ByColour[bool]:
+        """A queen of the side stands off its starting square."""
     @property
-    def fixed_pawns_on_bishop_colour(self) -> ByColour: ...
+    def fixed_pawns_on_bishop_colour(self) -> ByColour[int]:
+        """The side's fixed pawns standing on a square colour of one of its own bishops."""
     @property
-    def rook_on_seventh_with_king_on_eighth(self) -> ByColour: ...
+    def rook_on_seventh_with_king_on_eighth(self) -> ByColour[bool]:
+        """The side has a rook on its seventh rank with the enemy king on its eighth."""
     @property
-    def trapped_pieces(self) -> ByColour: ...
+    def trapped_pieces(self) -> ByColour[int]:
+        """The side's units that are neither pawns nor kings and have no safe destination."""
     @property
-    def trapped_value(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def trapped_value(self) -> ByColour[int]:
+        """The value sum of those."""
+    def to_dict(self) -> PieceFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class KingFacts:
     """King safety and shelter."""
 
     @property
-    def square(self) -> ByColour: ...
+    def square(self) -> ByColour[str]:
+        """Where the side's king stands."""
     @property
-    def on_home_square(self) -> ByColour: ...
+    def on_home_square(self) -> ByColour[bool]:
+        """It stands on its own starting square."""
     @property
-    def castled_queenside(self) -> ByColour: ...
+    def castled_queenside(self) -> ByColour[bool]:
+        """It stands on files a to c."""
     @property
-    def castled_kingside(self) -> ByColour: ...
+    def castled_kingside(self) -> ByColour[bool]:
+        """It stands on files f to h."""
     @property
-    def shield_files(self) -> ByColour: ...
+    def shield_files(self) -> ByColour[tuple[FileLetter, FileLetter, FileLetter]]:
+        """The three files the king's shelter is read on, queenside first."""
     @property
-    def shield(self) -> ByColour: ...
+    def shield(self) -> ByColour[tuple[int | None, int | None, int | None]]:
+        """Ranks to the nearest friendly pawn ahead of the king, one per file of the three around the king,
+        queenside first; `shield_files` names them.
+        """
     @property
-    def shield_file_open(self) -> ByColour: ...
+    def shield_file_open(self) -> ByColour[tuple[bool, bool, bool]]:
+        """Whether each of the three files around the king carries no pawn of either colour, queenside first;
+        `shield_files` names them.
+        """
     @property
-    def shield_file_semi_open_for_enemy(self) -> ByColour: ...
+    def shield_file_semi_open_for_enemy(self) -> ByColour[tuple[bool, bool, bool]]:
+        """Whether each of those three files is semi-open for the enemy of that king, queenside first;
+        `shield_files` names them.
+        """
     @property
-    def storm(self) -> ByColour: ...
+    def storm(self) -> ByColour[tuple[int | None, int | None, int | None]]:
+        """Ranks to the nearest enemy pawn ahead of the king, one per file of the three around the king,
+        queenside first; `shield_files` names them.
+        """
     @property
-    def ring(self) -> ByColour: ...
+    def ring(self) -> ByColour[SquareSet]:
+        """The squares adjacent to the king."""
     @property
-    def ring_attackers(self) -> ByColour: ...
+    def ring_attackers(self) -> ByColour[int]:
+        """Enemy knights, bishops, rooks and queens attacking that ring."""
     @property
-    def ring_attack_weight(self) -> ByColour: ...
+    def ring_attack_weight(self) -> ByColour[int]:
+        """Σ over those attackers of N, B = 1, R = 2, Q = 4."""
     @property
-    def ring_defended(self) -> ByColour: ...
+    def ring_defended(self) -> ByColour[int]:
+        """Ring squares the king's own side attacks, the king itself apart."""
     @property
-    def ring_holes(self) -> ByColour: ...
+    def ring_holes(self) -> ByColour[int]:
+        """Ring squares the enemy attacks and `ring_defended` does not count."""
     @property
-    def escape_squares(self) -> ByColour: ...
+    def escape_squares(self) -> ByColour[int]:
+        """Squares adjacent to the king that are empty or capturable and not attacked."""
     @property
-    def back_rank_risk(self) -> ByColour: ...
+    def back_rank_risk(self) -> ByColour[bool]:
+        """The king stands on its rank 1 with every forward-adjacent square held by a friendly unit."""
     @property
-    def distance(self) -> int: ...
+    def distance(self) -> int:
+        """Chebyshev distance between the kings."""
     @property
-    def tropism(self) -> ByColour: ...
+    def tropism(self) -> ByColour[float]:
+        """Mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king."""
     @property
-    def virtual_mobility(self) -> ByColour: ...
+    def virtual_mobility(self) -> ByColour[int]:
+        """Squares a queen on this king's square would attack."""
     @property
-    def ring_defenders(self) -> ByColour: ...
+    def ring_defenders(self) -> ByColour[int]:
+        """The king's own knights, bishops, rooks and queens attacking its ring."""
     @property
-    def ring_defence_weight(self) -> ByColour: ...
+    def ring_defence_weight(self) -> ByColour[int]:
+        """Σ over those defenders of N, B = 1, R = 2, Q = 4."""
     @property
-    def open_rays(self) -> ByColour: ...
+    def open_rays(self) -> ByColour[int]:
+        """Directions from the king holding at least one square, all of them empty out to the edge."""
     @property
-    def luft(self) -> ByColour: ...
+    def luft(self) -> ByColour[bool]:
+        """The king stands on its rank 1 with a square ahead of it empty and unattacked."""
     @property
-    def castled_side(self) -> ByColour: ...
+    def castled_side(self) -> ByColour[CastledSide | None]:
+        """The side the king's square and its spent castling rights read as."""
     @property
-    def opposite_side_castling(self) -> bool: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def opposite_side_castling(self) -> bool:
+        """The two kings stand on opposite wings."""
     @property
-    def ring_attacker_surplus(self) -> ByColour: ...
+    def ring_attacker_surplus(self) -> ByColour[int]:
+        """The weight besieging each king's ring, less the weight defending it."""
+    def to_dict(self) -> KingFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class MobilityFacts:
     """Mobility and space."""
 
     @property
-    def pawns(self) -> ByColour: ...
+    def pawns(self) -> ByColour[int]:
+        """Squares the side's pawns attack that its own units do not hold."""
     @property
-    def knights(self) -> ByColour: ...
+    def knights(self) -> ByColour[int]:
+        """The same for its knights."""
     @property
-    def bishops(self) -> ByColour: ...
+    def bishops(self) -> ByColour[int]:
+        """The same for its bishops."""
     @property
-    def rooks(self) -> ByColour: ...
+    def rooks(self) -> ByColour[int]:
+        """The same for its rooks."""
     @property
-    def queens(self) -> ByColour: ...
+    def queens(self) -> ByColour[int]:
+        """The same for its queens."""
     @property
-    def safe_pawns(self) -> ByColour: ...
+    def safe_pawns(self) -> ByColour[int]:
+        """Of the pawn squares, those no enemy pawn attacks."""
     @property
-    def safe_knights(self) -> ByColour: ...
+    def safe_knights(self) -> ByColour[int]:
+        """The same for its knights."""
     @property
-    def safe_bishops(self) -> ByColour: ...
+    def safe_bishops(self) -> ByColour[int]:
+        """The same for its bishops."""
     @property
-    def safe_rooks(self) -> ByColour: ...
+    def safe_rooks(self) -> ByColour[int]:
+        """The same for its rooks."""
     @property
-    def safe_queens(self) -> ByColour: ...
+    def safe_queens(self) -> ByColour[int]:
+        """The same for its queens."""
     @property
-    def total(self) -> ByColour: ...
+    def total(self) -> ByColour[int]:
+        """The five counts added up."""
     @property
-    def space(self) -> ByColour: ...
+    def space(self) -> ByColour[int]:
+        """Squares the side attacks in the enemy's half."""
     @property
-    def centre_control(self) -> ByColour: ...
+    def centre_control(self) -> ByColour[int]:
+        """The side's attacks on d4, e4, d5 and e5."""
     @property
-    def extended_centre_control(self) -> ByColour: ...
+    def extended_centre_control(self) -> ByColour[int]:
+        """The side's attacks on c3 to f6."""
     @property
-    def immobile_pieces(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def immobile_pieces(self) -> ByColour[int]:
+        """The side's units other than pawns and kings with no destination."""
+    def to_dict(self) -> MobilityFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class AttackFacts:
     """The attack maps and what they say about the units standing on the board."""
 
     @property
-    def controlled(self) -> ByColour: ...
+    def controlled(self) -> ByColour[SquareSet]:
+        """Every square the side attacks."""
     @property
-    def by_pawns(self) -> ByColour: ...
+    def by_pawns(self) -> ByColour[SquareSet]:
+        """The squares the side's pawns attack."""
     @property
-    def by_knights(self) -> ByColour: ...
+    def by_knights(self) -> ByColour[SquareSet]:
+        """The squares its knights attack."""
     @property
-    def by_bishops(self) -> ByColour: ...
+    def by_bishops(self) -> ByColour[SquareSet]:
+        """The squares its bishops attack."""
     @property
-    def by_rooks(self) -> ByColour: ...
+    def by_rooks(self) -> ByColour[SquareSet]:
+        """The squares its rooks attack."""
     @property
-    def by_queens(self) -> ByColour: ...
+    def by_queens(self) -> ByColour[SquareSet]:
+        """The squares its queens attack."""
     @property
-    def by_kings(self) -> ByColour: ...
+    def by_kings(self) -> ByColour[SquareSet]:
+        """The squares its king attacks."""
     @property
-    def attacked(self) -> ByColour: ...
+    def attacked(self) -> ByColour[SquareSet]:
+        """The side's units the enemy attacks, defended or not; never a king."""
     @property
-    def hanging(self) -> ByColour: ...
+    def hanging(self) -> ByColour[SquareSet]:
+        """Those of them their own side does not defend."""
     @property
-    def en_prise(self) -> ByColour: ...
+    def en_prise(self) -> ByColour[SquareSet]:
+        """Those hanging or attacked by a cheaper enemy unit."""
     @property
-    def pinned(self) -> ByColour: ...
+    def pinned(self) -> ByColour[SquareSet]:
+        """The side's units under an absolute pin."""
     @property
-    def defended(self) -> ByColour: ...
+    def defended(self) -> ByColour[SquareSet]:
+        """The side's units standing on a square their own side attacks."""
     @property
-    def attacked_value(self) -> ByColour: ...
+    def attacked_value(self) -> ByColour[int]:
+        """The value sum of the attacked units."""
     @property
-    def hanging_value(self) -> ByColour: ...
+    def hanging_value(self) -> ByColour[int]:
+        """The value sum of the hanging units."""
     @property
-    def en_prise_value(self) -> ByColour: ...
+    def en_prise_value(self) -> ByColour[int]:
+        """The value sum of the units en prise."""
     @property
-    def en_prise_max_value(self) -> ByColour: ...
+    def en_prise_max_value(self) -> ByColour[int]:
+        """The largest value en prise."""
     @property
-    def pinned_value(self) -> ByColour: ...
+    def pinned_value(self) -> ByColour[int]:
+        """The value sum of the absolutely pinned units."""
     @property
-    def skewer_candidates(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def skewer_candidates(self) -> ByColour[int]:
+        """Enemy unit pairs the side's sliders skewer."""
+    def to_dict(self) -> AttackFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class ExchangeFacts:
-    """Each side's captures, judged by the exchange they start.
-
-    The values for the side not to move are read after a null move; when the
-    side to move is in check that move does not exist and they are zero.
+    """Each side's captures, judged by the exchange they start. The values for the side not to move are read
+    after a null move; when the side to move is in check that move does not exist and they are zero.
     """
 
     @property
-    def see_best_capture(self) -> ByColour: ...
+    def see_best_capture(self) -> ByColour[int]:
+        """The largest static exchange evaluation over the side's captures; 0 when it has none."""
     @property
-    def see_positive_capture_count(self) -> ByColour: ...
+    def see_positive_capture_count(self) -> ByColour[int]:
+        """Its captures whose evaluation is above 0."""
     @property
-    def see_equal_capture_count(self) -> ByColour: ...
+    def see_equal_capture_count(self) -> ByColour[int]:
+        """Its captures whose evaluation is 0."""
     @property
-    def see_positive_total(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def see_positive_total(self) -> ByColour[int]:
+        """The sum of the evaluations above 0."""
+    def to_dict(self) -> ExchangeFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class ThreatFacts:
-    """What each side stands to lose, and the slider geometry behind it. Every set is read on the units it is about, and
-    holds no king.
+    """What each side stands to lose, and the slider geometry behind it. Every set is read on the units it is
+    about, and holds no king.
     """
 
     @property
-    def threatened(self) -> ByColour: ...
+    def threatened(self) -> ByColour[SquareSet]:
+        """The side's units the enemy wins material by taking."""
     @property
-    def threatened_value(self) -> ByColour: ...
+    def threatened_value(self) -> ByColour[int]:
+        """The value sum of those."""
     @property
-    def threat_max_gain(self) -> ByColour: ...
+    def threat_max_gain(self) -> ByColour[int]:
+        """The largest such gain over the side's own units."""
     @property
-    def attacked_by_lesser(self) -> ByColour: ...
+    def attacked_by_lesser(self) -> ByColour[SquareSet]:
+        """The side's units an enemy unit of strictly lower value attacks."""
     @property
-    def queen_attacked_by_lesser(self) -> ByColour: ...
+    def queen_attacked_by_lesser(self) -> ByColour[bool]:
+        """One of those units is a queen."""
     @property
-    def overloaded_defenders(self) -> ByColour: ...
+    def overloaded_defenders(self) -> ByColour[SquareSet]:
+        """The side's sole defenders of two or more attacked friendly units."""
     @property
-    def removable_defenders(self) -> ByColour: ...
+    def removable_defenders(self) -> ByColour[SquareSet]:
+        """Its sole defenders the enemy can capture without loss."""
     @property
-    def loose(self) -> ByColour: ...
+    def loose(self) -> ByColour[SquareSet]:
+        """The side's units no unit of their own side defends."""
     @property
-    def attacker_surplus(self) -> ByColour: ...
+    def attacker_surplus(self) -> ByColour[SquareSet]:
+        """The side's units more enemy units attack than its own defend."""
     @property
-    def xray_through_enemy(self) -> ByColour: ...
+    def xray_through_enemy(self) -> ByColour[int]:
+        """The side's x-rays onto an enemy unit through one enemy unit."""
     @property
-    def battery_count(self) -> ByColour: ...
+    def battery_count(self) -> ByColour[int]:
+        """The side's batteries: two of its own sliders on one line, agreeing in direction."""
     @property
-    def battery_at_king(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def battery_at_king(self) -> ByColour[bool]:
+        """One of them bears on a square of the enemy king's ring."""
+    def to_dict(self) -> ThreatFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
-class MapFacts:
-    """The square sets a reader most often wants side by side: what each side attacks, and what of it stands hanging,
-    pinned or threatened. Every one of them is also a field of the `attacks` or the `threats` group; this group is
-    where they are read together.
+class TacticsFacts:
+    """Each side's one-ply tactical options. The values for the side not to move are read after a null move; when
+    the side to move is in check that move does not exist and they are zero, which `available` reports.
     """
 
     @property
-    def controlled(self) -> ByColour: ...
+    def available(self) -> ByColour[bool]:
+        """The side's values could be read."""
     @property
-    def by_pawns(self) -> ByColour: ...
+    def check_count(self) -> ByColour[int]:
+        """Its moves giving check."""
     @property
-    def hanging(self) -> ByColour: ...
+    def check_by_pawn(self) -> ByColour[bool]:
+        """A pawn move of the side gives check."""
     @property
-    def pinned(self) -> ByColour: ...
+    def check_by_knight(self) -> ByColour[bool]:
+        """A knight move gives check."""
     @property
-    def threatened(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def check_by_bishop(self) -> ByColour[bool]:
+        """A bishop move gives check."""
+    @property
+    def check_by_rook(self) -> ByColour[bool]:
+        """A rook move gives check."""
+    @property
+    def check_by_queen(self) -> ByColour[bool]:
+        """A queen move gives check."""
+    @property
+    def safe_check_count(self) -> ByColour[int]:
+        """Its checking moves whose destination is safe."""
+    @property
+    def safe_check_by_pawn(self) -> ByColour[bool]:
+        """A pawn move of the side gives check from a safe square."""
+    @property
+    def safe_check_by_knight(self) -> ByColour[bool]:
+        """A knight move does."""
+    @property
+    def safe_check_by_bishop(self) -> ByColour[bool]:
+        """A bishop move does."""
+    @property
+    def safe_check_by_rook(self) -> ByColour[bool]:
+        """A rook move does."""
+    @property
+    def safe_check_by_queen(self) -> ByColour[bool]:
+        """A queen move does."""
+    @property
+    def double_check_available(self) -> ByColour[bool]:
+        """A move gives check from two units at once."""
+    @property
+    def discovered_check_available(self) -> ByColour[bool]:
+        """A move gives check with a unit that did not move."""
+    @property
+    def mate_in_1(self) -> ByColour[bool]:
+        """A move leaves the opponent checkmated."""
+    @property
+    def stalemate_in_1(self) -> ByColour[bool]:
+        """A move leaves the opponent stalemated."""
+    @property
+    def promotion_files(self) -> ByColour[FileSet]:
+        """Files a legal move of the side promotes on."""
+    @property
+    def promotes_to_queen(self) -> ByColour[bool]:
+        """A promotion to a queen is available."""
+    @property
+    def promotes_to_rook(self) -> ByColour[bool]:
+        """One to a rook is."""
+    @property
+    def promotes_to_bishop(self) -> ByColour[bool]:
+        """One to a bishop is."""
+    @property
+    def promotes_to_knight(self) -> ByColour[bool]:
+        """One to a knight is."""
+    @property
+    def safe_promotion_files(self) -> ByColour[FileSet]:
+        """Files a legal promotion with a safe destination lands on."""
+    @property
+    def capture_count(self) -> ByColour[int]:
+        """The side's capturing moves."""
+    @property
+    def winning_capture_available(self) -> ByColour[bool]:
+        """One of them takes a unit that outvalues the capturer or is undefended."""
+    @property
+    def winning_capture_max_gain(self) -> ByColour[int]:
+        """The largest victim value less capturer value over the captures, at least 0."""
+    @property
+    def captures_hanging(self) -> ByColour[bool]:
+        """A capture takes a hanging unit."""
+    @property
+    def hanging_victim_max_value(self) -> ByColour[int]:
+        """The largest value among the hanging units capturable now."""
+    @property
+    def equal_capture_count(self) -> ByColour[int]:
+        """Captures of a defended unit of equal value."""
+    @property
+    def losing_capture_count(self) -> ByColour[int]:
+        """Captures of a defended unit of lower value."""
+    @property
+    def fork_count(self) -> ByColour[int]:
+        """Moves after which the moved unit forks."""
+    @property
+    def fork_max_value(self) -> ByColour[int]:
+        """The largest single forked value."""
+    @property
+    def knight_fork_available(self) -> ByColour[bool]:
+        """A fork by a knight."""
+    @property
+    def royal_fork_available(self) -> ByColour[bool]:
+        """A fork one of whose targets is the king."""
+    @property
+    def pin_creation_count(self) -> ByColour[int]:
+        """Moves creating an absolute or a relative pin."""
+    @property
+    def skewer_creation_available(self) -> ByColour[bool]:
+        """A move creating a skewer."""
+    @property
+    def discovered_attack_available(self) -> ByColour[bool]:
+        """A move uncovering a slider's attack on a unit of value 3 or more."""
+    @property
+    def legal_move_count(self) -> ByColour[int]:
+        """The side's legal moves."""
+    @property
+    def safe_check_capturing(self) -> ByColour[bool]:
+        """A checking move that captures and whose destination is safe."""
+    @property
+    def discovered_attack_on_queen(self) -> ByColour[bool]:
+        """A move uncovering a slider's attack on the enemy queen."""
+    @property
+    def back_rank_mate_threat(self) -> ByColour[bool]:
+        """A move after which a rook or queen of the side checks the enemy king along that king's own rank, its
+        back rank being blocked.
+        """
+    @property
+    def quiet_threat_available(self) -> ByColour[bool]:
+        """A quiet move after which the largest gain the side threatens is greater than it is now."""
+    @property
+    def no_safe_moves(self) -> ByColour[bool]:
+        """No legal move of the side has a safe destination."""
+    @property
+    def promotion_see_positive(self) -> ByColour[bool]:
+        """A promotion of the side wins material."""
+    @property
+    def check_available(self) -> ByColour[bool]:
+        """Whether the side has a checking move."""
+
+    @property
+    def safe_check_available(self) -> ByColour[bool]:
+        """Whether it has a checking move with a safe destination."""
+
+    @property
+    def promotion_available(self) -> ByColour[bool]:
+        """Whether it has a promotion."""
+
+    @property
+    def safe_promotion_available(self) -> ByColour[bool]:
+        """Whether it has a promotion with a safe destination."""
+
+    @property
+    def capture_available(self) -> ByColour[bool]:
+        """Whether it has a capture."""
+
+    @property
+    def fork_available(self) -> ByColour[bool]:
+        """Whether it has a forking move."""
+
+    @property
+    def pin_creation_available(self) -> ByColour[bool]:
+        """Whether it has a move creating a pin."""
+
+    @property
+    def only_moves(self) -> ByColour[bool]:
+        """Whether the side has at most two legal moves. False for a side whose values could not be read."""
+    def to_dict(self) -> TacticsFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class EndgameFacts:
     """Where the kings stand, how the pawn race runs, and which drawn configuration the material is."""
 
     @property
-    def king_centralisation(self) -> ByColour: ...
+    def king_centralisation(self) -> ByColour[int]:
+        """Chebyshev distance from the side's king to the nearest central square."""
     @property
-    def race_plies(self) -> ByColour: ...
+    def race_plies(self) -> ByColour[int]:
+        """Plies the side's most advanced passer needs to promote unopposed; 8 for a side with no passer."""
     @property
-    def opposition(self) -> str | None: ...
+    def opposition(self) -> Opposition | None:
+        """The opposition the kings stand in, if any."""
     @property
-    def key_square_occupied(self) -> ByColour: ...
+    def key_square_occupied(self) -> ByColour[bool]:
+        """The side's king stands on a key square of one of its own passers."""
     @property
-    def wrong_colour_bishop(self) -> ByColour: ...
+    def wrong_colour_bishop(self) -> ByColour[bool]:
+        """The side's bishops all stand on the colour none of its pawns promotes on, every one of those pawns
+        being a rook pawn.
+        """
     @property
-    def drawish_material(self) -> str | None: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def drawish_material(self) -> DrawishMaterial | None:
+        """The drawn configuration the material is, if it is one of the three."""
+    def to_dict(self) -> EndgameFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
-class TacticsFacts:
-    """Each side's one-ply tactical options. The values for the side not to move are read after a null move; when the
-    side to move is in check that move does not exist and they are zero, which `available` reports.
+class MapFacts:
+    """The square sets a reader most often wants side by side: what each side attacks, and what of it stands
+    hanging, pinned or threatened. Every one of them is also a field of the `attacks` or the `threats` group;
+    this group is where they are read together.
     """
 
     @property
-    def available(self) -> ByColour: ...
+    def controlled(self) -> ByColour[SquareSet]:
+        """Every square the side attacks."""
     @property
-    def check_count(self) -> ByColour: ...
+    def by_pawns(self) -> ByColour[SquareSet]:
+        """The squares the side's pawns attack."""
     @property
-    def check_by_pawn(self) -> ByColour: ...
+    def hanging(self) -> ByColour[SquareSet]:
+        """The side's units the enemy attacks and their own side does not defend."""
     @property
-    def check_by_knight(self) -> ByColour: ...
+    def pinned(self) -> ByColour[SquareSet]:
+        """The side's units under an absolute pin."""
     @property
-    def check_by_bishop(self) -> ByColour: ...
-    @property
-    def check_by_rook(self) -> ByColour: ...
-    @property
-    def check_by_queen(self) -> ByColour: ...
-    @property
-    def safe_check_count(self) -> ByColour: ...
-    @property
-    def safe_check_by_pawn(self) -> ByColour: ...
-    @property
-    def safe_check_by_knight(self) -> ByColour: ...
-    @property
-    def safe_check_by_bishop(self) -> ByColour: ...
-    @property
-    def safe_check_by_rook(self) -> ByColour: ...
-    @property
-    def safe_check_by_queen(self) -> ByColour: ...
-    @property
-    def double_check_available(self) -> ByColour: ...
-    @property
-    def discovered_check_available(self) -> ByColour: ...
-    @property
-    def mate_in_1(self) -> ByColour: ...
-    @property
-    def stalemate_in_1(self) -> ByColour: ...
-    @property
-    def promotion_files(self) -> ByColour: ...
-    @property
-    def promotes_to_queen(self) -> ByColour: ...
-    @property
-    def promotes_to_rook(self) -> ByColour: ...
-    @property
-    def promotes_to_bishop(self) -> ByColour: ...
-    @property
-    def promotes_to_knight(self) -> ByColour: ...
-    @property
-    def safe_promotion_files(self) -> ByColour: ...
-    @property
-    def capture_count(self) -> ByColour: ...
-    @property
-    def winning_capture_available(self) -> ByColour: ...
-    @property
-    def winning_capture_max_gain(self) -> ByColour: ...
-    @property
-    def captures_hanging(self) -> ByColour: ...
-    @property
-    def hanging_victim_max_value(self) -> ByColour: ...
-    @property
-    def equal_capture_count(self) -> ByColour: ...
-    @property
-    def losing_capture_count(self) -> ByColour: ...
-    @property
-    def fork_count(self) -> ByColour: ...
-    @property
-    def fork_max_value(self) -> ByColour: ...
-    @property
-    def knight_fork_available(self) -> ByColour: ...
-    @property
-    def royal_fork_available(self) -> ByColour: ...
-    @property
-    def pin_creation_count(self) -> ByColour: ...
-    @property
-    def skewer_creation_available(self) -> ByColour: ...
-    @property
-    def discovered_attack_available(self) -> ByColour: ...
-    @property
-    def legal_move_count(self) -> ByColour: ...
-    @property
-    def safe_check_capturing(self) -> ByColour: ...
-    @property
-    def discovered_attack_on_queen(self) -> ByColour: ...
-    @property
-    def back_rank_mate_threat(self) -> ByColour: ...
-    @property
-    def quiet_threat_available(self) -> ByColour: ...
-    @property
-    def no_safe_moves(self) -> ByColour: ...
-    @property
-    def promotion_see_positive(self) -> ByColour: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
-    @property
-    def check_available(self) -> ByColour: ...
-    @property
-    def safe_check_available(self) -> ByColour: ...
-    @property
-    def promotion_available(self) -> ByColour: ...
-    @property
-    def safe_promotion_available(self) -> ByColour: ...
-    @property
-    def capture_available(self) -> ByColour: ...
-    @property
-    def fork_available(self) -> ByColour: ...
-    @property
-    def pin_creation_available(self) -> ByColour: ...
-    @property
-    def only_moves(self) -> ByColour: ...
+    def threatened(self) -> ByColour[SquareSet]:
+        """The side's units the enemy wins material by taking."""
+    def to_dict(self) -> MapFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
 
 @final
 class MoveFacts:
-    """What one legal move does, beyond what the move itself says. The mover is the side to move; the enemy is the other
-    side.
+    """What one legal move does, beyond what the move itself says. The mover is the side to move; the enemy is
+    the other side.
     """
 
     @property
-    def victim(self) -> str | None: ...
+    def victim(self) -> RoleLetter | None:
+        """The role captured, the pawn for an en-passant capture."""
     @property
-    def mover(self) -> str: ...
+    def mover(self) -> RoleLetter:
+        """The role that moves."""
     @property
-    def promotion(self) -> str | None: ...
+    def promotion(self) -> RoleLetter | None:
+        """The role a promoting pawn becomes."""
     @property
-    def gives_check(self) -> bool: ...
+    def gives_check(self) -> bool:
+        """The move gives check."""
     @property
-    def gives_safe_check(self) -> bool: ...
+    def gives_safe_check(self) -> bool:
+        """The move gives check and its destination is safe."""
     @property
-    def is_safe(self) -> bool: ...
+    def is_safe(self) -> bool:
+        """The destination is a safe destination."""
     @property
-    def captures_hanging(self) -> bool: ...
+    def captures_hanging(self) -> bool:
+        """The move captures a hanging unit."""
     @property
-    def escapes_attack(self) -> bool: ...
+    def escapes_attack(self) -> bool:
+        """The origin is attacked by the enemy and the destination is safe."""
     @property
-    def to_attacked_by_pawn(self) -> bool: ...
+    def to_attacked_by_pawn(self) -> bool:
+        """The destination is attacked by an enemy pawn."""
     @property
-    def is_castling(self) -> bool: ...
+    def is_castling(self) -> bool:
+        """The move is a castling."""
     @property
-    def is_en_passant(self) -> bool: ...
+    def is_en_passant(self) -> bool:
+        """The move is an en-passant capture."""
     @property
-    def see(self) -> int: ...
+    def see(self) -> int:
+        """The static exchange evaluation of the move, signed."""
     @property
-    def threat_created_max(self) -> int: ...
+    def threat_created_max(self) -> int:
+        """The largest static exchange evaluation of one of the enemy's units after the move; 0 when the move
+        threatens nothing.
+        """
     @property
-    def moves_attacked_unit(self) -> bool: ...
+    def moves_attacked_unit(self) -> bool:
+        """The origin is attacked by the enemy."""
     @property
-    def blocks_check(self) -> bool: ...
+    def blocks_check(self) -> bool:
+        """The destination interposes on the ray of the one unit giving check."""
     @property
-    def advances_passer(self) -> bool: ...
+    def advances_passer(self) -> bool:
+        """The moved unit is a passed pawn."""
     @property
-    def creates_passer(self) -> bool: ...
+    def creates_passer(self) -> bool:
+        """The mover has more passers after the move than before."""
     @property
-    def creates_isolated(self) -> bool: ...
+    def creates_isolated(self) -> bool:
+        """The mover has more isolated pawns after the move than before."""
     @property
-    def creates_doubled(self) -> bool: ...
+    def creates_doubled(self) -> bool:
+        """The mover has more doubled pawns after the move than before."""
     @property
-    def creates_backward(self) -> bool: ...
+    def creates_backward(self) -> bool:
+        """The mover has more backward pawns after the move than before."""
     @property
-    def opens_file_at_enemy_king(self) -> bool: ...
+    def opens_file_at_enemy_king(self) -> bool:
+        """One of the enemy king's shield files carried a pawn of the mover's and carries none after."""
     @property
-    def enemy_king_attackers_delta(self) -> int: ...
+    def enemy_king_attackers_delta(self) -> int:
+        """Change in the number of the mover's units attacking the enemy king ring."""
     @property
-    def mover_king_attackers_delta(self) -> int: ...
+    def mover_king_attackers_delta(self) -> int:
+        """Change in the number of the enemy's units attacking the mover's king ring."""
     @property
-    def mover_hanging_delta(self) -> int: ...
+    def mover_hanging_delta(self) -> int:
+        """Change in the number of the mover's hanging units."""
     @property
-    def enemy_hanging_delta(self) -> int: ...
+    def enemy_hanging_delta(self) -> int:
+        """Change in the number of the enemy's hanging units."""
     @property
-    def leaves_unit_hanging(self) -> bool: ...
+    def leaves_unit_hanging(self) -> bool:
+        """A square carries a hanging unit of the mover's worth 3 or more after the move and carried none before."""
     @property
-    def gives_discovered_attack(self) -> bool: ...
-    def fields(self) -> dict[str, Any]: ...
-    def to_dict(self) -> dict[str, Any]: ...
+    def gives_discovered_attack(self) -> bool:
+        """A slider of the mover's that the move leaves standing gains an attack on an enemy unit worth 3 or
+        more.
+        """
+    def to_dict(self) -> MoveFactsDict: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
+# --- end of the generated facts section ---
 
 @final
 class AnnotatedMove:
@@ -1196,7 +1857,7 @@ class Facts:
     @staticmethod
     def groups() -> list[str]: ...
     def group(self, name: str) -> Any: ...
-    def to_dict(self) -> dict[str, dict[str, Any]]: ...
+    def to_dict(self) -> FactsDict: ...
     @property
     def placement(self) -> PlacementFacts: ...
     @property
@@ -1281,6 +1942,7 @@ class PgnReader:
     def __next__(self) -> PgnGame: ...
 
 def facts_catalogue() -> list[GroupEntry]: ...
+def facts_layout() -> list[dict[str, Any]]: ...
 def move_facts_catalogue() -> list[FieldEntry]: ...
 def pgn_read(
     path: str | os.PathLike[str],

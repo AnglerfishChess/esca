@@ -1,7 +1,7 @@
 [package]
 name = "esca"
 version = "0.3.0"
-exclude = [".github/", "docs/", "python/", "benches/", "examples/"]
+exclude = [".github/", "docs/", "python/", "benches/", "examples/", "tests/", "mcp/"]
 description = "Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout."
 keywords = ["chess", "chess960", "fen", "san", "position"]
 categories = ["games", "game-development"]
@@ -20,7 +20,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = []
 # The dump reader.
-lichess = ["dep:serde", "dep:serde_json", "dep:zstd"]
+lichess = ["serde", "dep:zstd"]
 # The bundled ECO catalogue.
 openings = []
 # PGN reading and writing.
@@ -29,9 +29,11 @@ pgn = []
 polyglot = ["dep:memmap2"]
 # The PyO3 module. A wheel adds `pyo3/extension-module` on top; a test binary
 # links the interpreter instead.
-python = ["dep:pyo3"]
+python = ["dep:pyo3", "tensors"]
 # `serde::Serialize` for the facts and the board vocabulary.
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_json"]
+# A run of positions as one typed array per fact.
+tensors = ["serde"]
 # The UCI client: the protocol as values, and engines as subprocesses.
 uci = ["dep:log"]
 # The same client on a tokio runtime: `uci::tokio::Engine`.
@@ -64,3 +66,20 @@ rstest = { version = "0.26.1", default-features = false }
 [[bench]]
 name = "facts"
 harness = false
+
+# The generated artefacts these check are written behind their own features.
+[[test]]
+name = "catalogue"
+required-features = ["serde"]
+
+[[test]]
+name = "facts_json"
+required-features = ["serde"]
+
+[[test]]
+name = "facts_tensors"
+required-features = ["tensors"]
+
+[[example]]
+name = "catalogue"
+required-features = ["tensors"]

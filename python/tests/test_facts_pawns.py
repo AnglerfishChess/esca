@@ -232,16 +232,18 @@ def test_a_defended_pawn_stands_where_its_own_pawns_attack(
 @pytest.mark.parametrize(
     ("fen", "white", "black"),
     [
-        (START, [1] * 8, [1] * 8),
-        (WINGS, [1, 1, 2, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 2, 1, 1]),
-        (TRIPLED, [0, 0, 0, 3, 0, 0, 0, 0], [0, 2, 0, 0, 0, 0, 0, 0]),
-        (LOCKED, [0, 0, 1, 1, 1, 1, 0, 0], [0, 1, 1, 1, 1, 1, 0, 0]),
-        (MAJORITIES, [1, 1, 2, 1, 0, 1, 1, 1], [1, 1, 0, 0, 1, 2, 0, 1]),
-        (RUNAWAY, [1, 0, 0, 0, 0, 0, 0, 0], [0] * 8),
+        (START, (1,) * 8, (1,) * 8),
+        (WINGS, (1, 1, 2, 0, 0, 0, 0, 1), (1, 0, 0, 0, 0, 2, 1, 1)),
+        (TRIPLED, (0, 0, 0, 3, 0, 0, 0, 0), (0, 2, 0, 0, 0, 0, 0, 0)),
+        (LOCKED, (0, 0, 1, 1, 1, 1, 0, 0), (0, 1, 1, 1, 1, 1, 0, 0)),
+        (MAJORITIES, (1, 1, 2, 1, 0, 1, 1, 1), (1, 1, 0, 0, 1, 2, 0, 1)),
+        (RUNAWAY, (1, 0, 0, 0, 0, 0, 0, 0), (0,) * 8),
     ],
     ids=["start", "wings", "tripled", "locked", "majorities", "runaway"],
 )
-def test_pawns_are_counted_by_file_from_a(fen: str, white: list[int], black: list[int], facts_of: FactsOf) -> None:
+def test_pawns_are_counted_by_file_from_a(
+    fen: str, white: tuple[int, ...], black: tuple[int, ...], facts_of: FactsOf
+) -> None:
     pawns = facts_of(fen).pawns
     assert pawns.count_by_file.white == white
     assert pawns.count_by_file.black == black
@@ -250,17 +252,17 @@ def test_pawns_are_counted_by_file_from_a(fen: str, white: list[int], black: lis
 @pytest.mark.parametrize(
     ("fen", "white", "black"),
     [
-        (START, [0, 8, 0, 0, 0, 0, 0, 0], [0, 8, 0, 0, 0, 0, 0, 0]),
-        (SPLIT, [0, 1, 1, 0, 1, 0, 0, 0], [0, 1, 0, 1, 1, 0, 0, 0]),
-        (LOCKED, [0, 0, 0, 3, 1, 0, 0, 0], [0, 0, 1, 4, 0, 0, 0, 0]),
-        (PASSERS, [0, 0, 0, 1, 1, 0, 0, 0], [0, 1, 1, 0, 0, 0, 0, 0]),
-        (MAJORITIES, [0, 6, 1, 1, 0, 0, 0, 0], [0, 4, 2, 0, 0, 0, 0, 0]),
-        (RUNAWAY, [0, 0, 0, 0, 0, 0, 1, 0], [0] * 8),
+        (START, (0, 8, 0, 0, 0, 0, 0, 0), (0, 8, 0, 0, 0, 0, 0, 0)),
+        (SPLIT, (0, 1, 1, 0, 1, 0, 0, 0), (0, 1, 0, 1, 1, 0, 0, 0)),
+        (LOCKED, (0, 0, 0, 3, 1, 0, 0, 0), (0, 0, 1, 4, 0, 0, 0, 0)),
+        (PASSERS, (0, 0, 0, 1, 1, 0, 0, 0), (0, 1, 1, 0, 0, 0, 0, 0)),
+        (MAJORITIES, (0, 6, 1, 1, 0, 0, 0, 0), (0, 4, 2, 0, 0, 0, 0, 0)),
+        (RUNAWAY, (0, 0, 0, 0, 0, 0, 1, 0), (0,) * 8),
     ],
     ids=["start", "split", "locked", "passers", "majorities", "runaway"],
 )
 def test_pawns_are_counted_by_the_rank_their_owner_reads(
-    fen: str, white: list[int], black: list[int], facts_of: FactsOf
+    fen: str, white: tuple[int, ...], black: tuple[int, ...], facts_of: FactsOf
 ) -> None:
     pawns = facts_of(fen).pawns
     assert pawns.count_by_rank.white == white
@@ -691,8 +693,8 @@ def test_the_pawn_facts_of_a_chess960_position_are_the_classic_ones(facts_of: Fa
     assert set(pawns.doubled.black) == squares("d6 d7")
     assert set(pawns.defended.white) == squares("e3 f3")
     assert set(pawns.defended.black) == squares("d6")
-    assert pawns.count_by_file.black == [1, 1, 0, 2, 1, 1, 1, 1]
-    assert pawns.count_by_rank.white == [0, 3, 2, 3, 0, 0, 0, 0]
+    assert pawns.count_by_file.black == (1, 1, 0, 2, 1, 1, 1, 1)
+    assert pawns.count_by_rank.white == (0, 3, 2, 3, 0, 0, 0, 0)
     assert pawns.islands == esca.ByColour(1, 2)
     assert pawns.levers == esca.ByColour(2, 2)
     assert pawns.rams == 2

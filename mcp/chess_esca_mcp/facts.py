@@ -1,8 +1,13 @@
 """The named facts of a position, group by group.
 
-Every value comes from esca already labelled by colour, so a group is rendered
-by walking it: `{field: value}`, with a per-side value written
-`{"white": …, "black": …}`. The catalogue says what each field means.
+A group is served in the one JSON form esca writes everywhere — `{field:
+value}`, a per-side value `{"white": …, "black": …}`, a set of squares the list
+of its square names in board order, a set of files the list of its letters —
+so what this tool answers and what `docs/facts.schema.json` describes are the
+same thing.
+
+Where a value is a run of positions, `field_notes` carries that field's
+catalogue meaning once, since the meaning is what says which end is which.
 """
 
 from typing import Any
@@ -18,62 +23,36 @@ GROUPS: tuple[str, ...] = tuple(esca.Facts.groups())
 #: board the FEN already gives, and `maps` restates the attacks and threats.
 DEFAULT_GROUPS: tuple[str, ...] = tuple(name for name in GROUPS if name not in ("placement", "maps"))
 
-_FILES = tuple("abcdefgh")
-_RANKS = tuple("12345678")
 
-#: What the positions of a list mean, where they mean something of their own.
-LABELS: dict[str, tuple[str, ...]] = {
-    "pawns.count_by_file": _FILES,
-    "pawns.count_by_rank": _RANKS,
+def _is_run(declared: str) -> bool:
+    """Whether the declared type is a run of positions rather than one value."""
+    return "PerFile<" in declared or "PerRank<" in declared or "[" in declared
+
+
+#: The catalogue meaning of every fact whose value is a run of positions,
+#: keyed `group.field`. A reader of `[1, 1, 1, 1, 1, 1, 1, 1]` needs it.
+RUN_NOTES: dict[str, str] = {
+    f"{group['name']}.{field['name']}": field["meaning"]
+    for group in esca.facts_catalogue()
+    for field in group["fields"]
+    if _is_run(field["type"])
 }
-
-#: The `king` fields written one value per shield file, which the side's own
-#: `shield_files` names.
-SHIELD_FIELDS = ("shield", "storm", "shield_file_open", "shield_file_semi_open_for_enemy")
-
-
-def _label(value: Any, key: str) -> Any:
-    """A list whose positions carry a meaning of their own, as an object."""
-    labels = LABELS.get(key)
-    if labels is None or not isinstance(value, list) or len(value) != len(labels):
-        return value
-    return dict(zip(labels, value, strict=True))
-
-
-def _label_by_colour(value: Any, key: str) -> Any:
-    """The same, inside a per-side value."""
-    if not isinstance(value, dict) or set(value) != {"white", "black"}:
-        return _label(value, key)
-    return {side: _label(item, key) for side, item in value.items()}
-
-
-def _relabel_shield(group: dict[str, Any], shield_files: dict[str, list[str]]) -> None:
-    """Names the king's three shield values by the files they stand on."""
-    for name in SHIELD_FIELDS:
-        paired = group.get(name)
-        if not isinstance(paired, dict):
-            continue
-        for side, files in shield_files.items():
-            values = paired.get(side)
-            if isinstance(values, list) and len(values) == len(files):
-                paired[side] = dict(zip(files, values, strict=True))
 
 
 def group_facts(facts: esca.Facts, name: str) -> dict[str, Any]:
     """Every fact of one group, by name, as plain data."""
-    rendered = {
-        field: _label_by_colour(value, f"{name}.{field}") for field, value in facts.group(name).to_dict().items()
-    }
-    if name == "king":
-        files = rendered.get("shield_files")
-        if isinstance(files, dict):
-            _relabel_shield(rendered, {side: list(value) for side, value in files.items()})
-    return rendered
+    return facts.group(name).to_dict()
 
 
 def unknown_groups(names: list[str]) -> list[str]:
     """The names among `names` that no group answers to."""
     return [name for name in names if name not in GROUPS]
+
+
+def run_notes(names: list[str]) -> dict[str, str]:
+    """What the positions of every run the named groups carry mean."""
+    wanted = set(names)
+    return {key: note for key, note in RUN_NOTES.items() if key.split(".")[0] in wanted}
 
 
 def facts_content(facts: esca.Facts, names: list[str] | None) -> dict[str, Any]:
@@ -82,6 +61,7 @@ def facts_content(facts: esca.Facts, names: list[str] | None) -> dict[str, Any]:
     return {
         "side_to_move": facts.side_to_move,
         "groups": {name: group_facts(facts, name) for name in wanted},
+        "field_notes": run_notes(wanted),
         "groups_available": list(GROUPS),
         "prose": prose(facts),
     }
@@ -107,8 +87,13 @@ def catalogue() -> dict[str, Any]:
         ],
         "types": {
             "ByColour": 'one value per colour, written {"white": …, "black": …}',
-            "SquareSet": "a set of squares, written as a list of square names",
-            "FileSet": "a set of files, written as a list of file letters",
+            "SquareSet": (
+                "a set of squares, written as a list of square names in board order: a1, b1 through h1, then a2"
+            ),
+            "FileSet": "a set of files, written as a list of file letters, file a first",
+            "PerFile": "eight values, file a first, through file h",
+            "PerRank": "eight values, rank 1 first, through rank 8",
+            "[T; n]": "n values, in the order the fact's own meaning states",
             "Option": "a value that may be absent, written null when it is",
         },
     }
