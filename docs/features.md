@@ -744,7 +744,7 @@ a move row of another width as surely as a position row of one.
 `bit`, `bits`, `one-hot`, `mask8`, `plane`, `ratio`, `count/S` and `diff/S`,
 where `S` is the feature's scale; `count/8|4` marks `piece_count`, whose scale
 is 8 for pawns and 4 for the rest. The full text is checked in as
-`rs_anglerfish/esca/tests/data/schema_v1.txt`.
+`tests/data/schema_v1.txt`.
 
 ### Contract
 

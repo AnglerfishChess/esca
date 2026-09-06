@@ -1,17 +1,18 @@
 [package]
 name = "esca"
 version = "0.3.0"
-description = "A chess model that answers what is true about a position: variants, positions, games, and move text."
+exclude = [".github/", "docs/", "python/", "benches/", "examples/"]
+description = "Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout."
 keywords = ["chess", "chess960", "fen", "san", "position"]
 categories = ["games", "game-development"]
 readme = "README.md"
-homepage = "https://github.com/AnglerfishChess/anglerfish"
+homepage = "https://github.com/AnglerfishChess/esca"
 documentation = "https://docs.rs/esca"
-edition.workspace = true
-rust-version.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
+edition = "2024"
+rust-version = "1.85.1"
+authors = ["Alexander Myodov"]
+license = "MIT"
+repository = "https://github.com/AnglerfishChess/esca"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

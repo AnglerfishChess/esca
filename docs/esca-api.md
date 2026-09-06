@@ -1,7 +1,7 @@
 # esca API sketch
 
-`esca` is the position-facts library: a Rust crate at `rs_anglerfish/esca/`
-and a Python package of the same name built from it. Terms used below are
+`esca` is the position-facts library: a Rust crate at the root of this
+repository and a Python package of the same name built from it. Terms used below are
 defined in [`esca-vocabulary.md`](esca-vocabulary.md); features and their
 encodings in [`features.md`](features.md).
 
@@ -651,7 +651,7 @@ Rows are independent and the crate spawns no threads; the caller parallelises.
 `features.md` §4 names the features defined for classic chess only.
 
 The v1 id is `dbe7a74d1478ca3f083be1cb5df36a1d`; its canonical text is checked
-in as `rs_anglerfish/esca/tests/data/schema_v1.txt`, the position row's groups
+in as `tests/data/schema_v1.txt`, the position row's groups
 first and the `move` section last. The one id covers both rows, so a net that
 stores it refuses a move row of another shape as surely as a position row of
 one.
@@ -1517,7 +1517,7 @@ pub mod polyglot {
 ## 14. `openings` — the ECO catalogue (feature `openings`)
 
 The [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings)
-data set, bundled under CC0-1.0 as `rs_anglerfish/esca/data/openings/`: an ECO
+data set, bundled under CC0-1.0 as `data/openings/`: an ECO
 code and a name for each of some 3,800 named positions, indexed by Polyglot
 key.
 

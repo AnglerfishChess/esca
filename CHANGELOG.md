@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The crate lives at the root of its own repository,
+  <https://github.com/AnglerfishChess/esca>; the engine and its trainer go on
+  at <https://github.com/AnglerfishChess/anglerfish>.
+
 ## 0.3.0 (2026-09-04)
 
 - The `explain` layer answers a rules question with the evidence behind it,
