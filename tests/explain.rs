@@ -8,7 +8,7 @@ mod common;
 use common::squares;
 use esca::explain::{
     AutomaticDraw, ClaimableDraw, Difference, DrawStatus, EpCapture, EpObstacle, MaterialConfig,
-    NearMiss, Repetition, ResetKind, StalemateDetail, Stuck, Wing,
+    NearMiss, Repetition, Reset, ResetKind, StalemateDetail, Stuck, Wing,
 };
 use esca::{
     CHESS960, CLASSIC, Colour, Game, MoveList, Position, Square, SquareSet, Variant, classic,
@@ -884,4 +884,108 @@ fn a_move_of_another_position_claims_nothing() {
         .expect("the pawn move is legal");
     game.play_san("e4").expect("the pawn move is legal");
     assert!(game.claims_after(opening).is_empty());
+}
+
+// ------------------------------------------------------------------- prose
+
+/// Every value the layer answers with says what it means in plain English.
+#[rstest]
+#[case::wing_short(Wing::Short.describe().to_string())]
+#[case::wing_long(Wing::Long.describe().to_string())]
+#[case::castling_allowed(position(CLEAR_BACK_RANK).castling(Colour::White, Wing::Short).describe())]
+#[case::castling_no_right(position(NO_RIGHTS).castling(Colour::White, Wing::Short).describe())]
+#[case::castling_blocked(position(QUEEN_AND_KNIGHT).castling(Colour::White, Wing::Short).describe())]
+#[case::castling_every_reason(position(EVERY_REASON).castling(Colour::White, Wing::Short).describe())]
+#[case::en_passant_none(position(EP_NONE).en_passant_status().describe())]
+#[case::en_passant_offered(position(EP_PLAIN).en_passant_status().describe())]
+#[case::en_passant_no_taker(position(EP_NO_TAKER).en_passant_status().describe())]
+#[case::en_passant_forbidden(position(EP_PINNED).en_passant_status().describe())]
+#[case::ep_capture_legal(ep_capture(EP_PLAIN, "e5").describe())]
+#[case::ep_obstacle_pinned(ep_capture(EP_PINNED, "e5").describe())]
+#[case::ep_obstacle_exposes_king(ep_capture(EP_RANK_PIN, "e5").describe())]
+#[case::ep_obstacle_in_check(ep_capture(EP_IN_CHECK, "e5").describe())]
+#[case::pin(position(TWO_PINS).pins(Colour::White)[0].describe())]
+#[case::skewer(position(SKEWERED_QUEEN).skewers(Colour::Black)[0].describe())]
+#[case::difference_castling_rights(Difference::CastlingRights.describe().to_string())]
+#[case::difference_en_passant(Difference::EnPassant.describe().to_string())]
+#[case::difference_side_to_move(Difference::SideToMove.describe().to_string())]
+#[case::near_miss(NearMiss { ply: 0, differs: vec![Difference::CastlingRights] }.describe())]
+#[case::repetition(game_of(SHUFFLE).repetition_status().describe())]
+#[case::repetition_with_near_misses(game_from(TRIANGULATION, "Kc1 Ke8 Kc2 Kd8 Kd1").repetition_status().describe())]
+#[case::fifty_move(game_from(CLOCK_AT_99, "").fifty_move_status().describe())]
+#[case::reset_capture(Reset { ply: 3, kind: ResetKind::Capture }.describe())]
+#[case::reset_pawn_move(Reset { ply: 3, kind: ResetKind::PawnMove }.describe())]
+#[case::reset_kind_capture(ResetKind::Capture.describe().to_string())]
+#[case::reset_kind_pawn_move(ResetKind::PawnMove.describe().to_string())]
+#[case::draw_status_none(game_of("").draw_status().describe())]
+#[case::draw_status_stalemate(game_from(SMOTHERED_STALEMATE, "").draw_status().describe())]
+#[case::draw_status_two_draws(game_from(BISHOP_STALEMATE, "").draw_status().describe())]
+#[case::automatic_stalemate(AutomaticDraw::Stalemate(stalemate_detail(&game_from(SMOTHERED_STALEMATE, "").draw_status())).describe())]
+#[case::automatic_material(AutomaticDraw::InsufficientMaterial(MaterialConfig::KvK).describe())]
+#[case::automatic_fivefold(AutomaticDraw::Fivefold(game_of(SHUFFLE).repetition_status()).describe())]
+#[case::automatic_clock(AutomaticDraw::SeventyFiveMoves(game_from(CLOCK_AT_149, "").fifty_move_status()).describe())]
+#[case::claimable_threefold(ClaimableDraw::Threefold(game_of(SHUFFLE).repetition_status()).describe())]
+#[case::claimable_fifty(ClaimableDraw::FiftyMoves(game_from(CLOCK_AT_99, "").fifty_move_status()).describe())]
+#[case::material_k_v_k(MaterialConfig::KvK.describe().to_string())]
+#[case::material_kn_v_k(MaterialConfig::KNvK.describe().to_string())]
+#[case::material_kb_v_k(MaterialConfig::KBvK.describe().to_string())]
+#[case::material_same_bishops(MaterialConfig::KBvKBSameColour.describe().to_string())]
+#[case::stalemate_detail(stalemate_detail(&game_from(SMOTHERED_STALEMATE, "").draw_status()).describe())]
+#[case::stalemate_detail_with_units(stalemate_detail(&game_from(PINNED_AND_BLOCKED, "").draw_status()).describe())]
+#[case::stuck_pinned(Stuck::Pinned { ray: SquareSet::EMPTY, pinner: square("a6") }.describe())]
+#[case::stuck_blocked(Stuck::Blocked.describe())]
+#[case::stuck_no_moves(Stuck::NoMoves.describe())]
+fn every_value_of_the_layer_says_what_it_means(#[case] sentence: String) {
+    assert!(!sentence.is_empty());
+    assert!(sentence.ends_with('.'), "{sentence}");
+}
+
+#[test]
+fn a_castling_names_the_colour_and_the_wing_it_answers_for() {
+    let castling = position(CLEAR_BACK_RANK).castling(Colour::Black, Wing::Long);
+    assert_eq!(castling.colour, Colour::Black);
+    assert_eq!(castling.wing, Wing::Long);
+    assert_eq!(
+        castling.describe(),
+        "Black may castle long: nothing stands in its way."
+    );
+}
+
+/// Every reason is spelled out, in the order the fields carry them.
+#[test]
+fn a_castling_spells_out_every_reason_it_is_not_allowed() {
+    assert_eq!(
+        position(EVERY_REASON)
+            .castling(Colour::White, Wing::Short)
+            .describe(),
+        "White cannot castle short: the king is in check from e8, and a king may not castle out \
+         of check; the enemy covers f1, which the king must cross or land on; the path is \
+         blocked on g1."
+    );
+}
+
+#[test]
+fn an_en_passant_capture_says_what_forbids_it() {
+    assert_eq!(
+        ep_capture(EP_PINNED, "e5").describe(),
+        "The pawn on e5 may not take en passant. The pawn is pinned against its own king by the \
+         unit on b2, and the capture would step off that line."
+    );
+}
+
+#[test]
+fn a_pin_names_its_three_squares() {
+    assert_eq!(
+        position(TWO_PINS).pins(Colour::White)[0].describe(),
+        "The unit on d2 may not move off the line between the enemy unit on b4 and its own king \
+         on e1."
+    );
+}
+
+#[test]
+fn a_draw_status_that_holds_nothing_says_so() {
+    assert_eq!(
+        game_of("").draw_status().describe(),
+        "No draw condition holds in this position."
+    );
 }

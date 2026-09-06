@@ -5,6 +5,10 @@
 //! [`Game`] pairs a variant with the moves played, which is what repetition
 //! and claimable draws need.
 //!
+//! [`explain`] answers why a rules answer is what it is, and [`endings`]
+//! names the ending a position has reached, what theory says its result is
+//! and the method it is played by.
+//!
 //! [`Facts`] answers what is true about a position — material, pawn structure,
 //! king safety, one-ply tactics — for a reader and, through [`Schema`] and the
 //! encoders, as the flat `f32` row a net consumes.
@@ -29,6 +33,7 @@
 
 #![deny(missing_docs)]
 
+pub mod endings;
 mod error;
 pub mod explain;
 mod facts;

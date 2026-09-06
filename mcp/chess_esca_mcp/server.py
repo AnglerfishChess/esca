@@ -188,8 +188,9 @@ def position(fen: Fen = None, moves: Moves = None, pgn: Pgn = None, variant: Var
     from where, whether the game is over and how, which draws are claimable
     and on what evidence, how many legal moves there are, the opening name if
     the position has one, the material on each side, both castlings of both
-    colours with every obstacle at once, the en-passant capture on offer, and
-    the pins and skewers on the board.
+    colours with every obstacle at once, the en-passant capture on offer, the
+    pins and skewers on the board, and the ending it is where the material
+    makes one. `prose` gathers every sentence the answer carries.
 
     Args:
         fen: the position as FEN or EPD; the start position when omitted.
@@ -202,13 +203,15 @@ def position(fen: Fen = None, moves: Moves = None, pgn: Pgn = None, variant: Var
         dict: `fen`, `epd`, `variant`, `side_to_move`, `fullmove_number`,
         `halfmove_clock`, `ply`, `line`, `status`, `check`,
         `legal_move_count`, `opening`, `material`, `castling`, `en_passant`,
-        `pins`, `skewers`, `prose` — or `error` when the input names no
+        `pins`, `skewers`, `ending` where the material is one, and `prose`,
+        every sentence the answer carries — or `error` when the input names no
         position.
     """
     game = read_game(fen, moves, pgn, variant)
     board = game.position
     facts = game.facts()
-    return {
+    named = game.ending()
+    answer: dict[str, Any] = {
         "fen": board.fen,
         "epd": board.epd,
         "variant": variant_label(game.variant),
@@ -226,8 +229,11 @@ def position(fen: Fen = None, moves: Moves = None, pgn: Pgn = None, variant: Var
         "en_passant": render.en_passant(board),
         "pins": {name: [render.pin(item) for item in board.pins(letter)] for letter, name in SIDES},
         "skewers": {name: [render.skewer(item) for item in board.skewers(letter)] for letter, name in SIDES},
-        "prose": render.prose(board),
     }
+    if named.class_.name != render.NOT_AN_ENDING:
+        answer["ending"] = render.ending_summary(named)
+    answer["prose"] = render.gathered(answer)
+    return answer
 
 
 @mcp.tool(name="legal_moves", annotations=reading("List the legal moves"))
@@ -272,11 +278,12 @@ def legal_moves(
     return answer
 
 
-def _castling_reasons(game: esca.Game, text: str) -> list[dict[str, Any]]:
-    """Everything standing in the way of the castling `text` names."""
+def _castling_reasons(game: esca.Game, text: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """Everything standing in the way of the castling `text` names, and the
+    sentence the whole castling reads as."""
     wing = "short" if text.replace("0", "O").upper() == "O-O" else "long"
     answer = render.castling_wing(game.position, render.colour(game.position.side_to_move), wing)
-    return answer["obstacles"] or [{"reason": "no_such_legal_move", "castling": answer}]
+    return answer["obstacles"] or [{"reason": "no_such_legal_move", "castling": answer}], answer["prose"]
 
 
 def _en_passant_reasons(board: esca.Position, destination: str, origin: str | None) -> list[dict[str, Any]]:
@@ -365,18 +372,19 @@ def _destination_reasons(game: esca.Game, text: str) -> list[dict[str, Any]]:
     return reasons
 
 
-def _illegal_reasons(game: esca.Game, text: str) -> tuple[list[dict[str, Any]], list[str] | None]:
-    """Every reason `text` names no legal move here, and what the named unit
-    could play instead."""
+def _illegal_reasons(game: esca.Game, text: str) -> tuple[list[dict[str, Any]], list[str] | None, list[str]]:
+    """Every reason `text` names no legal move here, what the named unit could
+    play instead, and any sentence that belongs to the whole answer."""
     stripped = text.strip()
     if stripped.replace("0", "O").upper() in ("O-O", "O-O-O"):
-        return _castling_reasons(game, stripped), None
+        reasons, said = _castling_reasons(game, stripped)
+        return reasons, None, said
     uci = _UCI.match(stripped)
     if uci is None:
-        return _destination_reasons(game, stripped), None
+        return _destination_reasons(game, stripped), None, []
     origin, destination, promotion = uci.groups()
     from_origin = sorted(game.move_to_san(mv) for mv in game.legal_moves() if mv.origin == origin)
-    return _origin_reasons(game, origin, destination, promotion), from_origin
+    return _origin_reasons(game, origin, destination, promotion), from_origin, []
 
 
 @mcp.tool(name="explain_move", annotations=reading("Explain one move"))
@@ -406,7 +414,7 @@ def explain_move(
         variant: 'classic' or 'chess960'.
 
     Returns:
-        dict: `legal`, `move`, `fen`, and either `reasons` — a list of
+        dict: `legal`, `move`, `fen`, `prose`, and either `reasons` — a list of
         `reason`-and-evidence objects — with `legal_moves`, or the move's own
         text with `effects`, `after` and `claims_after`; or `error`.
     """
@@ -414,7 +422,7 @@ def explain_move(
     board = game.position
     mv = parse_move(game, move)
     if mv is None:
-        reasons, from_origin = _illegal_reasons(game, move)
+        reasons, from_origin, said = _illegal_reasons(game, move)
         answer: dict[str, Any] = {
             "legal": False,
             "move": move,
@@ -425,13 +433,14 @@ def explain_move(
         }
         if from_origin is not None:
             answer["legal_moves_from_origin"] = from_origin
+        answer["prose"] = said + [line for line in render.gathered(answer) if line not in said]
         return answer
 
     move_facts = next(item.facts for item in game.annotated_moves() if item.move == mv)
     content = _move_content(game, mv, move_facts)
     claims = [render.draw(claim) for claim in game.claims_after(mv)]
     game.play(mv)
-    return {
+    played: dict[str, Any] = {
         "legal": True,
         "move": move,
         "fen": board.fen,
@@ -457,8 +466,9 @@ def explain_move(
             "legal_move_count": len(game.legal_moves()),
         },
         "claims_after": claims,
-        "prose": render.prose(move_facts),
     }
+    played["prose"] = render.gathered(played)
+    return played
 
 
 @mcp.tool(name="facts", annotations=reading("Read the named facts of a position"))
@@ -508,6 +518,44 @@ def facts(
             )
     game = read_game(fen, moves, pgn, variant)
     return {"fen": game.position.fen, **facts_module.facts_content(game.facts(), groups)}
+
+
+@mcp.tool(name="ending", annotations=reading("Name the ending"))
+@answering
+def ending(fen: Fen = None, moves: Moves = None, pgn: Pgn = None, variant: Variant = "classic") -> dict:
+    """The ending the material makes, what theory says it is, and how it is won.
+
+    An ending is a position where neither side holds more than two pieces, a
+    piece being anything that is neither a king nor a pawn; above that the
+    class is `not_an_ending` and the signature still says what is on the board.
+    The signature writes the stronger side first — `KRPvKR` — the class names
+    the material alone, and the verdict names the colour it favours. The
+    technique is the named method the ending is played by: the box method, the
+    Lucena position, the opposition, the wrong bishop. The `evidence` holds the
+    position-specific facts the verdict and the technique were read off, each
+    behind the reason it belongs to.
+
+    This is the books' answer for the material, adjusted by those facts. It is
+    not a search, and it does not know whether this particular position is won.
+
+    Args:
+        fen: the position as FEN or EPD; the start position when omitted.
+        moves: moves played from it, SAN or UCI.
+        pgn: a whole game instead of `fen` and `moves`.
+        variant: 'classic' or 'chess960'.
+
+    Returns:
+        dict: `fen`, `is_ending`, `signature`, `class`, `verdict` (`kind` and
+        `colour`), `technique`, `evidence` (`pawn`, `bishops`, `opposition`)
+        and `prose` — or `error`.
+    """
+    game = read_game(fen, moves, pgn, variant)
+    named = game.ending()
+    return {
+        "fen": game.position.fen,
+        "is_ending": named.class_.name != render.NOT_AN_ENDING,
+        **render.ending(named),
+    }
 
 
 @mcp.tool(name="opening", annotations=reading("Name the opening"))
@@ -763,7 +811,9 @@ def analyse_position(
         "every reason that forbids it and the squares behind each reason.\n"
         "4. Call `facts` with the groups you need: `tactics` for one-ply threats, `king` for "
         "safety, `pawns` for structure, `threats` for what is hanging.\n"
-        "5. Call `opening` for the ECO name where the position has one.\n\n"
+        "5. Call `opening` for the ECO name where the position has one, and `ending` once the "
+        "pieces are nearly gone: it names the ending, what theory says the result is, and the "
+        "technique that gets it.\n\n"
         "Report what is true and name the squares it was read off. These tools do not search: a "
         "numeric evaluation or a best move needs an engine, which this server is not."
     )

@@ -76,7 +76,9 @@ class TestPosition:
         assert answer["claims"] == ["threefold_repetition"]
         claimable = answer["claimable"][0]
         assert claimable["kind"] == "threefold"
-        assert claimable["repetition"] == {"count": 3, "plies": [0, 4, 8], "near_misses": []}
+        assert claimable["repetition"]["count"] == 3
+        assert claimable["repetition"]["plies"] == [0, 4, 8]
+        assert claimable["repetition"]["near_misses"] == []
 
     def test_repetition_is_invisible_without_the_moves(self):
         played = server.position(moves=positions.THREEFOLD)
@@ -261,6 +263,100 @@ class TestFacts:
 
     def test_a_bad_position_is_an_error_object(self):
         assert server.facts(fen=positions.NOT_A_FEN)["error"]["kind"] == "invalid_fen"
+
+
+class TestEnding:
+    def test_a_rook_against_a_lone_king_is_won_by_the_box_method(self):
+        answer = server.ending(fen=positions.KING_AND_ROOK_V_KING)
+        assert answer["is_ending"] is True
+        assert answer["class"] == "kr_v_k"
+        assert answer["verdict"] == {"kind": "win", "colour": "white"}
+        assert answer["technique"] == "box_method"
+
+    def test_the_signature_writes_the_stronger_side_first_and_counts_both(self):
+        answer = server.ending(fen=positions.KING_AND_ROOK_V_KING)["signature"]
+        assert answer["text"] == "KRvK"
+        assert answer["stronger"] == "white"
+        assert answer["count"]["white"]["rook"] == 1
+        assert answer["count"]["black"] == dict.fromkeys(answer["count"]["black"], 0) | {"king": 1}
+        assert answer["pieces"] == {"white": 1, "black": 0}
+
+    def test_a_bishop_of_the_wrong_colour_draws_the_pawn_away(self):
+        answer = server.ending(fen=positions.WRONG_BISHOP)
+        assert answer["class"] == "kbp_v_k"
+        assert answer["verdict"] == {"kind": "draw", "colour": None}
+        assert answer["technique"] == "wrong_bishop"
+
+    def test_the_evidence_stays_grouped_the_way_esca_groups_it(self):
+        answer = server.ending(fen=positions.WRONG_BISHOP)["evidence"]
+        assert answer["bishops"] == {"opposite_colours": False, "same_colour": True, "wrong_bishop": True}
+        assert answer["pawn"]["pawn"] == "a2"
+        assert answer["pawn"]["promotion"] == "a8"
+        assert answer["pawn"]["rook_pawn"] is True
+        assert answer["pawn"]["defender_inside_square"] is True
+        assert answer["opposition"] is False
+        assert answer["prose"]
+
+    def test_a_middlegame_is_no_ending_and_still_says_what_stands_there(self):
+        answer = server.ending(fen=positions.MIDDLEGAME)
+        assert answer["is_ending"] is False
+        assert answer["class"] == "not_an_ending"
+        assert answer["technique"] == "none"
+        assert answer["signature"]["count"]["black"]["pawn"] == 8
+        assert answer["evidence"]["pawn"] is None
+
+    def test_the_whole_position_names_the_ending_without_its_evidence(self):
+        answer = server.position(fen=positions.WRONG_BISHOP)["ending"]
+        assert answer["class"] == "kbp_v_k"
+        assert answer["technique"] == "wrong_bishop"
+        assert answer["prose"] == server.ending(fen=positions.WRONG_BISHOP)["prose"]
+        assert set(answer) == {"class", "verdict", "technique", "prose"}
+
+    def test_a_position_that_is_no_ending_carries_none(self):
+        assert "ending" not in server.position(fen=positions.MIDDLEGAME)
+
+    def test_a_bad_position_is_an_error_object(self):
+        assert server.ending(fen=positions.NOT_A_FEN)["error"]["kind"] == "invalid_fen"
+
+
+class TestProse:
+    def test_a_blocked_castling_says_in_words_what_blocks_it(self):
+        answer = server.position(fen=positions.CASTLING_BLOCKED)
+        said = answer["castling"]["white"]["short"]["prose"]
+        assert "f1" in said[0]
+        assert said[0] in answer["prose"]
+
+    def test_the_gathered_sentences_repeat_none_of_themselves(self):
+        answer = server.position(fen=positions.CASTLING_BLOCKED)
+        assert len(answer["prose"]) == len(set(answer["prose"]))
+        assert answer["en_passant"]["prose"][0] in answer["prose"]
+
+    def test_a_pin_says_in_words_what_holds_the_unit(self):
+        answer = server.position(fen=positions.PIN_ON_THE_BACK_RANK)
+        pinned = answer["pins"]["white"][0]
+        assert "g1" in pinned["prose"][0]
+        assert pinned["prose"][0] in answer["prose"]
+
+    def test_the_draw_status_speaks_once_for_all_the_conditions_under_it(self):
+        answer = server.position(fen=positions.STALEMATE)["status"]
+        assert answer["prose"]
+        assert "prose" not in answer["automatic"][0]
+        assert answer["automatic"][0]["stalemate"]["prose"]
+
+    def test_an_illegal_castling_is_explained_in_words(self):
+        answer = server.explain_move(move="O-O", fen=positions.CASTLING_ATTACKED)
+        assert answer["legal"] is False
+        assert "f1" in answer["prose"][0]
+
+    def test_an_en_passant_obstacle_names_the_waiting_unit_in_words(self):
+        answer = server.explain_move(move="e5d6", fen=positions.EN_PASSANT_EXPOSES_KING)
+        obstacle = next(item for item in answer["reasons"] if item.get("capture") == "en_passant")
+        assert "h5" in obstacle["prose"][0]
+        assert obstacle["prose"][0] in answer["prose"]
+
+    def test_a_legal_move_carries_the_sentences_of_what_it_leaves_behind(self):
+        answer = server.explain_move(move="Ng8", moves=positions.THREEFOLD[:7])
+        assert answer["claims_after"][0]["prose"][0] in answer["prose"]
 
 
 class TestOpening:

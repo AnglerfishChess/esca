@@ -729,7 +729,8 @@ outcomes and castling styles are text on this surface, and a file set is the
 string of its letters; the classes are `Variant`, `SquareSet`, `Move`,
 `Position`, `Game`, `Schema`, `MoveSchema`, `Facts` with its groups,
 `lichess.Batch`, `pgn.Game`, `polyglot.Book` with its `Entry`, `Raw` and
-`Builder`, `openings.Opening`, `uci.Engine` and `uci.AsyncEngine` with their
+`Builder`, `openings.Opening`, `endings.Ending` with its class, verdict, technique and
+evidence, `uci.Engine` and `uci.AsyncEngine` with their
 `Limits`, `Option`, `Info` and `Answer`, and `uci.protocol` with `Command`,
 `Message` and `Session`.
 
@@ -833,6 +834,10 @@ esca.polyglot.download(url, path, sha256=None)
 esca.openings.lookup(p)  # Opening | None, with .eco and .name
 esca.openings.count()
 g.opening()  # Opening | None, the deepest name the game reached
+
+# Named endings, no feature
+esca.endings.classify(p)  # Ending, with .class_, .verdict, .technique, .evidence
+g.ending()  # the same for the current position
 
 # Engines. Times are seconds, moves are Move objects, scores are cp/mate.
 from esca import uci
@@ -1174,6 +1179,10 @@ pub mod explain {
 
     /// One castling of one colour, and everything standing in its way.
     pub struct Castling {
+        /// Whose castling this is.
+        pub colour: Colour,
+        /// Which castling of that colour.
+        pub wing: Wing,
         /// The position still holds this castling right.
         pub right: bool,
         /// The rook the right names stands on its square. False without a
@@ -1402,9 +1411,253 @@ draws.automatic[1].material  # "kb_v_k"
 [d.kind for d in game.claims_after(mv)]  # ["threefold"]
 ```
 
+Every value of every enum here, and every aggregate a one-line summary reads
+naturally off, answers `describe()` with one plain English sentence: what the
+value means, in the words a beginner or a language model would use. The enum
+value stays the answer; the sentence is derived from it and never replaces it.
+
+```rust
+impl Wing { pub fn describe(self) -> &'static str; }
+impl Castling { pub fn describe(&self) -> String; }
+impl EnPassant { pub fn describe(&self) -> String; }
+impl EpCapture { pub fn describe(&self) -> String; }
+impl EpObstacle { pub fn describe(&self) -> String; }
+impl Pin { pub fn describe(&self) -> String; }
+impl Skewer { pub fn describe(&self) -> String; }
+impl Repetition { pub fn describe(&self) -> String; }
+impl NearMiss { pub fn describe(&self) -> String; }
+impl Difference { pub fn describe(self) -> &'static str; }
+impl FiftyMove { pub fn describe(&self) -> String; }
+impl Reset { pub fn describe(&self) -> String; }
+impl ResetKind { pub fn describe(self) -> &'static str; }
+impl DrawStatus { pub fn describe(&self) -> String; }
+impl AutomaticDraw { pub fn describe(&self) -> String; }
+impl ClaimableDraw { pub fn describe(&self) -> String; }
+impl MaterialConfig { pub fn describe(self) -> &'static str; }
+impl StalemateDetail { pub fn describe(&self) -> String; }
+impl Stuck { pub fn describe(&self) -> String; }
+```
+
+A value that carries squares names them; an aggregate lists every reason that
+applies, in the order its fields carry them.
+
+```python
+c = game.position.castling("w", "short")
+c.colour, c.wing  # "w", "short"
+c.describe()
+# "White cannot castle short: the king is in check from e8, and a king may not
+#  castle out of check; the enemy covers f1, which the king must cross or land
+#  on; the path is blocked on g1."
+
+ep.captures[0].describe()  # "The pawn on e5 may not take en passant. …"
+game.draw_status().describe()
+```
+
+Python has `describe()` on the class each enum lives on: `Difference` reads as
+`NearMiss.describe()`, `ResetKind` as `Reset.describe()`, `MaterialConfig` as
+`AutomaticDraw.describe()` and `Wing` as `Castling.describe()`, since a value
+that carries nothing is a `snake_case` string there and has no methods of its
+own.
+
 ---
 
-## 13. `polyglot` — opening books (feature `polyglot`)
+## 13. `endings` — named endings, no feature
+
+The books' name for the material on the board, what theory says the result is,
+and the method it is played by. Everything here is the general case adjusted
+by the few position-specific facts that are cheap and well defined; it is not
+a search, and it is not part of the feature schema.
+
+```rust
+pub mod endings {
+    /// The most pieces one side may have for the position to be an ending. A
+    /// piece is any unit that is neither a king nor a pawn.
+    pub const ENDING_PIECES: u32 = 2;
+
+    /// The material both sides hold, written the way endings are named.
+    pub struct Signature {
+        /// The canonical spelling, stronger side first: `KRPvKR`.
+        pub text: String,
+        /// The side written first: the one with more conventional material;
+        /// on a tie the one whose pieces are worth more one by one, queen
+        /// before rook before bishop before knight before pawn; White when
+        /// even that is even.
+        pub stronger: Colour,
+        /// Units per role per colour, indexed by `Colour::index` and
+        /// `Role::index`.
+        pub counts: [[u8; 6]; 2],
+        /// Conventional material per colour, the king counting nothing.
+        pub value: [u32; 2],
+    }
+
+    impl Signature {
+        pub fn count(&self, colour: Colour, role: Role) -> u8;
+        /// Everything that is neither a king nor a pawn.
+        pub fn pieces(&self, colour: Colour) -> u32;
+        pub fn pawns(&self) -> u32;
+        pub fn describe(&self) -> String;
+    }
+
+    /// The named endings this version of the catalogue tells apart. A class
+    /// names material only: which side holds which half of it is `Verdict`'s
+    /// answer.
+    pub enum Class {
+        KvK, KQvK, KRvK, KBBvK, KBNvK, KNNvK, KBvK, KNvK, KPvK, KBPvK,
+        KQvKQ, KQvKR, KQvKB, KQvKN, KQvKP, KQvTwoMinors,
+        KRvKR, KRvKB, KRvKN, KRvKP, KRvTwoMinors, KRPvKR,
+        KBBvKN, KBvKN, KBvKBSameColour, KBvKBOppositeColour, KNvKN,
+        KBvKP, KNvKP,
+        /// Kings and pawns only, in any number.
+        Pawns,
+        /// An ending the catalogue does not name.
+        Other,
+        /// More material than `ENDING_PIECES` allows.
+        NotAnEnding,
+    }
+
+    impl Class {
+        pub const ALL: [Class; 32];
+        /// The name in `snake_case`, as the Python surface spells it.
+        pub fn name(self) -> &'static str;
+        pub fn describe(self) -> &'static str;
+    }
+
+    /// What theory says the result is, played out by both sides at their
+    /// best. The answer is for the ending, not a search of the position.
+    pub enum Verdict {
+        Win(Colour),
+        UsuallyWin(Colour),
+        /// Usually drawn; the positions that are not are won by that colour.
+        UsuallyDraw(Colour),
+        Draw,
+        Unknown,
+    }
+
+    impl Verdict {
+        pub fn winner(self) -> Option<Colour>;
+        pub fn name(self) -> &'static str;
+        pub fn describe(self) -> String;
+    }
+
+    /// The named method an ending is played by.
+    pub enum Technique {
+        None,
+        BoxMethod,
+        TwoBishopMate,
+        BishopKnightMate,
+        KeySquares,
+        Opposition,
+        RuleOfTheSquare,
+        Lucena,
+        Philidor,
+        WrongBishop,
+        WrongRookPawn,
+    }
+
+    impl Technique {
+        pub const ALL: [Technique; 11];
+        pub fn name(self) -> &'static str;
+        pub fn describe(self) -> &'static str;
+    }
+
+    /// The position-specific facts an ending's verdict and technique are read
+    /// off. Each group is present only when the material puts it in question.
+    pub struct Evidence {
+        pub pawn: Option<PawnRace>,
+        pub bishops: Option<Bishops>,
+        /// The kings stand on one file, rank or diagonal with exactly one
+        /// empty square between them, so the side not to move holds the
+        /// opposition.
+        pub opposition: bool,
+    }
+
+    /// The race of the only pawn on the board.
+    pub struct PawnRace {
+        pub pawn: Square,
+        pub colour: Colour,
+        pub promotion: Square,
+        /// It stands on the a- or the h-file.
+        pub rook_pawn: bool,
+        /// Pawn moves left to promotion, a double first step counted as one.
+        pub steps: u32,
+        /// The defending king reaches the promotion square no later than the
+        /// pawn does, both racing straight there and neither king counted as
+        /// an obstacle: the rule of the square.
+        pub defender_inside_square: bool,
+        pub attacker_in_front: bool,
+        pub defender_in_front: bool,
+        /// The defending king stands on the promotion square or beside it.
+        pub defender_holds_the_corner: bool,
+    }
+
+    /// The bishops on the board, when at least one stands on it.
+    pub struct Bishops {
+        /// One bishop each, on opposite square colours.
+        pub opposite_colours: bool,
+        /// Every bishop on the board stands on one square colour.
+        pub same_colour: bool,
+        /// The only pawn on the board belongs to the side with the bishops,
+        /// is a rook pawn, and no bishop of that side stands on the colour of
+        /// the square it promotes on.
+        pub wrong_bishop: bool,
+    }
+
+    pub struct Ending {
+        pub class: Class,
+        pub signature: Signature,
+        pub verdict: Verdict,
+        pub technique: Technique,
+        pub evidence: Evidence,
+    }
+
+    impl Ending { pub fn describe(&self) -> String; }
+    impl PawnRace { pub fn describe(&self) -> String; }
+    impl Bishops { pub fn describe(&self) -> String; }
+    impl Evidence { pub fn describe(&self) -> String; }
+
+    pub fn classify(position: &Position) -> Ending;
+}
+
+impl Position { pub fn ending(&self) -> Ending; }
+impl Game { pub fn ending(&self) -> Ending; }
+```
+
+| Rule | |
+|---|---|
+| A position is an ending while **neither side has more than two pieces**, a piece being any unit that is neither a king nor a pawn. Above that the class is `NotAnEnding`, and the signature still says what is on the board. | |
+| A signature writes the stronger side first, `K` then the pieces by descending value then the pawns: `KRPvKR`. The stronger side is the one with more conventional material (Q 9, R 5, B and N 3, P 1); on a tie the one holding the more valuable piece, queen before rook before bishop before knight before pawn; White when even that is even. | |
+| A class names material only. `KBvKN` is the class whichever side has the bishop, and `Verdict` names the colour. | |
+| `Class::KPvK` is one pawn and nothing else; two pawns or more, still with no pieces, is `Class::Pawns`. | |
+| The verdict is the class's own result, overturned only by the facts in `Evidence`: two bishops on one square colour draw; a bishop that cannot cover its rook pawn's promotion square draws; a lone king on or beside a rook pawn's promotion square draws; a lone king outside the square of the pawn loses to it. | |
+| The technique follows the class, and the same facts pick between two of them: `Lucena` unless the defending king stands in front of the pawn, which is `Philidor`; `RuleOfTheSquare` for a pawn the lone king cannot catch, `WrongRookPawn` for a corner it has reached, `KeySquares` otherwise. | |
+| `Evidence::pawn` is filled in when exactly one pawn stands on the board, `Evidence::bishops` when at least one bishop does. Neither depends on the class. | |
+
+```python
+from esca import endings
+
+e = endings.classify(position)  # also position.ending(), game.ending()
+e.class_, e.verdict, e.technique  # "krp_v_kr", "usually_win", "lucena"
+e.verdict.winner  # "w"
+e.signature.text  # "KRPvKR"
+e.signature.count("w", "p")  # 1
+e.signature.pieces("b")  # 1
+e.evidence.pawn.defender_inside_square  # True
+e.evidence.bishops  # None
+print(e.describe())
+
+endings.EndingClass.all()  # every class, for a catalogue
+e.class_.describe()
+```
+
+The three enums are objects on the Python surface rather than bare strings,
+because each carries its own `describe()`. One compares equal to, hashes as,
+and prints as its `snake_case` name, so `e.class_ == "krp_v_kr"` is the
+comparison to write. `class_` carries the trailing underscore because `class`
+is a Python keyword.
+
+---
+
+## 14. `polyglot` — opening books (feature `polyglot`)
 
 The Polyglot book format: a file of 16-byte entries sorted by a key that the
 format fixes, so a book written by one program is read by every other.
@@ -1514,7 +1767,7 @@ pub mod polyglot {
 
 ---
 
-## 14. `openings` — the ECO catalogue (feature `openings`)
+## 15. `openings` — the ECO catalogue (feature `openings`)
 
 The [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings)
 data set, bundled under CC0-1.0 as `data/openings/`: an ECO

@@ -857,3 +857,88 @@ def test_a_move_of_another_position_claims_nothing() -> None:
     opening = move_named(game, "e4")
     game.play_san("e4")
     assert game.claims_after(opening) == []
+
+
+# ---------------------------------------------------------------------- prose
+
+
+def sentences() -> dict[str, str]:
+    """Every value the layer answers with, by the case that produces it."""
+    stalemate = game_from(SMOTHERED_STALEMATE, "").draw_status()
+    blocked = game_from(PINNED_AND_BLOCKED, "").draw_status()
+    threefold = game_of(" ".join([SHUFFLE] * 2)).draw_status()
+    triangulated = game_from(TRIANGULATION, "Kc1 Ke8 Kc2 Kd8 Kd1").repetition_status()
+    return {
+        "castling_allowed": position(CLEAR_BACK_RANK).castling("w", "short").describe(),
+        "castling_no_right": position(NO_RIGHTS).castling("w", "short").describe(),
+        "castling_blocked": position(QUEEN_AND_KNIGHT).castling("w", "short").describe(),
+        "castling_every_reason": position(EVERY_REASON).castling("w", "short").describe(),
+        "en_passant_none": position(EP_NONE).en_passant_status().describe(),
+        "en_passant_offered": position(EP_PLAIN).en_passant_status().describe(),
+        "en_passant_no_taker": position(EP_NO_TAKER).en_passant_status().describe(),
+        "en_passant_forbidden": position(EP_PINNED).en_passant_status().describe(),
+        "ep_capture_legal": ep_capture(EP_PLAIN, "e5").describe(),
+        "ep_obstacle_pinned": ep_capture(EP_PINNED, "e5").forbidden_by.describe(),
+        "ep_obstacle_exposes_king": ep_capture(EP_RANK_PIN, "e5").forbidden_by.describe(),
+        "ep_obstacle_in_check": ep_capture(EP_IN_CHECK, "e5").forbidden_by.describe(),
+        "pin": position(TWO_PINS).pins("w")[0].describe(),
+        "skewer": position(SKEWERED_QUEEN).skewers("b")[0].describe(),
+        "near_miss": triangulated.near_misses[0].describe(),
+        "repetition": game_of(SHUFFLE).repetition_status().describe(),
+        "repetition_with_near_misses": triangulated.describe(),
+        "fifty_move": game_from(CLOCK_AT_99, "").fifty_move_status().describe(),
+        "reset_pawn_move": game_of("e4").fifty_move_status().last_reset.describe(),
+        "reset_capture": game_of("e4 d5 exd5").fifty_move_status().last_reset.describe(),
+        "draw_status_none": game_of("").draw_status().describe(),
+        "draw_status_stalemate": stalemate.describe(),
+        "draw_status_two_draws": game_from(BISHOP_STALEMATE, "").draw_status().describe(),
+        "draw_status_claimable": threefold.describe(),
+        "automatic_stalemate": stalemate.automatic[0].describe(),
+        "automatic_material": game_from(BARE_KINGS, "").draw_status().automatic[0].describe(),
+        "claimable_threefold": threefold.claimable[0].describe(),
+        "claimable_fifty": game_from(CLOCK_AT_99, "Kd1").draw_status().claimable[0].describe(),
+        "stalemate_detail": stalemate_detail(stalemate).describe(),
+        "stalemate_detail_with_units": stalemate_detail(blocked).describe(),
+        "stuck_pinned": stalemate_detail(blocked).stuck_units[1][1].describe(),
+        "stuck_blocked": stalemate_detail(blocked).stuck_units[0][1].describe(),
+    }
+
+
+@pytest.mark.parametrize("case", sorted(sentences()))
+def test_every_value_of_the_layer_says_what_it_means(case: str) -> None:
+    sentence = sentences()[case]
+    assert sentence
+    assert sentence.endswith(".")
+
+
+def test_a_castling_names_the_colour_and_the_wing_it_answers_for() -> None:
+    castling = position(CLEAR_BACK_RANK).castling("b", "long")
+    assert castling.colour == "b"
+    assert castling.wing == "long"
+    assert castling.describe() == "Black may castle long: nothing stands in its way."
+
+
+def test_a_castling_spells_out_every_reason_it_is_not_allowed() -> None:
+    """Every reason is spelled out, in the order the fields carry them."""
+    assert position(EVERY_REASON).castling("w", "short").describe() == (
+        "White cannot castle short: the king is in check from e8, and a king may not castle out "
+        "of check; the enemy covers f1, which the king must cross or land on; the path is "
+        "blocked on g1."
+    )
+
+
+def test_an_en_passant_capture_says_what_forbids_it() -> None:
+    assert ep_capture(EP_PINNED, "e5").describe() == (
+        "The pawn on e5 may not take en passant. The pawn is pinned against its own king by the "
+        "unit on b2, and the capture would step off that line."
+    )
+
+
+def test_a_pin_names_its_three_squares() -> None:
+    assert position(TWO_PINS).pins("w")[0].describe() == (
+        "The unit on d2 may not move off the line between the enemy unit on b4 and its own king on e1."
+    )
+
+
+def test_a_draw_status_that_holds_nothing_says_so() -> None:
+    assert game_of("").draw_status().describe() == "No draw condition holds in this position."
