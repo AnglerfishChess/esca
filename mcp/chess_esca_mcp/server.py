@@ -8,7 +8,7 @@ move or no game answers `{"error": {...}}` carrying the evidence to fix it.
 import re
 from collections.abc import Callable
 from functools import wraps
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import esca
 from mcp.server.fastmcp import FastMCP
@@ -25,6 +25,9 @@ from chess_esca_mcp.positions import (
     read_pgn,
     variant_label,
 )
+
+if TYPE_CHECKING:
+    from esca._esca import ColourName, Square
 
 mcp = FastMCP("chess-esca")
 
@@ -313,11 +316,11 @@ def _origin_reasons(game: esca.Game, origin: str, destination: str, promotion: s
     target = render.unit(board, destination)
     if target is not None and target["colour"] == unit["colour"]:
         reasons.append({"reason": "destination_held_by_own_unit", "unit": target})
-    blockers = board.between(origin, destination) & board.occupied
+    blockers = board.between(cast("Square", origin), cast("Square", destination)) & board.occupied
     if blockers:
         reasons.append({"reason": "path_blocked", "occupants": render.units(board, blockers)})
     reasons.extend(_en_passant_reasons(board, destination, origin))
-    for item in board.pins(mover):
+    for item in board.pins(cast("ColourName", mover)):
         if item.pinned == origin and destination not in item.ray and destination != item.pinner:
             reasons.append({"reason": "pinned", **render.pin(item)})
     if board.in_check:

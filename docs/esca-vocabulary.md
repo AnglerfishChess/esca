@@ -43,7 +43,7 @@ defined before it is used.
 | **quiet move** | A move that neither captures nor promotes. |
 | **capture** | A move whose destination holds an enemy unit, which is removed. |
 | **en passant** | A pawn that has just advanced two squares may be captured, on the very next ply only, by an enemy pawn moving to the square it skipped. |
-| **castling** | The king and one rook move in one ply, subject to castling rights, an empty path, and the king neither standing in, passing through, nor landing in check. Named *king-side* (short) and *queen-side* (long) after the rook's starting wing. |
+| **castling** | The king and one rook move in one ply, subject to castling rights, an empty path, and the king neither standing in, passing through, nor landing in check. Named after where the king lands: *short* (king-side) puts it on the g-file, *long* (queen-side) on the c-file. The rook it castles with is the outermost one on that side, whatever file it starts on. |
 | **null move** | A search device, not a chess move: the side to move passes, everything else unchanged. Illegal when that side is in check. |
 | **pseudo-legal move** | A move legal by the moving unit's movement rules and by occupancy, ignoring whether it leaves its own king in check. |
 | **legal move** | A pseudo-legal move that does not leave its own king attacked. Only legal moves may be played. |
@@ -116,11 +116,12 @@ defined before it is used.
 | **SquareSet** | A typed set of squares — one bit per square — supporting union, intersection, difference, membership, count and iteration. The idiomatic name for what engines call a *bitboard*. |
 | **FileSet** | The same for the eight files. |
 | **PerFile / PerRank** | Eight values, one per file (file a first) or one per rank (rank 1 first). The order is part of the type, so a value read out of one carries the file or rank it belongs to without a separate note. |
-| **Facts** | esca's word for cheap, position-derived answers: everything true about a position that follows from the position plus at most one ply of lookahead. Grouped into plain structs with public fields (`facts.pawns.passed.white`). |
+| **Facts** | esca's word for cheap, position-derived answers: everything true about one position that follows from the position plus at most one ply of lookahead. Grouped into plain structs with public fields (`facts.pawns.passed.white`). What each *move* does is a separate answer, the annotated moves. |
 | **MoveFacts** | The same for one legal move: what it captures, whether it checks, whether its destination is safe. |
-| **annotated legal move** | A `Move` paired with its `MoveFacts`. |
-| **Scratch** | Reusable buffers — attack maps, pawn spans, the move list — that let repeated fact extraction run without allocating. |
-| **catalogue** | Every group, field, type and meaning as data. `docs/features.md` is generated from it, and a consumer that must walk the facts without knowing them reads it. |
+| **annotated move** | A `Move` paired with its `MoveFacts`. `annotated_moves()` answers with one per legal move. `Facts` holds none: it describes the position, which is why its JSON form and its tensor form hold no move data either. |
+| **scratch** | The reusable buffers — attack maps, pawn spans, the move lists — that let repeated fact extraction run without allocating. `Scratch` is the type; the argument named `scratch` is one the caller keeps and hands back, one per thread or one per node of a search stack. |
+| **catalogue** | Every group, field, type and meaning as data. `docs/features.md` is generated from it, and a consumer that must walk the facts without knowing them reads it. Everything it hands out is fixed at compile time, so walking it allocates nothing. |
+| **describe()** | A contract, not a format: one plain English sentence about the value it is called on and nothing else. A value never repeats what a value it holds would say, so printing a value and then its parts reads as a report rather than as an echo. The value stays the answer; the sentence is derived from it. |
 | **summary** | A human-readable rendering of a position or its facts, for reading and for diagnostics. Its exact text is not a stable format. |
 | **explain** (esca module) | The layer that answers a rules question with the evidence behind it: not "you may not castle" but the right, the rook, the check, the covered squares and the units covering them. Every reason that applies is answered at once. |
 | **Wing** (esca type) | Which castling: `Short`, the king landing on the g-file, or `Long`, the king landing on the c-file. Named by where the king lands, because a shuffled back rank can put either rook on either side of the centre. |
@@ -135,8 +136,13 @@ defined before it is used.
 | Term | Definition |
 |---|---|
 | **fact** | One named value of one group: a name, a type and one sentence of meaning. |
-| **group** | A named block of facts about one aspect of a position, e.g. `pawns` or `king`. |
-| **field** | A fact as the API spells it: an attribute of a group. |
+| **group** | A named block of facts about one aspect of a position — `pawns`, `king` — and an attribute of `Facts` of that name. `Facts::groups()` lists the names and `facts.group(name)` reads one without naming its type. |
+| **field** | A fact as the API spells it: an attribute of a group, named the same in Rust and in Python. A group's fields keep the order they are declared in, which is the order the catalogue, the JSON form and `docs/features.md` all use. |
+| **entry** | In the catalogue, what one group or one field says about itself: its name, its declared type and its meaning. In the tensors layout, what one array holds: its name, its dtype, its shape, its axis order and its encoding. Not a *book entry*, which is a row of a Polyglot book (§8). |
+| **array name** | The name one fact's array carries in a batch and in a safetensors file: the group and the field joined by a dot, `pawns.passed`. `esca.tensors.names()` and `facts::tensors::layout()` list them, and `docs/features.md` carries them in its `array` column. |
+| **layout** | Every array a batch holds, in declaration order, each with its entry. It is fixed for a build, so a reader can check an array against it without having a batch in hand. |
+| **form** | Which way a batch's arrays are written. *Expanded* is one value per element, as the layout's dtype and shape say. *Packed* is the same facts as bits: a square set is one `uint64` bitboard, a file set one `uint8` mask, and every other `bool` fact eight values to a byte. A batch converts either way and the facts are unchanged. |
+| **batch** | The facts of a run of positions, one array per fact, batch axis first. |
 | **attack** | Side X attacks square *s* if some unit of X could capture a unit standing on *s*, ignoring pins and ignoring whether X's own king would be exposed. Pawns attack diagonally only; sliders stop at the first occupied square. |
 | **attack map** | The union of a side's attacked squares, kept per role as well. |
 | **defend** | A unit of X is defended when the square it stands on is attacked by X. A unit never defends itself. |
@@ -178,6 +184,8 @@ defined before it is used.
 | **bound** | A score the engine did not search out exactly: `lowerbound` means the true score is at least this, `upperbound` that it is at most this. |
 | **WDL** | Win, draw and loss in permille, from the side to move's point of view: an engine's estimate of the outcome, reported beside the score. |
 | **null move token** | The move text an engine writes when it has none: `(none)` or `0000`. |
+| **`movetime`** | A search limit the client sends to the engine: how long the engine is asked to think, in the `go` line. It is part of the answer's shape, not of the client's patience. |
+| **timeout** (esca's UCI client) | How long the client waits on silence before giving up. Every wait is bounded by it, and a search fails once the engine has said nothing for what its limits asked for plus the timeout — so a long `movetime` needs no long timeout, and an engine that reports steadily is never cut off. `Engine::timeout` and `set_timeout` in Rust, `engine.timeout` in Python. |
 | **cancellation-safe** | Of a client's wait: giving up on it — dropping the future, cancelling the task — loses no line the engine wrote and leaves the conversation where it stood, so the next call still works. |
 | **line buffer** | The lines an engine has written that the client has not read yet. It is capped: an engine writing faster than it is read loses its oldest reports, never a line the conversation turns on. |
 

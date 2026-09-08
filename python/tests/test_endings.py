@@ -7,9 +7,14 @@ definitions in `docs/esca-api.md` §13. The cases mirror `tests/endings.rs`.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import esca
 import pytest
 from esca import endings
+
+if TYPE_CHECKING:
+    from esca._esca import ColourName, RoleName
 
 #: Kings only.
 BARE_KINGS = "4k3/8/8/8/8/8/8/4K3 w - - 0 1"
@@ -207,7 +212,7 @@ def test_a_signature_writes_the_stronger_side_first(fen: str, text: str, stronge
         "start_white_bishops",
     ],
 )
-def test_a_signature_counts_every_role_of_every_side(fen: str, side: str, unit: str, count: int) -> None:
+def test_a_signature_counts_every_role_of_every_side(fen: str, side: ColourName, unit: RoleName, count: int) -> None:
     assert ending(fen).signature.count(side, unit) == count
 
 
@@ -220,7 +225,9 @@ def test_a_signature_counts_every_role_of_every_side(fen: str, side: str, unit: 
     ],
     ids=["lone_queen", "rook_and_pawn", "two_pieces_each"],
 )
-def test_a_signature_counts_the_pieces_and_the_material_of_a_side(fen: str, side: str, pieces: int, value: int) -> None:
+def test_a_signature_counts_the_pieces_and_the_material_of_a_side(
+    fen: str, side: ColourName, pieces: int, value: int
+) -> None:
     signature = ending(fen).signature
     assert signature.pieces(side) == pieces
     assert signature.value(side) == value
@@ -228,10 +235,10 @@ def test_a_signature_counts_the_pieces_and_the_material_of_a_side(fen: str, side
 
 def test_a_signature_refuses_a_colour_or_a_role_it_does_not_know() -> None:
     signature = ending(BARE_KINGS).signature
-    with pytest.raises(ValueError, match="a colour is"):
-        signature.count("grey", "r")
+    with pytest.raises(ValueError, match="not a colour"):
+        signature.count("grey", "r")  # type: ignore[bad-argument-type]
     with pytest.raises(ValueError, match="not a role"):
-        signature.count("w", "rook")
+        signature.count("w", "rook")  # type: ignore[bad-argument-type]
 
 
 # -------------------------------------------------------------- the threshold
@@ -646,22 +653,25 @@ def test_evidence_that_applies_to_nothing_says_so() -> None:
     )
 
 
-def test_an_ending_describes_itself_from_its_parts() -> None:
-    """The whole answer reads as the material, the ending, the result and the method."""
+def test_an_ending_names_itself_and_repeats_none_of_its_parts() -> None:
+    """The answer names the ending; every part says for itself what it holds."""
     answer = ending(LONE_ROOK)
     prose = answer.describe()
-    assert prose.startswith(answer.signature.describe())
-    assert answer.class_.describe() in prose
-    assert answer.verdict.describe() in prose
-    assert prose.endswith(answer.technique.describe())
+    assert prose == f"This is the {answer.signature.text} ending."
+    for part in (
+        answer.signature.describe(),
+        answer.class_.describe(),
+        answer.verdict.describe(),
+        answer.technique.describe(),
+        answer.evidence.describe(),
+    ):
+        assert part not in prose
 
 
-def test_a_position_that_is_not_an_ending_describes_only_its_material() -> None:
-    """A position that is not an ending is answered with its material and no theory."""
+def test_a_position_that_is_not_an_ending_says_so() -> None:
+    """A position that is not an ending says so, and says no more."""
     answer = ending(START)
-    assert answer.describe() == (
-        f"{answer.signature.describe()} Too much material is left for this to be an ending at all."
-    )
+    assert answer.describe() == (f"The material is {answer.signature.text}, which is more than an ending has.")
 
 
 # ------------------------------------------------------------------ surfaces

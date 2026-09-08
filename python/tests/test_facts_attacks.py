@@ -7,9 +7,13 @@ for the named position above it. The cases mirror `tests/facts_attacks.rs`.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import esca
 import pytest
+
+if TYPE_CHECKING:
+    from esca._esca import Square
 
 #: The untouched array: every unit but the two rooks stands on a defended square.
 START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -422,7 +426,7 @@ def test_the_units_of_each_side_are_listed(
     ],
 )
 def test_the_attackers_of_a_square_are_the_units_of_a_side_that_bear_on_it(
-    fen: str, square: str, white: str, black: str, facts_of: FactsOf, squares: Squares
+    fen: str, square: Square, white: str, black: str, facts_of: FactsOf, squares: Squares
 ) -> None:
     position = facts_of(fen).position
     assert set(position.attackers(square, "white")) == squares(white)
@@ -442,7 +446,7 @@ def test_the_attackers_of_a_square_are_the_units_of_a_side_that_bear_on_it(
     ids=["ours", "theirs", "defended", "unattacked", "one_of_three", "en_prise_but_defended"],
 )
 def test_a_unit_of_either_colour_is_asked_whether_it_hangs(
-    fen: str, square: str, hanging: bool, facts_of: FactsOf
+    fen: str, square: Square, hanging: bool, facts_of: FactsOf
 ) -> None:
     hanging_units = facts_of(fen).attacks.hanging
     assert (square in hanging_units.white or square in hanging_units.black) is hanging

@@ -141,7 +141,7 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
             facts.pawns.backward.of(colour),
             facts.pawns.defended.of(colour),
         ] {
-            prop_assert!(derived.is_subset(pawns), "{}", fen);
+            prop_assert!(derived.is_subset(*pawns), "{}", fen);
         }
         let units = facts.placement.units.of(colour);
         for derived in [
@@ -150,28 +150,28 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
             facts.attacks.pinned.of(colour),
             facts.attacks.defended.of(colour),
         ] {
-            prop_assert!(derived.is_subset(units), "{}", fen);
+            prop_assert!(derived.is_subset(*units), "{}", fen);
         }
         prop_assert!(
             facts
                 .attacks
                 .hanging
                 .of(colour)
-                .is_subset(facts.attacks.en_prise.of(colour))
+                .is_subset(*facts.attacks.en_prise.of(colour))
         );
         prop_assert!(
             facts
                 .attacks
                 .by_pawns
                 .of(colour)
-                .is_subset(facts.attacks.controlled.of(colour))
+                .is_subset(*facts.attacks.controlled.of(colour))
         );
         prop_assert!(
             facts
                 .pieces
                 .outposts
                 .of(colour)
-                .is_subset(facts.attacks.by_pawns.of(colour))
+                .is_subset(*facts.attacks.by_pawns.of(colour))
         );
         prop_assert!(
             facts
@@ -185,14 +185,15 @@ fn check_facts(variant: &dyn Variant, position: &Position) -> Result<(), TestCas
     // Every annotated move is one of the legal moves, once.
     let mut legal = MoveList::new();
     variant.legal_moves(position, &mut legal);
-    prop_assert_eq!(facts.moves.len(), legal.len(), "{}", fen);
+    let annotated_moves = position.annotated_moves(variant);
+    prop_assert_eq!(annotated_moves.len(), legal.len(), "{}", fen);
     prop_assert_eq!(
-        facts.tactics.legal_move_count.of(facts.side_to_move()) as usize,
+        *facts.tactics.legal_move_count.of(facts.side_to_move()) as usize,
         legal.len(),
         "{}",
         fen
     );
-    for annotated in facts.moves.iter() {
+    for annotated in annotated_moves.iter() {
         prop_assert!(legal.contains(&annotated.mv), "{}", fen);
     }
     Ok(())

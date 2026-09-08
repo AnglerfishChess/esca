@@ -258,7 +258,7 @@ def test_a_variation_reads_as_the_moves_of_the_game_it_was_searched_from() -> No
     game = esca.Game()
     info = parse("info pv e2e4 e7e5 g1f3", game).info
     assert info is not None
-    assert [move.uci for move in info.pv] == ["e2e4", "e7e5", "g1f3"]
+    assert [move.uci() for move in info.pv] == ["e2e4", "e7e5", "g1f3"]
     assert game.move_to_san(info.pv[0]) == "e4"
 
 
@@ -275,7 +275,7 @@ def test_a_bestmove_reads_as_a_move_of_the_position_searched() -> None:
     assert answer.best is not None
     assert game.move_to_san(answer.best) == "e4"
     assert answer.ponder is not None
-    assert answer.ponder.uci == "e7e5"
+    assert answer.ponder.uci() == "e7e5"
 
 
 def test_a_bestmove_of_none_names_no_move() -> None:

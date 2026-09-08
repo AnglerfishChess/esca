@@ -2061,14 +2061,16 @@ impl PyAnnotatedMove {
     }
 
     fn __repr__(&self) -> String {
-        format!("<AnnotatedMove {}>", self.inner.mv)
+        format!("<AnnotatedMove {:?}>", self.inner.mv)
     }
 }
 
-/// Every group of facts about one position, plus its annotated legal moves.
+/// Every group of facts about one position.
 ///
-/// Pickling re-reads the facts from the position they were computed for, so
-/// the history flags a game supplies do not survive a round trip.
+/// What each *move* of the position does is a separate answer:
+/// `Position.annotated_moves()` and `Game.annotated_moves()`. Pickling
+/// re-reads the facts from the position they were computed for, so the
+/// history flags a game supplies do not survive a round trip.
 #[pyclass(frozen, module = "esca", name = "Facts")]
 pub struct PyFacts {
     pub(crate) inner: facts::Facts,
@@ -2215,17 +2217,6 @@ impl PyFacts {
     #[getter]
     fn maps(slf: &Bound<'_, Self>) -> PyResult<PyMapFacts> {
         PyMapFacts::of(slf.py(), &slf.get().inner.maps, slf.clone().unbind())
-    }
-
-    /// Every legal move, annotated.
-    #[getter]
-    fn moves(&self) -> Vec<PyAnnotatedMove> {
-        self.inner
-            .moves
-            .iter()
-            .copied()
-            .map(PyAnnotatedMove::new)
-            .collect()
     }
 
     /// Material, structure, king safety and threats, for a human reader. Not a

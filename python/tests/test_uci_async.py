@@ -96,11 +96,11 @@ async def test_a_search_reports_and_then_answers() -> None:
         game = esca.Game()
         await engine.set_position(game)
 
-        search = await engine.go(uci.Limits(depth=2))
+        search = engine.go(uci.Limits(depth=2))
         reports = [report async for report in search]
         assert [report.depth for report in reports] == [1, 2, None]
-        assert [move.uci for move in reports[0].pv] == ["e2e4"]
-        assert [move.uci for move in reports[1].pv] == ["e2e4", "e7e5"]
+        assert [move.uci() for move in reports[0].pv] == ["e2e4"]
+        assert [move.uci() for move in reports[1].pv] == ["e2e4", "e7e5"]
         assert reports[1].cp == 25
         assert reports[1].bound == "lowerbound"
         assert reports[2].string == "thinking about it: hard"
@@ -109,7 +109,7 @@ async def test_a_search_reports_and_then_answers() -> None:
         assert answer.best is not None
         assert game.move_to_san(answer.best) == "e4"
         assert answer.ponder is not None
-        assert answer.ponder.uci == "e7e5"
+        assert answer.ponder.uci() == "e7e5"
         assert engine.state == "idle"
 
 
@@ -133,7 +133,7 @@ async def test_playing_sets_the_position_and_answers() -> None:
     async with await identified() as engine:
         answer = await engine.play(esca.Game(), uci.Limits(movetime=0.01))
         assert answer.best is not None
-        assert answer.best.uci == "e2e4"
+        assert answer.best.uci() == "e2e4"
 
 
 @asyncio_test
@@ -142,7 +142,7 @@ async def test_analysing_keeps_the_deepest_report_of_each_variation() -> None:
         reports = await engine.analyse(esca.Game(), uci.Limits(depth=2))
         assert len(reports) == 1
         assert reports[0].depth == 2
-        assert [move.uci for move in reports[0].pv] == ["e2e4", "e7e5"]
+        assert [move.uci() for move in reports[0].pv] == ["e2e4", "e7e5"]
 
 
 @asyncio_test
@@ -164,26 +164,26 @@ async def test_an_engine_with_no_move_answers_with_none() -> None:
 async def test_a_search_that_waits_is_ended_by_stop() -> None:
     async with await identified() as engine:
         await engine.set_position(esca.Game())
-        search = await engine.go(uci.Limits(infinite=True))
-        await search.stop()
-        assert (await search.answer()).best is not None
+        async with engine.go(uci.Limits(infinite=True)) as search:
+            await search.stop()
+            assert (await search.answer()).best is not None
 
 
 @asyncio_test
 async def test_a_ponder_becomes_a_search_on_a_ponderhit() -> None:
     async with await identified() as engine:
         await engine.set_position(esca.Game())
-        search = await engine.go(uci.Limits(infinite=True, ponder=True))
-        assert engine.state == "pondering"
-        await search.ponderhit()
-        assert (await search.answer()).best is not None
+        async with engine.go(uci.Limits(infinite=True, ponder=True)) as search:
+            assert engine.state == "pondering"
+            await search.ponderhit()
+            assert (await search.answer()).best is not None
 
 
 @asyncio_test
 async def test_leaving_a_search_stops_it_and_leaves_the_engine_idle() -> None:
     async with await identified() as engine:
         await engine.set_position(esca.Game())
-        async with await engine.go(uci.Limits(infinite=True)):
+        async with engine.go(uci.Limits(infinite=True)):
             pass
         assert engine.state == "idle"
         await engine.is_ready()
@@ -224,7 +224,7 @@ async def test_an_engine_that_never_ends_its_identification_times_out() -> None:
 async def test_a_search_that_outlasts_its_budget_is_a_timeout() -> None:
     async with await identified("--slow") as engine:
         await engine.set_position(esca.Game())
-        search = await engine.go(uci.Limits(depth=2), timeout=0.05)
+        search = engine.go(uci.Limits(depth=2), timeout=0.05)
         with pytest.raises(uci.EngineTimeout):
             await search.answer()
 
@@ -255,7 +255,7 @@ async def test_an_engine_that_dies_mid_search_is_reported_as_dead() -> None:
     engine = await identified("--die-on-go")
     try:
         await engine.set_position(esca.Game())
-        search = await engine.go(uci.Limits(depth=2))
+        search = engine.go(uci.Limits(depth=2))
         with pytest.raises(uci.EngineDied):
             await search.answer()
         # Every call after says the same thing.
@@ -267,9 +267,13 @@ async def test_an_engine_that_dies_mid_search_is_reported_as_dead() -> None:
 
 @asyncio_test
 async def test_a_command_the_conversation_has_no_room_for_is_refused() -> None:
+    """The search is not pondering, so the command never reaches the engine."""
     async with await identified() as engine:
+        await engine.set_position(esca.Game())
+        search = engine.go(uci.Limits(depth=2))
         with pytest.raises(uci.ProtocolError):
-            await engine.stop()
+            await search.ponderhit()
+        await search.answer()
         await engine.is_ready()
 
 
@@ -306,7 +310,7 @@ async def test_a_cancelled_search_is_stopped_and_the_engine_settles() -> None:
 async def test_a_search_given_up_on_is_stopped() -> None:
     async with await identified() as engine:
         await engine.set_position(esca.Game())
-        search = await engine.go(uci.Limits(infinite=True))
+        search = engine.go(uci.Limits(infinite=True))
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(search.answer(), 0.05)
 
@@ -321,14 +325,13 @@ async def test_a_search_given_up_on_is_stopped() -> None:
 async def test_a_flood_of_reports_drops_the_oldest_and_keeps_the_answer() -> None:
     async with await identified("--flood") as engine:
         await engine.set_position(esca.Game())
-        search = await engine.go(uci.Limits(depth=2), timeout=TIMEOUT)
-
-        # Let the double outrun the client, which reads nothing until it does.
-        for _ in range(int(TIMEOUT / 0.01)):
-            if engine.dropped_lines > 0:
-                break
-            await asyncio.sleep(0.01)
-        assert engine.dropped_lines > 0, "the double floods the client"
+        async with engine.go(uci.Limits(depth=2), timeout=TIMEOUT) as search:
+            # Let the double outrun the client, which reads nothing until it does.
+            for _ in range(int(TIMEOUT / 0.01)):
+                if engine.dropped_lines > 0:
+                    break
+                await asyncio.sleep(0.01)
+            assert engine.dropped_lines > 0, "the double floods the client"
 
         assert (await search.answer()).best is not None, "the answer is never dropped"
         assert engine.state == "idle"
@@ -371,7 +374,9 @@ async def test_an_option_is_set_by_the_name_the_engine_declared(tmp_path: Path) 
     ],
 )
 @asyncio_test
-async def test_a_value_the_engine_did_not_declare_is_refused(name: str, value: object, complaint: str) -> None:
+async def test_a_value_the_engine_did_not_declare_is_refused(
+    name: str, value: bool | int | str | None, complaint: str
+) -> None:
     async with await identified() as engine:
         with pytest.raises(ValueError, match=complaint):
             await engine.set_option(name, value)

@@ -46,13 +46,13 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
         let ours = facts.pawns.of(colour);
         let theirs = facts.pawns.of(them);
 
-        for square in ours {
+        for square in *ours {
             facts.count_by_file[colour][square.file()] += 1;
             facts.count_by_rank[colour]
                 [Rank::ALL[scan.relative_rank(square, colour) as usize - 1]] += 1;
         }
 
-        for square in ours {
+        for square in *ours {
             let file = square.file();
             let rank = scan.relative_rank(square, colour);
             let own_file = file_mask(file);
@@ -64,27 +64,27 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
             let ahead = ahead_of(scan, rank, colour);
             let behind = behind_or_on(scan, rank, colour);
 
-            if !(own_file & (ours - square.to_set())).is_empty() {
+            if !(own_file & (*ours - square.to_set())).is_empty() {
                 facts.doubled[colour].insert(square);
             }
-            if (neighbours & ours).is_empty() {
+            if (neighbours & *ours).is_empty() {
                 facts.isolated[colour].insert(square);
             }
 
-            let blockers_ahead = (own_file | neighbours) & ahead & theirs;
+            let blockers_ahead = (own_file | neighbours) & ahead & *theirs;
             let passed = blockers_ahead.is_empty();
             if passed {
                 facts.passed[colour].insert(square);
-            } else if (own_file & ahead & theirs).is_empty() {
-                let support = (neighbours & behind & ours).len();
-                let opposition = (neighbours & ahead & theirs).len();
+            } else if (own_file & ahead & *theirs).is_empty() {
+                let support = (neighbours & behind & *ours).len();
+                let opposition = (neighbours & ahead & *theirs).len();
                 if support >= opposition {
                     facts.candidates[colour].insert(square);
                 }
             }
 
             if !passed
-                && (neighbours & behind & ours).is_empty()
+                && (neighbours & behind & *ours).is_empty()
                 && scan.by_role.of(them)[Role::Pawn.index()].contains(scan.relative_square(
                     file,
                     rank + 1,
@@ -94,17 +94,17 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
                 facts.backward[colour].insert(square);
             }
 
-            if !(attacks_of(Role::Pawn, square, colour, scan.occupied) & theirs).is_empty() {
+            if !(attacks_of(Role::Pawn, square, colour, scan.occupied) & *theirs).is_empty() {
                 facts.levers[colour] = facts.levers.of(colour).saturating_add(1);
             }
         }
 
-        facts.defended[colour] = ours & scan.by_role.of(colour)[Role::Pawn.index()];
+        facts.defended[colour] = *ours & scan.by_role.of(colour)[Role::Pawn.index()];
 
         // Islands: maximal runs of adjacent files carrying a pawn.
         let mut previous = false;
         for file in File::ALL {
-            let occupied = facts.count_by_file.of(colour).of(file) > 0;
+            let occupied = *facts.count_by_file.of(colour).of(file) > 0;
             if occupied && !previous {
                 facts.islands[colour] += 1;
             }
@@ -116,12 +116,13 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
             .into_iter()
             .map(|square| scan.relative_rank(square, colour) as u8)
             .max();
-        facts.passer_protected[colour] = (passers & facts.defended.of(colour)).len().min(255) as u8;
+        facts.passer_protected[colour] =
+            (*passers & *facts.defended.of(colour)).len().min(255) as u8;
         facts.passers_connected[colour] = passers.into_iter().any(|square| {
             adjacent_files(square.file())
                 .into_iter()
                 .flatten()
-                .any(|file| !(file_mask(file) & passers).is_empty())
+                .any(|file| !(file_mask(file) & *passers).is_empty())
         });
         facts.passer_unstoppable[colour] = passers
             .into_iter()
@@ -129,8 +130,8 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
     }
 
     for file in File::ALL {
-        let white = facts.count_by_file.white.of(file) > 0;
-        let black = facts.count_by_file.black.of(file) > 0;
+        let white = *facts.count_by_file.white.of(file) > 0;
+        let black = *facts.count_by_file.black.of(file) > 0;
         if !white && !black {
             facts.open_files.insert(file);
         }
@@ -161,26 +162,26 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
 
         facts.chain_max_length[colour] = ours
             .into_iter()
-            .flat_map(|square| [-1i32, 1].map(|step| chain_run(scan, ours, square, step, colour)))
+            .flat_map(|square| [-1i32, 1].map(|step| chain_run(scan, *ours, square, step, colour)))
             .max()
             .unwrap_or(0);
         facts.chain_base_attacked[colour] = ours.into_iter().any(|square| {
             [-1i32, 1].into_iter().any(|step| {
-                chain_run(scan, ours, square, step, colour) >= 2
+                chain_run(scan, *ours, square, step, colour) >= 2
                     && behind(scan, square, step, colour).is_none_or(|back| !ours.contains(back))
                     && scan.by.of(them).contains(square)
             })
         });
 
         facts.queenside_majority[colour] =
-            (ours & QUEEN_SIDE).len() > (facts.pawns.of(them) & QUEEN_SIDE).len();
+            (*ours & QUEEN_SIDE).len() > (*facts.pawns.of(them) & QUEEN_SIDE).len();
         facts.kingside_majority[colour] =
-            (ours & KING_SIDE).len() > (facts.pawns.of(them) & KING_SIDE).len();
+            (*ours & KING_SIDE).len() > (*facts.pawns.of(them) & KING_SIDE).len();
 
-        facts.holes[colour] = holes(scan, ours, colour);
+        facts.holes[colour] = holes(scan, *ours, colour);
         let minors = scan.role_units.of(them)[Role::Knight.index()]
             | scan.role_units.of(them)[Role::Bishop.index()];
-        facts.holes_occupied[colour] = (minors & facts.holes.of(colour)).len().min(255) as u8;
+        facts.holes_occupied[colour] = (minors & *facts.holes.of(colour)).len().min(255) as u8;
 
         facts.fixed_pawns[colour] = ours
             .into_iter()
@@ -220,9 +221,9 @@ pub(super) fn pawn_facts(scan: &Scan) -> PawnFacts {
         if let Some(square) = lead {
             let promotion = scan.relative_square(square.file(), 8, colour);
             facts.passer_own_king_distance[colour] =
-                Some(distance(scan.kings.of(colour), promotion).min(255) as u8);
+                Some(distance(*scan.kings.of(colour), promotion).min(255) as u8);
             facts.passer_enemy_king_distance[colour] =
-                Some(distance(scan.kings.of(them), promotion).min(255) as u8);
+                Some(distance(*scan.kings.of(them), promotion).min(255) as u8);
         }
         facts.passer_in_square[colour] = lead.is_some_and(|square| in_square(scan, square, colour));
 
@@ -324,7 +325,7 @@ fn in_square(scan: &Scan, square: Square, colour: Colour) -> bool {
     let rank = scan.relative_rank(square, colour);
     let promotion = scan.relative_square(square.file(), 8, colour);
     let tempo = u32::from(defender == scan.us);
-    distance(scan.kings.of(defender), promotion).saturating_sub(tempo) <= 8 - rank
+    distance(*scan.kings.of(defender), promotion).saturating_sub(tempo) <= 8 - rank
 }
 
 /// Whether the enemy king cannot catch `colour`'s passer on `square` by the
@@ -340,5 +341,5 @@ fn unstoppable(scan: &Scan, square: Square, colour: Colour) -> bool {
     let rank = scan.relative_rank(square, colour);
     let promotion = scan.relative_square(square.file(), 8, colour);
     let tempo = u32::from(defender == scan.us);
-    distance(scan.kings.of(defender), promotion).saturating_sub(tempo) > 8 - rank
+    distance(*scan.kings.of(defender), promotion).saturating_sub(tempo) > 8 - rank
 }

@@ -10,7 +10,7 @@ START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 
 def test_the_groups_answer_by_colour() -> None:
-    facts = esca.Position.from_fen(START).facts(esca.CLASSIC)
+    facts = esca.Position.from_fen(START).facts(variant=esca.CLASSIC)
     assert facts.variant == esca.CLASSIC
     assert facts.side_to_move == "white"
     assert facts.material.phase_points == 24
@@ -20,10 +20,12 @@ def test_the_groups_answer_by_colour() -> None:
     assert facts.king.square == esca.ByColour("e1", "e8")
     assert facts.tactics.legal_move_count == esca.ByColour(20, 20)
     assert not facts.tactics.check_available.white
-    assert len(facts.moves) == 20
-    assert facts.moves[0].move in [annotated.move for annotated in facts.moves]
-    assert facts.moves[0].facts.mover in {"p", "n"}
     assert "material" in facts.summary()
+
+    annotated = esca.Position.from_fen(START).annotated_moves()
+    assert len(annotated) == 20
+    assert annotated[0].move in [one.move for one in annotated]
+    assert annotated[0].facts.mover in {"p", "n"}
 
 
 def test_the_same_placement_reads_the_same_whoever_is_to_move() -> None:
@@ -79,9 +81,8 @@ def test_the_catalogue_names_every_field_of_every_group() -> None:
 
 
 def test_the_move_catalogue_names_every_field_of_a_move() -> None:
-    facts = esca.Position.from_fen(START).facts()
     names = [field["name"] for field in esca.move_facts_catalogue()]
-    move = facts.moves[0].facts
+    move = esca.Position.from_fen(START).annotated_moves()[0].facts
     assert list(move.to_dict()) == names
     assert move.to_dict()["mover"] in {"p", "n"}
 
@@ -105,7 +106,7 @@ def test_a_group_is_picklable_through_its_facts() -> None:
 
 def test_chess960_facts_use_the_chess960_rules() -> None:
     position = esca.CHESS960.start_position(518)
-    facts = position.facts(esca.CHESS960)
+    facts = position.facts(variant=esca.CHESS960)
     assert facts.variant == esca.CHESS960
     assert facts.tactics.legal_move_count.white == 20
 

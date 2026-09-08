@@ -3,12 +3,20 @@
 //! Where [`Facts`](crate::Facts) answers what is true, these types answer
 //! why: each distinct reason is its own field carrying the squares it was
 //! read off, and every reason that applies is filled in at once.
+//!
+//! Every type here answers `describe()` with one plain sentence about itself
+//! and nothing else: a value never repeats what a value it holds would say.
+//! So printing a value and then its parts reads as a report rather than as an
+//! echo, and printing only the part that matters loses nothing else.
+//! [`endings`](crate::endings) follows the same rule.
 
 use crate::facts::scan::{attackers, attacks_of, between, line, order_value};
 use crate::game::Game;
 use crate::moves::{Move, MoveKind};
 use crate::position::Position;
 use crate::types::{Colour, File, Piece, Rank, Role, Square, SquareSet};
+
+pub use crate::types::Wing;
 
 /// The halfmove clock a player may claim the fifty-move draw at.
 const CLAIM_CLOCK: u32 = 100;
@@ -20,40 +28,6 @@ const AUTOMATIC_CLOCK: u32 = 150;
 /// draw.
 const CLAIM_REPETITIONS: u32 = 3;
 const AUTOMATIC_REPETITIONS: u32 = 5;
-
-/// Which castling, named by where the king lands: `Short` on the g-file,
-/// `Long` on the c-file.
-///
-/// Not the wing the rook starts on: a shuffled back rank can put either rook
-/// on either side of the centre.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Wing {
-    /// The king lands on the g-file, the rook on the f-file.
-    Short,
-    /// The king lands on the c-file, the rook on the d-file.
-    Long,
-}
-
-impl Wing {
-    /// Both wings, short first.
-    pub const ALL: [Wing; 2] = [Wing::Short, Wing::Long];
-
-    /// The file the king lands on.
-    const fn king_file(self) -> File {
-        match self {
-            Wing::Short => File::G,
-            Wing::Long => File::C,
-        }
-    }
-
-    /// The file the rook lands on.
-    const fn rook_file(self) -> File {
-        match self {
-            Wing::Short => File::F,
-            Wing::Long => File::D,
-        }
-    }
-}
 
 /// One castling of one colour, and everything standing in its way.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -260,7 +234,7 @@ pub enum AutomaticDraw {
     /// Neither side has material that could ever deliver mate.
     InsufficientMaterial(MaterialConfig),
     /// The position has stood five times.
-    Fivefold(Repetition),
+    FivefoldRepetition(Repetition),
     /// The halfmove clock has reached 150.
     SeventyFiveMoves(FiftyMove),
 }
@@ -269,7 +243,7 @@ pub enum AutomaticDraw {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ClaimableDraw {
     /// The position has stood three times.
-    Threefold(Repetition),
+    ThreefoldRepetition(Repetition),
     /// The halfmove clock has reached 100.
     FiftyMoves(FiftyMove),
 }
@@ -691,7 +665,7 @@ impl Game {
         if repetition.count >= AUTOMATIC_REPETITIONS {
             status
                 .automatic
-                .push(AutomaticDraw::Fivefold(repetition.clone()));
+                .push(AutomaticDraw::FivefoldRepetition(repetition.clone()));
         }
         if fifty.clock >= AUTOMATIC_CLOCK {
             status
@@ -699,7 +673,9 @@ impl Game {
                 .push(AutomaticDraw::SeventyFiveMoves(fifty.clone()));
         }
         if repetition.count >= CLAIM_REPETITIONS {
-            status.claimable.push(ClaimableDraw::Threefold(repetition));
+            status
+                .claimable
+                .push(ClaimableDraw::ThreefoldRepetition(repetition));
         }
         if fifty.clock >= CLAIM_CLOCK {
             status.claimable.push(ClaimableDraw::FiftyMoves(fifty));
@@ -894,15 +870,12 @@ impl EnPassant {
 }
 
 impl EpCapture {
-    /// One plain sentence: whether this pawn may take, and what stops it.
+    /// One plain sentence: whether this pawn may take. What stops it is
+    /// [`EpCapture::forbidden_by`]'s own sentence.
     pub fn describe(&self) -> String {
         match &self.forbidden_by {
             None => format!("The pawn on {} may take en passant.", self.from),
-            Some(obstacle) => format!(
-                "The pawn on {} may not take en passant. {}",
-                self.from,
-                obstacle.describe()
-            ),
+            Some(_) => format!("The pawn on {} may not take en passant.", self.from),
         }
     }
 }
@@ -1069,25 +1042,33 @@ impl ResetKind {
 
 impl DrawStatus {
     /// One plain sentence: whether the game is drawn, could be drawn on a
-    /// claim, or neither.
+    /// claim, or neither. Each condition of the two lists says for itself
+    /// what it is.
     pub fn describe(&self) -> String {
-        let mut parts = Vec::new();
-        if !self.automatic.is_empty() {
-            parts.push("The game is drawn already.".to_string());
-            parts.extend(self.automatic.iter().map(AutomaticDraw::describe));
+        match (self.automatic.is_empty(), self.claimable.is_empty()) {
+            (true, true) => "No draw condition holds in this position.".to_string(),
+            (false, true) => "The game is drawn already.".to_string(),
+            (true, false) => "Either player may claim a draw.".to_string(),
+            (false, false) => {
+                "The game is drawn already, and a claim was available before that.".to_string()
+            }
         }
-        if !self.claimable.is_empty() {
-            parts.push("Either player may claim a draw.".to_string());
-            parts.extend(self.claimable.iter().map(ClaimableDraw::describe));
-        }
-        if parts.is_empty() {
-            return "No draw condition holds in this position.".to_string();
-        }
-        parts.join(" ")
     }
 }
 
 impl AutomaticDraw {
+    /// The condition's name, the one spelling every surface uses:
+    /// `stalemate`, `insufficient_material`, `fivefold_repetition`,
+    /// `seventy_five_moves`.
+    pub const fn name(&self) -> &'static str {
+        match self {
+            AutomaticDraw::Stalemate(_) => "stalemate",
+            AutomaticDraw::InsufficientMaterial(_) => "insufficient_material",
+            AutomaticDraw::FivefoldRepetition(_) => "fivefold_repetition",
+            AutomaticDraw::SeventyFiveMoves(_) => "seventy_five_moves",
+        }
+    }
+
     /// One plain sentence naming the draw and why it needs no claim.
     pub fn describe(&self) -> String {
         match self {
@@ -1096,11 +1077,11 @@ impl AutomaticDraw {
                  draw."
                     .to_string()
             }
-            AutomaticDraw::InsufficientMaterial(config) => format!(
-                "{} Neither side could ever deliver mate, so the game is drawn.",
-                config.describe()
-            ),
-            AutomaticDraw::Fivefold(_) => {
+            AutomaticDraw::InsufficientMaterial(_) => {
+                "Neither side has material that could ever deliver mate, so the game is drawn."
+                    .to_string()
+            }
+            AutomaticDraw::FivefoldRepetition(_) => {
                 "The position has stood five times, which draws the game with no claim.".to_string()
             }
             AutomaticDraw::SeventyFiveMoves(_) => {
@@ -1113,10 +1094,19 @@ impl AutomaticDraw {
 }
 
 impl ClaimableDraw {
+    /// The condition's name, the one spelling every surface uses:
+    /// `threefold_repetition`, `fifty_moves`.
+    pub const fn name(&self) -> &'static str {
+        match self {
+            ClaimableDraw::ThreefoldRepetition(_) => "threefold_repetition",
+            ClaimableDraw::FiftyMoves(_) => "fifty_moves",
+        }
+    }
+
     /// One plain sentence naming the draw a player may ask for.
     pub fn describe(&self) -> String {
         match self {
-            ClaimableDraw::Threefold(_) => {
+            ClaimableDraw::ThreefoldRepetition(_) => {
                 "The position has stood three times, so either player may claim a draw.".to_string()
             }
             ClaimableDraw::FiftyMoves(_) => {

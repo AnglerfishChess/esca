@@ -85,8 +85,8 @@ def test_a_search_reports_and_then_answers(engine: uci.Engine) -> None:
     search = engine.go(uci.Limits(depth=2))
     reports = list(search)
     assert [report.depth for report in reports] == [1, 2, None]
-    assert [move.uci for move in reports[0].pv] == ["e2e4"]
-    assert [move.uci for move in reports[1].pv] == ["e2e4", "e7e5"]
+    assert [move.uci() for move in reports[0].pv] == ["e2e4"]
+    assert [move.uci() for move in reports[1].pv] == ["e2e4", "e7e5"]
     assert reports[1].cp == 25
     assert reports[1].bound == "lowerbound"
     assert reports[2].string == "thinking about it: hard"
@@ -95,21 +95,21 @@ def test_a_search_reports_and_then_answers(engine: uci.Engine) -> None:
     assert answer.best is not None
     assert game.move_to_san(answer.best) == "e4"
     assert answer.ponder is not None
-    assert answer.ponder.uci == "e7e5"
+    assert answer.ponder.uci() == "e7e5"
     assert engine.state == "idle"
 
 
 def test_playing_sets_the_position_and_answers(engine: uci.Engine) -> None:
     answer = engine.play(esca.Game(), uci.Limits(movetime=0.01))
     assert answer.best is not None
-    assert answer.best.uci == "e2e4"
+    assert answer.best.uci() == "e2e4"
 
 
 def test_analysing_keeps_the_deepest_report_of_each_variation(engine: uci.Engine) -> None:
     reports = engine.analyse(esca.Game(), uci.Limits(depth=2))
     assert len(reports) == 1
     assert reports[0].depth == 2
-    assert [move.uci for move in reports[0].pv] == ["e2e4", "e7e5"]
+    assert [move.uci() for move in reports[0].pv] == ["e2e4", "e7e5"]
 
 
 def test_an_engine_with_no_move_answers_with_none() -> None:
@@ -209,8 +209,12 @@ def test_an_engine_that_dies_mid_search_is_reported_as_dead() -> None:
 
 
 def test_a_command_the_conversation_has_no_room_for_is_refused(engine: uci.Engine) -> None:
+    """The search is not pondering, so the command never reaches the engine."""
+    engine.set_position(esca.Game())
+    search = engine.go(uci.Limits(depth=2))
     with pytest.raises(uci.ProtocolError):
-        engine.stop()
+        search.ponderhit()
+    search.answer()
     engine.is_ready()
 
 
@@ -248,7 +252,7 @@ def test_an_option_is_set_by_the_name_the_engine_declared(tmp_path: Path) -> Non
     ],
 )
 def test_a_value_the_engine_did_not_declare_is_refused(
-    engine: uci.Engine, name: str, value: object, complaint: str
+    engine: uci.Engine, name: str, value: bool | int | str | None, complaint: str
 ) -> None:
     with pytest.raises(ValueError, match=complaint):
         engine.set_option(name, value)

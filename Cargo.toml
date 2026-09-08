@@ -17,6 +17,12 @@ repository = "https://github.com/AnglerfishChess/esca"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# docs.rs builds every feature and badges each gated item with the feature it
+# needs.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = []
 # The dump reader.

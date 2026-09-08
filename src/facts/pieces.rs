@@ -46,8 +46,8 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
             colours |= SquareSet::DARK;
         }
         facts.pawns_on_bishop_colour[colour] =
-            (pawns.pawns.of(colour) & colours).len().min(255) as u8;
-        facts.fixed_pawns_on_bishop_colour[colour] = (pawns.pawns.of(colour) & colours)
+            (*pawns.pawns.of(colour) & colours).len().min(255) as u8;
+        facts.fixed_pawns_on_bishop_colour[colour] = (*pawns.pawns.of(colour) & colours)
             .into_iter()
             .filter(|pawn| scan.occupied.contains(stop_square(scan, *pawn, colour)))
             .count()
@@ -80,29 +80,29 @@ pub(super) fn piece_facts(scan: &Scan, pawns: &PawnFacts) -> PieceFacts {
             if scan.relative_rank(rook, colour) == 7 {
                 facts.rooks_on_seventh_rank[colour] += 1;
             }
-            if behind_a_passer(scan, rook, pawns.passed.of(colour), colour) {
+            if behind_a_passer(scan, rook, *pawns.passed.of(colour), colour) {
                 facts.rook_behind_own_passer[colour] += 1;
             }
-            if behind_a_passer(scan, rook, pawns.passed.of(them), them) {
+            if behind_a_passer(scan, rook, *pawns.passed.of(them), them) {
                 facts.rook_behind_enemy_passer[colour] += 1;
             }
         }
 
         facts.trapped_rook[colour] = trapped_rook(scan, colour, rooks);
-        facts.rook_on_seventh_with_king_on_eighth[colour] = facts.rooks_on_seventh_rank.of(colour)
+        facts.rook_on_seventh_with_king_on_eighth[colour] = *facts.rooks_on_seventh_rank.of(colour)
             > 0
-            && scan.relative_rank(scan.kings.of(them), colour) == 8;
+            && scan.relative_rank(*scan.kings.of(them), colour) == 8;
 
         let (trapped, value) = trapped_pieces(scan, colour);
         facts.trapped_pieces[colour] = trapped;
         facts.trapped_value[colour] = value;
 
         facts.outposts[colour] = outposts(scan, pawns, colour);
-        facts.minors_on_outpost[colour] = ((knights | bishops) & facts.outposts.of(colour))
+        facts.minors_on_outpost[colour] = ((knights | bishops) & *facts.outposts.of(colour))
             .len()
             .min(255) as u8;
         facts.outpost_squares_free[colour] =
-            (facts.outposts.of(colour) - scan.occupied).len().min(255) as u8;
+            (*facts.outposts.of(colour) - scan.occupied).len().min(255) as u8;
         facts.knights_on_rim[colour] = knights
             .into_iter()
             .filter(|square| {
@@ -141,7 +141,7 @@ fn trapped_pieces(scan: &Scan, colour: Colour) -> (u8, u8) {
     let mut value = 0i32;
     for role in TRAPPABLE {
         for square in scan.role_units.of(colour)[role.index()] {
-            let destinations = scan.attacks_from[square.index()] - scan.units.of(colour);
+            let destinations = scan.attacks_from[square.index()] - *scan.units.of(colour);
             if destinations
                 .into_iter()
                 .any(|to| is_safe(scan, colour, role, square, to))
@@ -162,11 +162,11 @@ fn is_safe(scan: &Scan, colour: Colour, role: Role, from: Square, to: Square) ->
     let occupied = (scan.occupied - from.to_set()) | to.to_set();
 
     // The move takes whatever stood on `to` and leaves `from` empty.
-    let mut their_units = scan.role_units.of(them);
+    let mut their_units = *scan.role_units.of(them);
     for set in &mut their_units {
         *set -= to.to_set();
     }
-    let mut our_units = scan.role_units.of(colour);
+    let mut our_units = *scan.role_units.of(colour);
     our_units[role.index()] = (our_units[role.index()] - from.to_set()) | to.to_set();
 
     let by_pawn = attacks_of(Role::Pawn, to, colour, occupied);
@@ -196,7 +196,7 @@ fn behind_a_passer(scan: &Scan, rook: Square, passers: SquareSet, owner: Colour)
 /// destinations, beyond its own king on the wing the king stands on, the king
 /// having lost its castling rights.
 fn trapped_rook(scan: &Scan, colour: Colour, rooks: SquareSet) -> bool {
-    if scan.castling.of(colour) {
+    if *scan.castling.of(colour) {
         return false;
     }
     let king = scan.kings.of(colour);
@@ -227,7 +227,7 @@ fn outposts(scan: &Scan, pawns: &PawnFacts, colour: Colour) -> SquareSet {
         .into_iter()
         .flatten()
         .any(|file| {
-            (theirs & file_mask(file))
+            (*theirs & file_mask(file))
                 .into_iter()
                 .any(|pawn| scan.relative_rank(pawn, colour) >= rank)
         });

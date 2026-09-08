@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::files;
+use common::{files, position_of};
 use esca::{
     ByColour, CHESS960, CLASSIC, Colour, Facts, Game, Position, Rank, Role, Scratch, Square,
     Variant, chess960, classic,
@@ -38,7 +38,6 @@ fn the_start_position_is_symmetric() {
     assert_eq!(facts.king.distance, 7);
     assert_eq!(facts.tactics.legal_move_count, ByColour::new(20, 20));
     assert_eq!(facts.tactics.available, ByColour::new(true, true));
-    assert_eq!(facts.moves.len(), 20);
 }
 
 #[test]
@@ -111,7 +110,9 @@ fn an_en_passant_capture_is_legal_when_it_is() {
     let facts = facts_of("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3");
     assert_eq!(facts.state.en_passant, Some(esca::File::F));
     assert!(facts.state.en_passant_capture_legal);
-    assert!(facts.moves.iter().any(|m| m.facts.is_en_passant));
+    let annotated = position_of("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3")
+        .annotated_moves(&CLASSIC);
+    assert!(annotated.iter().any(|m| m.facts.is_en_passant));
 
     let quiet = facts_of("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
     assert_eq!(quiet.state.en_passant, Some(esca::File::E));
@@ -209,9 +210,9 @@ fn a_game_supplies_the_repetition_facts_a_position_cannot() {
 
 #[test]
 fn a_promotion_and_a_king_move_are_both_annotated() {
-    let facts = facts_of("r3k3/1P6/8/8/8/8/6K1/8 w q - 0 1");
-    assert!(facts.moves.iter().any(|m| m.facts.promotion.is_some()));
-    assert!(facts.moves.iter().any(|m| m.facts.mover == Role::King));
+    let annotated = position_of("r3k3/1P6/8/8/8/8/6K1/8 w q - 0 1").annotated_moves(&CLASSIC);
+    assert!(annotated.iter().any(|m| m.facts.promotion.is_some()));
+    assert!(annotated.iter().any(|m| m.facts.mover == Role::King));
 }
 
 #[test]
@@ -219,7 +220,7 @@ fn chess960_start_positions_are_facts_too() {
     for seed in 0..8u64 {
         let game = Game::with_seed(chess960(), seed);
         let facts = game.facts();
-        assert_eq!(facts.variant(), "chess960");
+        assert_eq!(facts.variant_name(), "chess960");
         assert_eq!(facts.material.phase_points, 24);
         assert_eq!(facts.pawns.islands, ByColour::new(1, 1));
         assert!(facts.tactics.legal_move_count.white > 0);

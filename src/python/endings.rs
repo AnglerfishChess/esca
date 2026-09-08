@@ -222,7 +222,7 @@ impl PyMaterialSignature {
 
     /// The conventional material of `colour`, the king counting nothing.
     fn value(&self, colour: &str) -> PyResult<u32> {
-        Ok(self.inner.value[colour_from(colour)?.index()])
+        Ok(self.inner.value[colour_from(colour)?])
     }
 
     /// One plain sentence naming what each side has.

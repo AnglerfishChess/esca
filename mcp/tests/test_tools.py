@@ -141,7 +141,7 @@ class TestPosition:
         answer = server.position(moves=positions.THREEFOLD)["status"]
         assert answer["claims"] == ["threefold_repetition"]
         [claimable] = answer["claimable"]
-        assert claimable["kind"] == "threefold"
+        assert claimable["kind"] == "threefold_repetition"
         assert claimable["repetition"]["count"] == 3
         assert claimable["repetition"]["plies"] == [0, 4, 8]
         assert claimable["repetition"]["near_misses"] == []
@@ -149,7 +149,7 @@ class TestPosition:
     def test_every_claim_that_stands_is_answered_with_its_own_evidence(self):
         answer = server.position(fen=positions.FIFTY_MOVE_EDGE, moves=positions.SHUFFLE)["status"]
         assert answer["claims"] == ["fifty_moves", "threefold_repetition"]
-        assert [claim["kind"] for claim in answer["claimable"]] == ["threefold", "fifty_moves"]
+        assert [claim["kind"] for claim in answer["claimable"]] == ["threefold_repetition", "fifty_moves"]
         threefold, fifty = answer["claimable"]
         assert threefold["repetition"]["count"] == 3
         assert threefold["repetition"]["plies"] == [0, 4, 8]
@@ -320,11 +320,11 @@ class TestExplainMove:
 
     def test_a_move_that_would_repeat_names_the_claim_it_opens(self):
         answer = server.explain_move(move="Ng8", moves=positions.THREEFOLD[:7])
-        assert [claim["kind"] for claim in answer["claims_after"]] == ["threefold"]
+        assert [claim["kind"] for claim in answer["claims_after"]] == ["threefold_repetition"]
 
     def test_a_move_that_opens_two_claims_names_them_both(self):
         answer = server.explain_move(move="Ka8", fen=positions.FIFTY_MOVE_EDGE, moves=positions.SHUFFLE[:-1])
-        assert [claim["kind"] for claim in answer["claims_after"]] == ["threefold", "fifty_moves"]
+        assert [claim["kind"] for claim in answer["claims_after"]] == ["threefold_repetition", "fifty_moves"]
         threefold, fifty = answer["claims_after"]
         assert threefold["repetition"]["plies"] == [0, 4, 8]
         assert fifty["fifty_move"]["plies_to_claim"] == 0
@@ -493,11 +493,10 @@ class TestEnding:
         assert answer["pawn"]["rook_pawn"] is True
         assert answer["pawn"]["defender_inside_square"] is True
         assert answer["opposition"] is False
-        # The wording is esca's own, one sentence per group of evidence it holds.
+        # The wording is esca's own: the evidence names its groups, each of
+        # which says for itself what it holds.
         assert answer["prose"] == [
-            "White's pawn on a2 is 5 moves from promoting on a8, and the defending king is "
-            "inside the square of the pawn. The bishop stands on the square colour its rook "
-            "pawn does not promote on, so it can never cover the promotion square."
+            "What theory says about this ending is read here against the pawn race and the bishops."
         ]
 
     def test_a_middlegame_is_no_ending_and_still_says_what_stands_there(self):
@@ -559,10 +558,7 @@ class TestProse:
 
     def test_the_draw_status_speaks_once_for_all_the_conditions_under_it(self):
         answer = server.position(fen=positions.STALEMATE)["status"]
-        assert answer["prose"] == [
-            "The game is drawn already. The side to move is not in check and has no legal move, "
-            "which is stalemate: a draw."
-        ]
+        assert answer["prose"] == ["The game is drawn already."]
         [drawn] = answer["automatic"]
         assert "prose" not in drawn
         assert drawn["stalemate"]["prose"] == [

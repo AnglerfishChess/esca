@@ -11,7 +11,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use esca::polyglot::{Book, Builder, ENTRY_SIZE, Entry, Raw};
-use esca::{CHESS960, CLASSIC, Game, Move, Position, Variant, chess960, classic};
+use esca::{CHESS960, CLASSIC, CastlingOutput, Game, Move, Position, Variant, chess960, classic};
 use rstest::rstest;
 
 /// A book of five entries at two of the format's published keys: three moves
@@ -220,7 +220,7 @@ fn the_entries_of_a_position_keep_the_order_the_file_gives_them() {
     let moves: Vec<String> = tiny()
         .entries(&CLASSIC, &start)
         .iter()
-        .map(|entry| entry.mv.to_string())
+        .map(|entry| entry.mv.uci(CastlingOutput::KingToRook))
         .collect();
     assert_eq!(moves, ["e2e4", "d2d4", "g1f3"]);
 }
@@ -266,7 +266,7 @@ fn the_heaviest_entry_is_the_best_one() {
     let best = tiny()
         .best(&CLASSIC, &start)
         .expect("the book knows the start");
-    assert_eq!(best.mv.to_string(), "e2e4");
+    assert_eq!(best.mv.uci(CastlingOutput::KingToRook), "e2e4");
     assert_eq!(best.weight, 100);
 }
 
@@ -284,7 +284,7 @@ fn a_pick_is_the_entry_the_seed_falls_in(#[case] seed: u64, #[case] uci: &str) {
     let picked = tiny()
         .pick(&CLASSIC, &start, seed)
         .expect("the book knows the start");
-    assert_eq!(picked.mv.to_string(), uci);
+    assert_eq!(picked.mv.uci(CastlingOutput::KingToRook), uci);
 }
 
 #[test]
@@ -398,11 +398,14 @@ fn a_builder_weighs_a_move_by_how_many_games_played_it() {
     let start = position(START);
     let opening = book.entries(&CLASSIC, &start);
     assert_eq!(opening.len(), 1);
-    assert_eq!(opening[0].mv.to_string(), "e2e4");
+    assert_eq!(opening[0].mv.uci(CastlingOutput::KingToRook), "e2e4");
     assert_eq!(opening[0].weight, 2);
 
     let replies = book.entries(&CLASSIC, played("e2e4").position());
-    let moves: Vec<String> = replies.iter().map(|entry| entry.mv.to_string()).collect();
+    let moves: Vec<String> = replies
+        .iter()
+        .map(|entry| entry.mv.uci(CastlingOutput::KingToRook))
+        .collect();
     assert_eq!(moves, ["d7d5", "e7e5"]);
     assert!(replies.iter().all(|entry| entry.weight == 1));
     fs::remove_file(&path).expect("the temporary file is removable");

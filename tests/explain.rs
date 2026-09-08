@@ -216,26 +216,11 @@ fn obstacle_kind(capture: &EpCapture) -> Option<&'static str> {
 
 /// The cases of a draw status, in the order it lists them.
 fn automatic_kinds(status: &DrawStatus) -> Vec<&'static str> {
-    status
-        .automatic
-        .iter()
-        .map(|draw| match draw {
-            AutomaticDraw::Stalemate(_) => "stalemate",
-            AutomaticDraw::InsufficientMaterial(_) => "insufficient_material",
-            AutomaticDraw::Fivefold(_) => "fivefold",
-            AutomaticDraw::SeventyFiveMoves(_) => "seventy_five_moves",
-        })
-        .collect()
+    status.automatic.iter().map(AutomaticDraw::name).collect()
 }
 
 fn claimable_kinds(claims: &[ClaimableDraw]) -> Vec<&'static str> {
-    claims
-        .iter()
-        .map(|claim| match claim {
-            ClaimableDraw::Threefold(_) => "threefold",
-            ClaimableDraw::FiftyMoves(_) => "fifty_moves",
-        })
-        .collect()
+    claims.iter().map(ClaimableDraw::name).collect()
 }
 
 /// The material configuration a draw status names, if it names one.
@@ -761,8 +746,8 @@ fn a_draw_status_lists_every_reason_that_applies(
 }
 
 #[rstest]
-#[case::threefold(2, &[], &["threefold"])]
-#[case::fivefold(4, &["fivefold"], &["threefold"])]
+#[case::threefold(2, &[], &["threefold_repetition"])]
+#[case::fivefold(4, &["fivefold_repetition"], &["threefold_repetition"])]
 fn a_repeated_position_is_claimable_before_it_is_automatic(
     #[case] shuffles: usize,
     #[case] automatic: &[&str],
@@ -832,7 +817,7 @@ fn a_stuck_pinned_unit_names_its_pinner_and_the_ray() {
 fn a_claimable_draw_carries_the_evidence_for_the_claim() {
     let threefold = game_of(&[SHUFFLE; 2].join(" ")).draw_status();
     match &threefold.claimable[0] {
-        ClaimableDraw::Threefold(repetition) => {
+        ClaimableDraw::ThreefoldRepetition(repetition) => {
             assert_eq!(repetition.count, 3);
             assert_eq!(repetition.plies, [0, 4, 8]);
         }
@@ -849,7 +834,7 @@ fn a_claimable_draw_carries_the_evidence_for_the_claim() {
 // -------------------------------------------------------------- claims after
 
 #[rstest]
-#[case::a_third_occurrence("Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1", "Ng8", &["threefold"])]
+#[case::a_third_occurrence("Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1", "Ng8", &["threefold_repetition"])]
 #[case::anything_else("Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1", "e5", &[])]
 #[case::a_second_occurrence("Nf3 Nf6 Ng1", "Ng8", &[])]
 fn a_claim_after_a_move_is_what_that_move_would_earn(
@@ -922,9 +907,9 @@ fn a_move_of_another_position_claims_nothing() {
 #[case::draw_status_two_draws(game_from(BISHOP_STALEMATE, "").draw_status().describe())]
 #[case::automatic_stalemate(AutomaticDraw::Stalemate(stalemate_detail(&game_from(SMOTHERED_STALEMATE, "").draw_status())).describe())]
 #[case::automatic_material(AutomaticDraw::InsufficientMaterial(MaterialConfig::KvK).describe())]
-#[case::automatic_fivefold(AutomaticDraw::Fivefold(game_of(SHUFFLE).repetition_status()).describe())]
+#[case::automatic_fivefold(AutomaticDraw::FivefoldRepetition(game_of(SHUFFLE).repetition_status()).describe())]
 #[case::automatic_clock(AutomaticDraw::SeventyFiveMoves(game_from(CLOCK_AT_149, "").fifty_move_status()).describe())]
-#[case::claimable_threefold(ClaimableDraw::Threefold(game_of(SHUFFLE).repetition_status()).describe())]
+#[case::claimable_threefold(ClaimableDraw::ThreefoldRepetition(game_of(SHUFFLE).repetition_status()).describe())]
 #[case::claimable_fifty(ClaimableDraw::FiftyMoves(game_from(CLOCK_AT_99, "").fifty_move_status()).describe())]
 #[case::material_k_v_k(MaterialConfig::KvK.describe().to_string())]
 #[case::material_kn_v_k(MaterialConfig::KNvK.describe().to_string())]
@@ -964,12 +949,22 @@ fn a_castling_spells_out_every_reason_it_is_not_allowed() {
     );
 }
 
+/// The capture says it may not take; what forbids it says so itself.
 #[test]
-fn an_en_passant_capture_says_what_forbids_it() {
+fn an_en_passant_capture_says_only_that_it_may_not_take() {
+    let capture = ep_capture(EP_PINNED, "e5");
     assert_eq!(
-        ep_capture(EP_PINNED, "e5").describe(),
-        "The pawn on e5 may not take en passant. The pawn is pinned against its own king by the \
-         unit on b2, and the capture would step off that line."
+        capture.describe(),
+        "The pawn on e5 may not take en passant."
+    );
+    assert_eq!(
+        capture
+            .forbidden_by
+            .as_ref()
+            .expect("a pinned pawn is forbidden")
+            .describe(),
+        "The pawn is pinned against its own king by the unit on b2, and the capture would step \
+         off that line."
     );
 }
 

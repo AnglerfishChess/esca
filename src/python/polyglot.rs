@@ -159,7 +159,11 @@ impl PyEntry {
     fn __repr__(&self) -> String {
         format!(
             "<PolyglotEntry {:016x} {} weight {}>",
-            self.inner.key, self.inner.mv, self.inner.weight
+            self.inner.key,
+            self.inner
+                .mv
+                .uci(crate::variant::CastlingOutput::KingToRook),
+            self.inner.weight
         )
     }
 }

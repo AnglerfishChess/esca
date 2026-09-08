@@ -11,8 +11,8 @@ fn a_pair_is_read_by_name_by_colour_and_by_index() {
     let pair = ByColour::new(3, 5);
     assert_eq!(pair.white, 3);
     assert_eq!(pair.black, 5);
-    assert_eq!(pair.of(Colour::White), 3);
-    assert_eq!(pair.of(Colour::Black), 5);
+    assert_eq!(*pair.of(Colour::White), 3);
+    assert_eq!(*pair.of(Colour::Black), 5);
     assert_eq!(pair[Colour::Black], 5);
 }
 
@@ -80,7 +80,7 @@ fn a_group_serialises_as_the_python_to_dict_writes_it() {
 #[test]
 fn every_group_serialises_under_its_own_name() {
     let facts = facts_of("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
-    let json = serde_json::to_value(&facts).expect("the facts serialise");
+    let json = serde_json::to_value(facts).expect("the facts serialise");
     for group in esca::catalogue() {
         let block = &json[group.name];
         assert!(block.is_object(), "{} is not an object", group.name);

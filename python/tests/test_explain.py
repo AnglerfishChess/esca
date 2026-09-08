@@ -6,9 +6,15 @@ definitions in `docs/esca-api.md` §12. The cases mirror `tests/explain.rs`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
 import esca
 import pytest
 from esca import explain
+
+if TYPE_CHECKING:
+    from esca._esca import ColourName, Square, VariantName, Wing
 
 #: Both sides may castle either way and the back ranks are otherwise bare.
 CLEAR_BACK_RANK = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
@@ -163,7 +169,7 @@ def covers(pairs: list[tuple[str, str]]) -> list[tuple[str, set[str]]]:
     return [(square, set(by.split())) for square, by in pairs]
 
 
-def named(items: list[tuple[str, esca.SquareSet]]) -> list[tuple[str, set[str]]]:
+def named(items: Sequence[tuple[str, esca.SquareSet]]) -> list[tuple[str, set[str]]]:
     """A list of square-and-set pairs, its sets as sets of square names."""
     return [(square, set(square_set)) for square, square_set in items]
 
@@ -249,7 +255,9 @@ def stuck_kinds(detail: explain.StalemateDetail) -> list[tuple[str, str]]:
         "nine_sixty_array",
     ],
 )
-def test_a_castling_is_allowed_when_nothing_stands_in_its_way(fen: str, colour: str, wing: str, allowed: bool) -> None:
+def test_a_castling_is_allowed_when_nothing_stands_in_its_way(
+    fen: str, colour: ColourName, wing: Wing, allowed: bool
+) -> None:
     assert position(fen).castling(colour, wing).allowed is allowed
 
 
@@ -280,7 +288,9 @@ def test_a_castling_is_allowed_when_nothing_stands_in_its_way(fen: str, colour: 
         "nine_sixty_array_long",
     ],
 )
-def test_a_castling_names_the_units_standing_on_its_path(fen: str, colour: str, wing: str, blocked: str) -> None:
+def test_a_castling_names_the_units_standing_on_its_path(
+    fen: str, colour: ColourName, wing: Wing, blocked: str
+) -> None:
     assert set(position(fen).castling(colour, wing).path_blocked) == set(blocked.split())
 
 
@@ -304,7 +314,7 @@ def test_a_castling_names_the_units_standing_on_its_path(fen: str, colour: str, 
     ],
 )
 def test_a_castling_names_every_covered_square_the_king_would_cross(
-    fen: str, colour: str, wing: str, attacked: list[tuple[str, str]]
+    fen: str, colour: ColourName, wing: Wing, attacked: list[tuple[str, str]]
 ) -> None:
     assert named(position(fen).castling(colour, wing).path_attacked) == covers(attacked)
 
@@ -327,7 +337,7 @@ def test_a_castling_names_every_covered_square_the_king_would_cross(
     ],
 )
 def test_a_castling_names_the_right_the_rook_and_the_check(
-    fen: str, colour: str, wing: str, right: bool, rook_present: bool, check_by: str
+    fen: str, colour: ColourName, wing: Wing, right: bool, rook_present: bool, check_by: str
 ) -> None:
     castling = position(fen).castling(colour, wing)
     assert castling.right is right
@@ -371,7 +381,7 @@ def test_a_castling_reports_every_reason_that_applies() -> None:
         "nine_sixty_array",
     ],
 )
-def test_allowed_is_what_the_move_generator_says_for_the_side_to_move(variant: str, fen: str) -> None:
+def test_allowed_is_what_the_move_generator_says_for_the_side_to_move(variant: VariantName, fen: str) -> None:
     game = esca.Game.from_fen(fen, variant=esca.Variant.named(variant))
     colour = game.position.side_to_move
     for wing in ("short", "long"):
@@ -503,7 +513,7 @@ def test_checkers_are_the_units_giving_check_to_the_side_to_move(fen: str, check
     ids=["white_on_e5", "black_on_e5", "white_on_d4", "black_on_d4", "an_empty_square"],
 )
 def test_attackers_are_the_units_of_a_colour_that_bear_on_a_square(
-    fen: str, square: str, colour: str, attackers: str
+    fen: str, square: Square, colour: ColourName, attackers: str
 ) -> None:
     assert set(position(fen).attackers(square, colour)) == set(attackers.split())
 
@@ -529,7 +539,9 @@ def test_attackers_are_the_units_of_a_colour_that_bear_on_a_square(
         "itself",
     ],
 )
-def test_between_is_the_squares_two_squares_share_a_line_through(origin: str, destination: str, expected: str) -> None:
+def test_between_is_the_squares_two_squares_share_a_line_through(
+    origin: Square, destination: Square, expected: str
+) -> None:
     assert set(position(CLEAR_BACK_RANK).between(origin, destination)) == set(expected.split())
 
 
@@ -542,7 +554,9 @@ def test_between_is_the_squares_two_squares_share_a_line_through(origin: str, de
     ],
     ids=["two_pins", "nothing_pinned", "a_bare_board"],
 )
-def test_a_pin_names_the_unit_the_pinner_and_the_king_behind_it(fen: str, colour: str, expected: list[str]) -> None:
+def test_a_pin_names_the_unit_the_pinner_and_the_king_behind_it(
+    fen: str, colour: ColourName, expected: list[str]
+) -> None:
     pins = [f"{pin.pinned} {pin.pinner} {pin.king}" for pin in position(fen).pins(colour)]
     assert pins == expected
 
@@ -569,7 +583,7 @@ def test_a_pin_carries_the_ray_the_pinned_unit_may_not_leave() -> None:
     ],
 )
 def test_a_skewer_names_the_attacker_the_front_unit_and_what_stands_behind(
-    fen: str, colour: str, expected: list[str]
+    fen: str, colour: ColourName, expected: list[str]
 ) -> None:
     skewers = [f"{skewer.attacker} {skewer.front} {skewer.behind}" for skewer in position(fen).skewers(colour)]
     assert skewers == expected
@@ -748,8 +762,8 @@ def test_a_draw_status_lists_every_reason_that_applies(
 @pytest.mark.parametrize(
     ("shuffles", "automatic", "claimable"),
     [
-        (2, [], ["threefold"]),
-        (4, ["fivefold"], ["threefold"]),
+        (2, [], ["threefold_repetition"]),
+        (4, ["fivefold_repetition"], ["threefold_repetition"]),
     ],
     ids=["threefold", "fivefold"],
 )
@@ -824,7 +838,7 @@ def test_a_stuck_pinned_unit_names_its_pinner_and_the_ray() -> None:
 def test_a_claimable_draw_carries_the_evidence_for_the_claim() -> None:
     """A claim carries the count or the clock that earns it."""
     threefold = game_of(" ".join([SHUFFLE] * 2)).draw_status().claimable[0]
-    assert threefold.kind == "threefold"
+    assert threefold.kind == "threefold_repetition"
     assert threefold.repetition is not None
     assert threefold.repetition.count == 3
     assert threefold.repetition.plies == [0, 4, 8]
@@ -841,7 +855,7 @@ def test_a_claimable_draw_carries_the_evidence_for_the_claim() -> None:
 @pytest.mark.parametrize(
     ("moves", "next_move", "claims"),
     [
-        ("Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1", "Ng8", ["threefold"]),
+        ("Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1", "Ng8", ["threefold_repetition"]),
         ("Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1", "e5", []),
         ("Nf3 Nf6 Ng1", "Ng8", []),
     ],
@@ -944,10 +958,14 @@ def test_a_castling_spells_out_every_reason_it_is_not_allowed() -> None:
     )
 
 
-def test_an_en_passant_capture_says_what_forbids_it() -> None:
-    assert ep_capture(EP_PINNED, "e5").describe() == (
-        "The pawn on e5 may not take en passant. The pawn is pinned against its own king by the "
-        "unit on b2, and the capture would step off that line."
+def test_an_en_passant_capture_says_only_that_it_may_not_take() -> None:
+    """The capture says it may not take; what forbids it says so itself."""
+    capture = ep_capture(EP_PINNED, "e5")
+    assert capture.describe() == "The pawn on e5 may not take en passant."
+    obstacle = capture.forbidden_by
+    assert obstacle is not None
+    assert obstacle.describe() == (
+        "The pawn is pinned against its own king by the unit on b2, and the capture would step off that line."
     )
 
 

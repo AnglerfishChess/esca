@@ -118,11 +118,12 @@ fn king_destination(mv: Move) -> Square {
 }
 
 pub(crate) fn move_to_uci(mv: Move, style: CastlingOutput, two_squares_allowed: bool) -> String {
-    if mv.is_castling() && style == CastlingOutput::KingTwoSquares && two_squares_allowed {
-        format!("{}{}", mv.from(), king_destination(mv))
+    let style = if two_squares_allowed {
+        style
     } else {
-        mv.to_string()
-    }
+        CastlingOutput::KingToRook
+    };
+    mv.uci(style)
 }
 
 pub(crate) fn move_from_uci(

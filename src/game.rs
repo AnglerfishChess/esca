@@ -186,15 +186,21 @@ impl Game {
     /// The facts of the current position, reusing `scratch`.
     pub fn facts_in(&self, scratch: &mut Scratch) -> Facts {
         let mut facts = self.position().facts_in(self.variant(), scratch);
-        facts.history = crate::facts::from_history(&self.positions, &self.moves);
-        facts.history.repetition_seen = self.repetitions() >= 2;
-        facts.history.repetition_available = self.reaches_history(self.position());
+        facts.history = self.history_facts();
         facts
     }
 
-    /// Every legal move in the current position, annotated.
+    /// Every legal move in the current position, with what it does.
     pub fn annotated_moves(&self) -> MoveList<AnnotatedMove> {
-        self.facts().moves
+        self.position().annotated_moves(self.variant())
+    }
+
+    /// What the plies before the current position say.
+    fn history_facts(&self) -> crate::facts::HistoryFacts {
+        let mut history = crate::facts::from_history(&self.positions, &self.moves);
+        history.repetition_seen = self.repetitions() >= 2;
+        history.repetition_available = self.reaches_history(self.position());
+        history
     }
 
     /// Whether some legal move from `from` reaches a position this game has

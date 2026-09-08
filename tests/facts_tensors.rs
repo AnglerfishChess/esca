@@ -36,7 +36,7 @@ fn the_layout_names_every_fact_of_every_group() {
     let entries: Vec<String> = layout()
         .entries
         .iter()
-        .map(|entry| entry.name.clone())
+        .map(|entry| entry.name.to_string())
         .collect();
     assert_eq!(entries, named);
 }
@@ -105,7 +105,7 @@ fn a_square_set_is_one_flag_per_square_a1_first() {
     assert!(black.is_empty());
     assert_eq!(
         entry.order,
-        "axis 0: white, black; axis 1: the 64 squares, a1 first, then b1 through h1, then a2"
+        "axis 1: white, black; axis 2: the 64 squares, a1 first, then b1 through h1, then a2"
     );
 }
 
@@ -154,7 +154,7 @@ fn nothing_is_a_float_but_the_one_fact_that_is_fractional() {
         .entries
         .iter()
         .filter(|entry| entry.dtype == Dtype::Float32)
-        .map(|entry| entry.name.as_str())
+        .map(|entry| entry.name)
         .collect();
     assert_eq!(floats, vec!["king.tropism"]);
 }

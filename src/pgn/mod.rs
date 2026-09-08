@@ -18,7 +18,6 @@ use core::fmt;
 use std::sync::Arc;
 
 use crate::error::{FenError, PositionError};
-use crate::game::Game as PlayedGame;
 use crate::moves::Move;
 use crate::position::Position;
 use crate::types::Colour;
@@ -239,9 +238,9 @@ impl Game {
     }
 
     /// The mainline as a played game.
-    pub fn mainline_game(&self) -> Result<PlayedGame, PgnError> {
+    pub fn mainline_game(&self) -> Result<crate::Game, PgnError> {
         let (variant, start) = self.setup()?;
-        let mut game = PlayedGame::from_position(variant, start)
+        let mut game = crate::Game::from_position(variant, start)
             .map_err(|e| PgnError::detached(ErrorKind::BadSetup(e)))?;
         for node in &self.moves {
             game.play(node.mv)
@@ -252,7 +251,7 @@ impl Game {
 
     /// The PGN of a played game: the seven-tag roster, the mainline, and the
     /// `Variant`, `SetUp` and `FEN` tags the start needs.
-    pub fn from_game(game: &PlayedGame) -> Game {
+    pub fn from_game(game: &crate::Game) -> Game {
         let variant = game.variant();
         let result = match game.outcome() {
             Some(Outcome::Checkmate {
@@ -320,7 +319,7 @@ impl fmt::Display for Game {
     }
 }
 
-impl PlayedGame {
+impl crate::Game {
     /// This game as PGN, with a seven-tag roster of placeholders.
     #[cfg_attr(docsrs, doc(cfg(feature = "pgn")))]
     pub fn to_pgn(&self) -> Game {

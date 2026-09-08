@@ -10,7 +10,7 @@ Where a value is a run of positions, `field_notes` carries that field's
 catalogue meaning once, since the meaning is what says which end is which.
 """
 
-from typing import Any
+from typing import Any, cast
 
 import esca
 
@@ -41,7 +41,7 @@ RUN_NOTES: dict[str, str] = {
 
 def group_facts(facts: esca.Facts, name: str) -> dict[str, Any]:
     """Every fact of one group, by name, as plain data."""
-    return facts.group(name).to_dict()
+    return cast("dict[str, Any]", facts.group(name).to_dict())
 
 
 def unknown_groups(names: list[str]) -> list[str]:

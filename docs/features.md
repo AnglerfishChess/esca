@@ -65,335 +65,342 @@ bits: a `SquareSet` is one `uint64` bitboard with a1 as bit 0, a `FileSet` one
 `uint8` mask with file a as bit 0, and every other `bool` fact eight values to
 a byte.
 
-Every group is also a Python attribute of `Facts`, listed by `Facts.groups()`
-and read by `facts.group(name)`; `to_dict()` walks one group in the order
-below. This file is generated from the group definitions themselves:
-`cargo run --example catalogue`.
+The `array` column is the name that array carries in a batch and in a
+safetensors file: the group and the field, joined by a dot. `esca.tensors`
+lists them at runtime as `names()`, and Rust's
+`facts::tensors::layout().entries()` does the same.
+
+Every group is an attribute of `Facts` in both languages, listed by
+`Facts::groups()` and read by `facts.group(name)`; `to_dict()` walks one group
+in the order below. This file is generated from the group definitions
+themselves: `cargo run --example catalogue`.
 
 ## `placement`
 
 Where the units stand.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `units` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Every unit of the side. |
-| `pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns. |
-| `knights` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's knights. |
-| `bishops` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's bishops. |
-| `rooks` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's rooks. |
-| `queens` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's queens. |
-| `kings` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's king. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `units` | `placement.units` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Every unit of the side. |
+| `pawns` | `placement.pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns. |
+| `knights` | `placement.knights` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's knights. |
+| `bishops` | `placement.bishops` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's bishops. |
+| `rooks` | `placement.rooks` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's rooks. |
+| `queens` | `placement.queens` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's queens. |
+| `kings` | `placement.kings` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's king. |
 
 ## `state`
 
 Check, castling rights and the en-passant square.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `in_check` | `bool` | `bool` | `()` | The side to move stands in check. |
-| `double_check` | `bool` | `bool` | `()` | Two or more units give check to the side to move. |
-| `can_castle_short` | `ByColour<bool>` | `bool` | `(2,)` | The side may still castle short. |
-| `can_castle_long` | `ByColour<bool>` | `bool` | `(2,)` | The side may still castle long. |
-| `en_passant` | `Option<File>` | `int16` | `()` | The file the position names as the en-passant target, if any. |
-| `en_passant_capture_legal` | `bool` | `bool` | `()` | Some legal move captures en passant. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `in_check` | `state.in_check` | `bool` | `bool` | `()` | The side to move stands in check. |
+| `double_check` | `state.double_check` | `bool` | `bool` | `()` | Two or more units give check to the side to move. |
+| `can_castle_short` | `state.can_castle_short` | `ByColour<bool>` | `bool` | `(2,)` | The side may still castle short. |
+| `can_castle_long` | `state.can_castle_long` | `ByColour<bool>` | `bool` | `(2,)` | The side may still castle long. |
+| `en_passant` | `state.en_passant` | `Option<File>` | `int16` | `()` | The file the position names as the en-passant target, if any. |
+| `en_passant_capture_legal` | `state.en_passant_capture_legal` | `bool` | `bool` | `()` | Some legal move captures en passant. |
 
 ## `history`
 
 What the plies before this position say: the clock, repetition, and how forcing the recent play was. Everything but the halfmove clock, which the position itself carries, is zero unless `known` is true.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `known` | `bool` | `bool` | `()` | A position history was supplied. |
-| `halfmove_clock` | `u32` | `uint32` | `()` | Plies since the last capture or pawn move. |
-| `halfmove_known` | `bool` | `bool` | `()` | The position carried a halfmove clock. |
-| `repetition_seen` | `bool` | `bool` | `()` | This position occurred before in the supplied history. |
-| `repetition_available` | `bool` | `bool` | `()` | Some legal move reaches a position of the supplied history. |
-| `captures_in_last_8` | `u8` | `uint8` | `()` | Captures among the last eight plies of the supplied history. |
-| `checks_in_last_8` | `u8` | `uint8` | `()` | Plies among the last eight that gave check. |
-| `quiet_plies` | `u32` | `uint32` | `()` | Plies since the last one that captured or gave check; the whole history when it holds none. |
-| `material_trend` | `i32` | `int32` | `()` | The material balance now, less the balance eight plies ago, White less Black. |
-| `last_move_victim` | `Option<Role>` | `int16` | `()` | The role the last move captured, the pawn for an en-passant capture. |
-| `last_move_mover` | `Option<Role>` | `int16` | `()` | The role that made the last move; for castling, the king. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `known` | `history.known` | `bool` | `bool` | `()` | A position history was supplied. |
+| `halfmove_clock` | `history.halfmove_clock` | `u32` | `uint32` | `()` | Plies since the last capture or pawn move. |
+| `halfmove_known` | `history.halfmove_known` | `bool` | `bool` | `()` | The position carried a halfmove clock. |
+| `repetition_seen` | `history.repetition_seen` | `bool` | `bool` | `()` | This position occurred before in the supplied history. |
+| `repetition_available` | `history.repetition_available` | `bool` | `bool` | `()` | Some legal move reaches a position of the supplied history. |
+| `captures_in_last_8` | `history.captures_in_last_8` | `u8` | `uint8` | `()` | Captures among the last eight plies of the supplied history. |
+| `checks_in_last_8` | `history.checks_in_last_8` | `u8` | `uint8` | `()` | Plies among the last eight that gave check. |
+| `quiet_plies` | `history.quiet_plies` | `u32` | `uint32` | `()` | Plies since the last one that captured or gave check; the whole history when it holds none. |
+| `material_trend` | `history.material_trend` | `i32` | `int32` | `()` | The material balance now, less the balance eight plies ago, White less Black. |
+| `last_move_victim` | `history.last_move_victim` | `Option<Role>` | `int16` | `()` | The role the last move captured, the pawn for an en-passant capture. |
+| `last_move_mover` | `history.last_move_mover` | `Option<Role>` | `int16` | `()` | The role that made the last move; for castling, the king. |
 
 ## `material`
 
 Material and phase.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `pawns` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns. |
-| `knights` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights. |
-| `bishops` | `ByColour<u8>` | `uint8` | `(2,)` | The side's bishops. |
-| `rooks` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks. |
-| `queens` | `ByColour<u8>` | `uint8` | `(2,)` | The side's queens. |
-| `non_pawn_value` | `ByColour<i32>` | `int32` | `(2,)` | The value of the side's knights, bishops, rooks and queens. |
-| `value` | `ByColour<i32>` | `int32` | `(2,)` | The value of every unit of the side but the king. |
-| `phase_points` | `u8` | `uint8` | `()` | `4·Q + 2·R + B + N` over both sides: 24 at the full opening array, 0 with nothing but kings and pawns left. |
-| `both_queens` | `bool` | `bool` | `()` | Both sides have at least one queen. |
-| `pawns_only` | `bool` | `bool` | `()` | Neither side has a unit other than kings and pawns. |
-| `insufficient_material` | `ByColour<bool>` | `bool` | `(2,)` | The side's own material could never deliver mate. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `pawns` | `material.pawns` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns. |
+| `knights` | `material.knights` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights. |
+| `bishops` | `material.bishops` | `ByColour<u8>` | `uint8` | `(2,)` | The side's bishops. |
+| `rooks` | `material.rooks` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks. |
+| `queens` | `material.queens` | `ByColour<u8>` | `uint8` | `(2,)` | The side's queens. |
+| `non_pawn_value` | `material.non_pawn_value` | `ByColour<i32>` | `int32` | `(2,)` | The value of the side's knights, bishops, rooks and queens. |
+| `value` | `material.value` | `ByColour<i32>` | `int32` | `(2,)` | The value of every unit of the side but the king. |
+| `phase_points` | `material.phase_points` | `u8` | `uint8` | `()` | `4·Q + 2·R + B + N` over both sides: 24 at the full opening array, 0 with nothing but kings and pawns left. |
+| `both_queens` | `material.both_queens` | `bool` | `bool` | `()` | Both sides have at least one queen. |
+| `pawns_only` | `material.pawns_only` | `bool` | `bool` | `()` | Neither side has a unit other than kings and pawns. |
+| `insufficient_material` | `material.insufficient_material` | `ByColour<bool>` | `bool` | `(2,)` | The side's own material could never deliver mate. |
 
 ## `pawns`
 
 Pawn structure.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns. |
-| `passed` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns with no enemy pawn ahead on their own or an adjacent file. |
-| `candidates` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's candidate passers: pawns with no enemy pawn ahead on their own file, backed by at least as many friendly pawns behind on the adjacent files as there are enemy pawns ahead on them. |
-| `doubled` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns sharing a file with another pawn of their own colour. |
-| `isolated` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns with no friendly pawn on either adjacent file. |
-| `backward` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns that cannot advance without being taken and cannot be defended by a pawn. |
-| `defended` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns defended by a pawn of their own colour. |
-| `count_by_file` | `ByColour<PerFile<u8>>` | `uint8` | `(2, 8)` | The side's pawns per file, file a first. |
-| `count_by_rank` | `ByColour<PerRank<u8>>` | `uint8` | `(2, 8)` | The side's pawns per rank counted from its own back rank, rank 1 first. |
-| `open_files` | `FileSet` | `bool` | `(8,)` | Files carrying no pawn of either colour. |
-| `semi_open_files` | `ByColour<FileSet>` | `bool` | `(2, 8)` | Files carrying no pawn of the side and at least one of the other. |
-| `islands` | `ByColour<u8>` | `uint8` | `(2,)` | The side's maximal runs of adjacent files carrying a pawn. |
-| `levers` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns that can capture an enemy pawn. |
-| `rams` | `u8` | `uint8` | `()` | Pawn pairs blocking each other head on. |
-| `passer_lead_rank` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The rank, counted from the side's own back rank, of its most advanced passer. |
-| `passer_protected` | `ByColour<u8>` | `uint8` | `(2,)` | The side's passers defended by a friendly pawn. |
-| `passers_connected` | `ByColour<bool>` | `bool` | `(2,)` | The side has two passers on adjacent files. |
-| `passer_unstoppable` | `ByColour<bool>` | `bool` | `(2,)` | The side has a passer the enemy king cannot catch. |
-| `chain_max_length` | `ByColour<u8>` | `uint8` | `(2,)` | The side's longest run of pawns each defending the next. |
-| `chain_base_attacked` | `ByColour<bool>` | `bool` | `(2,)` | An enemy unit attacks the base of one of the side's chains of two or more. |
-| `queenside_majority` | `ByColour<bool>` | `bool` | `(2,)` | The side has more pawns than the enemy on files a to d. |
-| `kingside_majority` | `ByColour<bool>` | `bool` | `(2,)` | The side has more pawns than the enemy on files e to h. |
-| `holes` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Squares on the side's ranks 3 to 6 that no pawn of the side can ever attack. |
-| `holes_occupied` | `ByColour<u8>` | `uint8` | `(2,)` | Enemy knights and bishops standing on those squares. |
-| `fixed_pawns` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns whose stop square holds a unit of either colour. |
-| `blocked_passers` | `ByColour<u8>` | `uint8` | `(2,)` | The side's passers whose stop square holds an enemy unit. |
-| `passer_distance` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The pushes the side's lead passer still needs. |
-| `passer_own_king_distance` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The distance from the side's own king to its lead passer's promotion square. |
-| `passer_enemy_king_distance` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The distance from the enemy king to that same square. |
-| `passer_in_square` | `ByColour<bool>` | `bool` | `(2,)` | The enemy king stands in the square of the side's lead passer. |
-| `passer_free_path` | `ByColour<u8>` | `uint8` | `(2,)` | The side's passers whose whole front span is empty. |
-| `half_open_at_enemy_king` | `ByColour<u8>` | `uint8` | `(2,)` | Files semi-open for the side among the enemy king's three shield files. |
-| `backward_on_semi_open` | `ByColour<u8>` | `uint8` | `(2,)` | The side's backward pawns on a file semi-open for the enemy. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `pawns` | `pawns.pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns. |
+| `passed` | `pawns.passed` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns with no enemy pawn ahead on their own or an adjacent file. |
+| `candidates` | `pawns.candidates` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's candidate passers: pawns with no enemy pawn ahead on their own file, backed by at least as many friendly pawns behind on the adjacent files as there are enemy pawns ahead on them. |
+| `doubled` | `pawns.doubled` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns sharing a file with another pawn of their own colour. |
+| `isolated` | `pawns.isolated` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns with no friendly pawn on either adjacent file. |
+| `backward` | `pawns.backward` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns that cannot advance without being taken and cannot be defended by a pawn. |
+| `defended` | `pawns.defended` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's pawns defended by a pawn of their own colour. |
+| `count_by_file` | `pawns.count_by_file` | `ByColour<PerFile<u8>>` | `uint8` | `(2, 8)` | The side's pawns per file, file a first. |
+| `count_by_rank` | `pawns.count_by_rank` | `ByColour<PerRank<u8>>` | `uint8` | `(2, 8)` | The side's pawns per rank counted from its own back rank, rank 1 first. |
+| `open_files` | `pawns.open_files` | `FileSet` | `bool` | `(8,)` | Files carrying no pawn of either colour. |
+| `semi_open_files` | `pawns.semi_open_files` | `ByColour<FileSet>` | `bool` | `(2, 8)` | Files carrying no pawn of the side and at least one of the other. |
+| `islands` | `pawns.islands` | `ByColour<u8>` | `uint8` | `(2,)` | The side's maximal runs of adjacent files carrying a pawn. |
+| `levers` | `pawns.levers` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns that can capture an enemy pawn. |
+| `rams` | `pawns.rams` | `u8` | `uint8` | `()` | Pawn pairs blocking each other head on. |
+| `passer_lead_rank` | `pawns.passer_lead_rank` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The rank, counted from the side's own back rank, of its most advanced passer. |
+| `passer_protected` | `pawns.passer_protected` | `ByColour<u8>` | `uint8` | `(2,)` | The side's passers defended by a friendly pawn. |
+| `passers_connected` | `pawns.passers_connected` | `ByColour<bool>` | `bool` | `(2,)` | The side has two passers on adjacent files. |
+| `passer_unstoppable` | `pawns.passer_unstoppable` | `ByColour<bool>` | `bool` | `(2,)` | The side has a passer the enemy king cannot catch. |
+| `chain_max_length` | `pawns.chain_max_length` | `ByColour<u8>` | `uint8` | `(2,)` | The side's longest run of pawns each defending the next. |
+| `chain_base_attacked` | `pawns.chain_base_attacked` | `ByColour<bool>` | `bool` | `(2,)` | An enemy unit attacks the base of one of the side's chains of two or more. |
+| `queenside_majority` | `pawns.queenside_majority` | `ByColour<bool>` | `bool` | `(2,)` | The side has more pawns than the enemy on files a to d. |
+| `kingside_majority` | `pawns.kingside_majority` | `ByColour<bool>` | `bool` | `(2,)` | The side has more pawns than the enemy on files e to h. |
+| `holes` | `pawns.holes` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Squares on the side's ranks 3 to 6 that no pawn of the side can ever attack. |
+| `holes_occupied` | `pawns.holes_occupied` | `ByColour<u8>` | `uint8` | `(2,)` | Enemy knights and bishops standing on those squares. |
+| `fixed_pawns` | `pawns.fixed_pawns` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns whose stop square holds a unit of either colour. |
+| `blocked_passers` | `pawns.blocked_passers` | `ByColour<u8>` | `uint8` | `(2,)` | The side's passers whose stop square holds an enemy unit. |
+| `passer_distance` | `pawns.passer_distance` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The pushes the side's lead passer still needs. |
+| `passer_own_king_distance` | `pawns.passer_own_king_distance` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The distance from the side's own king to its lead passer's promotion square. |
+| `passer_enemy_king_distance` | `pawns.passer_enemy_king_distance` | `ByColour<Option<u8>>` | `int16` | `(2,)` | The distance from the enemy king to that same square. |
+| `passer_in_square` | `pawns.passer_in_square` | `ByColour<bool>` | `bool` | `(2,)` | The enemy king stands in the square of the side's lead passer. |
+| `passer_free_path` | `pawns.passer_free_path` | `ByColour<u8>` | `uint8` | `(2,)` | The side's passers whose whole front span is empty. |
+| `half_open_at_enemy_king` | `pawns.half_open_at_enemy_king` | `ByColour<u8>` | `uint8` | `(2,)` | Files semi-open for the side among the enemy king's three shield files. |
+| `backward_on_semi_open` | `pawns.backward_on_semi_open` | `ByColour<u8>` | `uint8` | `(2,)` | The side's backward pawns on a file semi-open for the enemy. |
 
 ## `pieces`
 
 Bishops, rooks, knights and queens.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `bishop_pair` | `ByColour<bool>` | `bool` | `(2,)` | The side holds bishops on both square colours. |
-| `knight_pair` | `ByColour<bool>` | `bool` | `(2,)` | The side holds two or more knights. |
-| `bishops_light` | `ByColour<u8>` | `uint8` | `(2,)` | The side's bishops on light squares. |
-| `bishops_dark` | `ByColour<u8>` | `uint8` | `(2,)` | The side's bishops on dark squares. |
-| `opposite_coloured_bishops` | `bool` | `bool` | `()` | Exactly one bishop each, on different square colours. |
-| `pawns_on_bishop_colour` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns standing on a square colour of one of its own bishops. |
-| `rooks_connected_rank` | `ByColour<bool>` | `bool` | `(2,)` | Two of the side's rooks share a rank with nothing between. |
-| `rooks_connected_file` | `ByColour<bool>` | `bool` | `(2,)` | Two of the side's rooks share a file with nothing between. |
-| `rooks_on_open_file` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks on an open file. |
-| `rooks_on_semi_open_file` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks on a file semi-open for their own side. |
-| `rooks_on_seventh_rank` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks on its seventh rank, counted from its own back rank. |
-| `rook_behind_own_passer` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks behind a passer of their own side. |
-| `rook_behind_enemy_passer` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks behind an enemy passer. |
-| `trapped_rook` | `ByColour<bool>` | `bool` | `(2,)` | The side has a rook shut in by its own king with no file to leave by. |
-| `outposts` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's outpost squares: squares on its ranks 4 to 6 that a friendly pawn defends and no enemy pawn can ever attack. |
-| `minors_on_outpost` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights and bishops standing on one of them. |
-| `outpost_squares_free` | `ByColour<u8>` | `uint8` | `(2,)` | Its unoccupied outpost squares. |
-| `knights_on_rim` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights on file a or h, or on its rank 1 or 8. |
-| `minors_undeveloped` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights and bishops still on their starting squares. |
-| `queen_developed` | `ByColour<bool>` | `bool` | `(2,)` | A queen of the side stands off its starting square. |
-| `fixed_pawns_on_bishop_colour` | `ByColour<u8>` | `uint8` | `(2,)` | The side's fixed pawns standing on a square colour of one of its own bishops. |
-| `rook_on_seventh_with_king_on_eighth` | `ByColour<bool>` | `bool` | `(2,)` | The side has a rook on its seventh rank with the enemy king on its eighth. |
-| `trapped_pieces` | `ByColour<u8>` | `uint8` | `(2,)` | The side's units that are neither pawns nor kings and have no safe destination. |
-| `trapped_value` | `ByColour<u8>` | `uint8` | `(2,)` | The value sum of those. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `bishop_pair` | `pieces.bishop_pair` | `ByColour<bool>` | `bool` | `(2,)` | The side holds bishops on both square colours. |
+| `knight_pair` | `pieces.knight_pair` | `ByColour<bool>` | `bool` | `(2,)` | The side holds two or more knights. |
+| `bishops_light` | `pieces.bishops_light` | `ByColour<u8>` | `uint8` | `(2,)` | The side's bishops on light squares. |
+| `bishops_dark` | `pieces.bishops_dark` | `ByColour<u8>` | `uint8` | `(2,)` | The side's bishops on dark squares. |
+| `opposite_coloured_bishops` | `pieces.opposite_coloured_bishops` | `bool` | `bool` | `()` | Exactly one bishop each, on different square colours. |
+| `pawns_on_bishop_colour` | `pieces.pawns_on_bishop_colour` | `ByColour<u8>` | `uint8` | `(2,)` | The side's pawns standing on a square colour of one of its own bishops. |
+| `rooks_connected_rank` | `pieces.rooks_connected_rank` | `ByColour<bool>` | `bool` | `(2,)` | Two of the side's rooks share a rank with nothing between. |
+| `rooks_connected_file` | `pieces.rooks_connected_file` | `ByColour<bool>` | `bool` | `(2,)` | Two of the side's rooks share a file with nothing between. |
+| `rooks_on_open_file` | `pieces.rooks_on_open_file` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks on an open file. |
+| `rooks_on_semi_open_file` | `pieces.rooks_on_semi_open_file` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks on a file semi-open for their own side. |
+| `rooks_on_seventh_rank` | `pieces.rooks_on_seventh_rank` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks on its seventh rank, counted from its own back rank. |
+| `rook_behind_own_passer` | `pieces.rook_behind_own_passer` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks behind a passer of their own side. |
+| `rook_behind_enemy_passer` | `pieces.rook_behind_enemy_passer` | `ByColour<u8>` | `uint8` | `(2,)` | The side's rooks behind an enemy passer. |
+| `trapped_rook` | `pieces.trapped_rook` | `ByColour<bool>` | `bool` | `(2,)` | The side has a rook shut in by its own king with no file to leave by. |
+| `outposts` | `pieces.outposts` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's outpost squares: squares on its ranks 4 to 6 that a friendly pawn defends and no enemy pawn can ever attack. |
+| `minors_on_outpost` | `pieces.minors_on_outpost` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights and bishops standing on one of them. |
+| `outpost_squares_free` | `pieces.outpost_squares_free` | `ByColour<u8>` | `uint8` | `(2,)` | Its unoccupied outpost squares. |
+| `knights_on_rim` | `pieces.knights_on_rim` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights on file a or h, or on its rank 1 or 8. |
+| `minors_undeveloped` | `pieces.minors_undeveloped` | `ByColour<u8>` | `uint8` | `(2,)` | The side's knights and bishops still on their starting squares. |
+| `queen_developed` | `pieces.queen_developed` | `ByColour<bool>` | `bool` | `(2,)` | A queen of the side stands off its starting square. |
+| `fixed_pawns_on_bishop_colour` | `pieces.fixed_pawns_on_bishop_colour` | `ByColour<u8>` | `uint8` | `(2,)` | The side's fixed pawns standing on a square colour of one of its own bishops. |
+| `rook_on_seventh_with_king_on_eighth` | `pieces.rook_on_seventh_with_king_on_eighth` | `ByColour<bool>` | `bool` | `(2,)` | The side has a rook on its seventh rank with the enemy king on its eighth. |
+| `trapped_pieces` | `pieces.trapped_pieces` | `ByColour<u8>` | `uint8` | `(2,)` | The side's units that are neither pawns nor kings and have no safe destination. |
+| `trapped_value` | `pieces.trapped_value` | `ByColour<u8>` | `uint8` | `(2,)` | The value sum of those. |
 
 ## `king`
 
 King safety and shelter.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `square` | `ByColour<Square>` | `uint8` | `(2,)` | Where the side's king stands. |
-| `on_home_square` | `ByColour<bool>` | `bool` | `(2,)` | It stands on its own starting square. |
-| `castled_queenside` | `ByColour<bool>` | `bool` | `(2,)` | It stands on files a to c. |
-| `castled_kingside` | `ByColour<bool>` | `bool` | `(2,)` | It stands on files f to h. |
-| `shield_files` | `ByColour<[File; 3]>` | `uint8` | `(2, 3)` | The three files the king's shelter is read on, queenside first. |
-| `shield` | `ByColour<[Option<u8>; 3]>` | `int16` | `(2, 3)` | Ranks to the nearest friendly pawn ahead of the king, one per file of the three around the king, queenside first; `shield_files` names them. |
-| `shield_file_open` | `ByColour<[bool; 3]>` | `bool` | `(2, 3)` | Whether each of the three files around the king carries no pawn of either colour, queenside first; `shield_files` names them. |
-| `shield_file_semi_open_for_enemy` | `ByColour<[bool; 3]>` | `bool` | `(2, 3)` | Whether each of those three files is semi-open for the enemy of that king, queenside first; `shield_files` names them. |
-| `storm` | `ByColour<[Option<u8>; 3]>` | `int16` | `(2, 3)` | Ranks to the nearest enemy pawn ahead of the king, one per file of the three around the king, queenside first; `shield_files` names them. |
-| `ring` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares adjacent to the king. |
-| `ring_attackers` | `ByColour<u8>` | `uint8` | `(2,)` | Enemy knights, bishops, rooks and queens attacking that ring. |
-| `ring_attack_weight` | `ByColour<u8>` | `uint8` | `(2,)` | Σ over those attackers of N, B = 1, R = 2, Q = 4. |
-| `ring_defended` | `ByColour<u8>` | `uint8` | `(2,)` | Ring squares the king's own side attacks, the king itself apart. |
-| `ring_holes` | `ByColour<u8>` | `uint8` | `(2,)` | Ring squares the enemy attacks and `ring_defended` does not count. |
-| `escape_squares` | `ByColour<u8>` | `uint8` | `(2,)` | Squares adjacent to the king that are empty or capturable and not attacked. |
-| `back_rank_risk` | `ByColour<bool>` | `bool` | `(2,)` | The king stands on its rank 1 with every forward-adjacent square held by a friendly unit. |
-| `distance` | `u8` | `uint8` | `()` | Chebyshev distance between the kings. |
-| `tropism` | `ByColour<f32>` | `float32` | `(2,)` | Mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king. |
-| `virtual_mobility` | `ByColour<u8>` | `uint8` | `(2,)` | Squares a queen on this king's square would attack. |
-| `ring_defenders` | `ByColour<u8>` | `uint8` | `(2,)` | The king's own knights, bishops, rooks and queens attacking its ring. |
-| `ring_defence_weight` | `ByColour<u8>` | `uint8` | `(2,)` | Σ over those defenders of N, B = 1, R = 2, Q = 4. |
-| `open_rays` | `ByColour<u8>` | `uint8` | `(2,)` | Directions from the king holding at least one square, all of them empty out to the edge. |
-| `luft` | `ByColour<bool>` | `bool` | `(2,)` | The king stands on its rank 1 with a square ahead of it empty and unattacked. |
-| `castled_side` | `ByColour<Option<CastledSide>>` | `int16` | `(2,)` | The side the king's square and its spent castling rights read as. |
-| `opposite_side_castling` | `bool` | `bool` | `()` | The two kings stand on opposite wings. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `square` | `king.square` | `ByColour<Square>` | `uint8` | `(2,)` | Where the side's king stands. |
+| `on_home_square` | `king.on_home_square` | `ByColour<bool>` | `bool` | `(2,)` | It stands on its own starting square. |
+| `castled_queenside` | `king.castled_queenside` | `ByColour<bool>` | `bool` | `(2,)` | It stands on files a to c. |
+| `castled_kingside` | `king.castled_kingside` | `ByColour<bool>` | `bool` | `(2,)` | It stands on files f to h. |
+| `shield_files` | `king.shield_files` | `ByColour<[File; 3]>` | `uint8` | `(2, 3)` | The three files the king's shelter is read on, queenside first. |
+| `shield` | `king.shield` | `ByColour<[Option<u8>; 3]>` | `int16` | `(2, 3)` | Ranks to the nearest friendly pawn ahead of the king, one per file of the three around the king, queenside first; `shield_files` names them. |
+| `shield_file_open` | `king.shield_file_open` | `ByColour<[bool; 3]>` | `bool` | `(2, 3)` | Whether each of the three files around the king carries no pawn of either colour, queenside first; `shield_files` names them. |
+| `shield_file_semi_open_for_enemy` | `king.shield_file_semi_open_for_enemy` | `ByColour<[bool; 3]>` | `bool` | `(2, 3)` | Whether each of those three files is semi-open for the enemy of that king, queenside first; `shield_files` names them. |
+| `storm` | `king.storm` | `ByColour<[Option<u8>; 3]>` | `int16` | `(2, 3)` | Ranks to the nearest enemy pawn ahead of the king, one per file of the three around the king, queenside first; `shield_files` names them. |
+| `ring` | `king.ring` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares adjacent to the king. |
+| `ring_attackers` | `king.ring_attackers` | `ByColour<u8>` | `uint8` | `(2,)` | Enemy knights, bishops, rooks and queens attacking that ring. |
+| `ring_attack_weight` | `king.ring_attack_weight` | `ByColour<u8>` | `uint8` | `(2,)` | Σ over those attackers of N, B = 1, R = 2, Q = 4. |
+| `ring_defended` | `king.ring_defended` | `ByColour<u8>` | `uint8` | `(2,)` | Ring squares the king's own side attacks, the king itself apart. |
+| `ring_holes` | `king.ring_holes` | `ByColour<u8>` | `uint8` | `(2,)` | Ring squares the enemy attacks and `ring_defended` does not count. |
+| `escape_squares` | `king.escape_squares` | `ByColour<u8>` | `uint8` | `(2,)` | Squares adjacent to the king that are empty or capturable and not attacked. |
+| `back_rank_risk` | `king.back_rank_risk` | `ByColour<bool>` | `bool` | `(2,)` | The king stands on its rank 1 with every forward-adjacent square held by a friendly unit. |
+| `distance` | `king.distance` | `u8` | `uint8` | `()` | Chebyshev distance between the kings. |
+| `tropism` | `king.tropism` | `ByColour<f32>` | `float32` | `(2,)` | Mean Chebyshev distance of the enemy's knights, bishops, rooks and queens to this king. |
+| `virtual_mobility` | `king.virtual_mobility` | `ByColour<u8>` | `uint8` | `(2,)` | Squares a queen on this king's square would attack. |
+| `ring_defenders` | `king.ring_defenders` | `ByColour<u8>` | `uint8` | `(2,)` | The king's own knights, bishops, rooks and queens attacking its ring. |
+| `ring_defence_weight` | `king.ring_defence_weight` | `ByColour<u8>` | `uint8` | `(2,)` | Σ over those defenders of N, B = 1, R = 2, Q = 4. |
+| `open_rays` | `king.open_rays` | `ByColour<u8>` | `uint8` | `(2,)` | Directions from the king holding at least one square, all of them empty out to the edge. |
+| `luft` | `king.luft` | `ByColour<bool>` | `bool` | `(2,)` | The king stands on its rank 1 with a square ahead of it empty and unattacked. |
+| `castled_side` | `king.castled_side` | `ByColour<Option<CastledSide>>` | `int16` | `(2,)` | The side the king's square and its spent castling rights read as. |
+| `opposite_side_castling` | `king.opposite_side_castling` | `bool` | `bool` | `()` | The two kings stand on opposite wings. |
 
 ## `mobility`
 
 Mobility and space.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `pawns` | `ByColour<u16>` | `uint16` | `(2,)` | Squares the side's pawns attack that its own units do not hold. |
-| `knights` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its knights. |
-| `bishops` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its bishops. |
-| `rooks` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its rooks. |
-| `queens` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its queens. |
-| `safe_pawns` | `ByColour<u16>` | `uint16` | `(2,)` | Of the pawn squares, those no enemy pawn attacks. |
-| `safe_knights` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its knights. |
-| `safe_bishops` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its bishops. |
-| `safe_rooks` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its rooks. |
-| `safe_queens` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its queens. |
-| `total` | `ByColour<u16>` | `uint16` | `(2,)` | The five counts added up. |
-| `space` | `ByColour<u16>` | `uint16` | `(2,)` | Squares the side attacks in the enemy's half. |
-| `centre_control` | `ByColour<u8>` | `uint8` | `(2,)` | The side's attacks on d4, e4, d5 and e5. |
-| `extended_centre_control` | `ByColour<u8>` | `uint8` | `(2,)` | The side's attacks on c3 to f6. |
-| `immobile_pieces` | `ByColour<u8>` | `uint8` | `(2,)` | The side's units other than pawns and kings with no destination. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `pawns` | `mobility.pawns` | `ByColour<u16>` | `uint16` | `(2,)` | Squares the side's pawns attack that its own units do not hold. |
+| `knights` | `mobility.knights` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its knights. |
+| `bishops` | `mobility.bishops` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its bishops. |
+| `rooks` | `mobility.rooks` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its rooks. |
+| `queens` | `mobility.queens` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its queens. |
+| `safe_pawns` | `mobility.safe_pawns` | `ByColour<u16>` | `uint16` | `(2,)` | Of the pawn squares, those no enemy pawn attacks. |
+| `safe_knights` | `mobility.safe_knights` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its knights. |
+| `safe_bishops` | `mobility.safe_bishops` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its bishops. |
+| `safe_rooks` | `mobility.safe_rooks` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its rooks. |
+| `safe_queens` | `mobility.safe_queens` | `ByColour<u16>` | `uint16` | `(2,)` | The same for its queens. |
+| `total` | `mobility.total` | `ByColour<u16>` | `uint16` | `(2,)` | The five counts added up. |
+| `space` | `mobility.space` | `ByColour<u16>` | `uint16` | `(2,)` | Squares the side attacks in the enemy's half. |
+| `centre_control` | `mobility.centre_control` | `ByColour<u8>` | `uint8` | `(2,)` | The side's attacks on d4, e4, d5 and e5. |
+| `extended_centre_control` | `mobility.extended_centre_control` | `ByColour<u8>` | `uint8` | `(2,)` | The side's attacks on c3 to f6. |
+| `immobile_pieces` | `mobility.immobile_pieces` | `ByColour<u8>` | `uint8` | `(2,)` | The side's units other than pawns and kings with no destination. |
 
 ## `attacks`
 
 The attack maps and what they say about the units standing on the board.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `controlled` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Every square the side attacks. |
-| `by_pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares the side's pawns attack. |
-| `by_knights` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its knights attack. |
-| `by_bishops` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its bishops attack. |
-| `by_rooks` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its rooks attack. |
-| `by_queens` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its queens attack. |
-| `by_kings` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its king attacks. |
-| `attacked` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy attacks, defended or not; never a king. |
-| `hanging` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Those of them their own side does not defend. |
-| `en_prise` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Those hanging or attacked by a cheaper enemy unit. |
-| `pinned` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units under an absolute pin. |
-| `defended` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units standing on a square their own side attacks. |
-| `attacked_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the attacked units. |
-| `hanging_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the hanging units. |
-| `en_prise_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the units en prise. |
-| `en_prise_max_value` | `ByColour<i32>` | `int32` | `(2,)` | The largest value en prise. |
-| `pinned_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the absolutely pinned units. |
-| `skewer_candidates` | `ByColour<u8>` | `uint8` | `(2,)` | Enemy unit pairs the side's sliders skewer. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `controlled` | `attacks.controlled` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Every square the side attacks. |
+| `by_pawns` | `attacks.by_pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares the side's pawns attack. |
+| `by_knights` | `attacks.by_knights` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its knights attack. |
+| `by_bishops` | `attacks.by_bishops` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its bishops attack. |
+| `by_rooks` | `attacks.by_rooks` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its rooks attack. |
+| `by_queens` | `attacks.by_queens` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its queens attack. |
+| `by_kings` | `attacks.by_kings` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares its king attacks. |
+| `attacked` | `attacks.attacked` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy attacks, defended or not; never a king. |
+| `hanging` | `attacks.hanging` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Those of them their own side does not defend. |
+| `en_prise` | `attacks.en_prise` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Those hanging or attacked by a cheaper enemy unit. |
+| `pinned` | `attacks.pinned` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units under an absolute pin. |
+| `defended` | `attacks.defended` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units standing on a square their own side attacks. |
+| `attacked_value` | `attacks.attacked_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the attacked units. |
+| `hanging_value` | `attacks.hanging_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the hanging units. |
+| `en_prise_value` | `attacks.en_prise_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the units en prise. |
+| `en_prise_max_value` | `attacks.en_prise_max_value` | `ByColour<i32>` | `int32` | `(2,)` | The largest value en prise. |
+| `pinned_value` | `attacks.pinned_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of the absolutely pinned units. |
+| `skewer_candidates` | `attacks.skewer_candidates` | `ByColour<u8>` | `uint8` | `(2,)` | Enemy unit pairs the side's sliders skewer. |
 
 ## `exchange`
 
 Each side's captures, judged by the exchange they start. The values for the side not to move are read after a null move; when the side to move is in check that move does not exist and they are zero.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `see_best_capture` | `ByColour<i32>` | `int32` | `(2,)` | The largest static exchange evaluation over the side's captures; 0 when it has none. |
-| `see_positive_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its captures whose evaluation is above 0. |
-| `see_equal_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its captures whose evaluation is 0. |
-| `see_positive_total` | `ByColour<i32>` | `int32` | `(2,)` | The sum of the evaluations above 0. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `see_best_capture` | `exchange.see_best_capture` | `ByColour<i32>` | `int32` | `(2,)` | The largest static exchange evaluation over the side's captures; 0 when it has none. |
+| `see_positive_capture_count` | `exchange.see_positive_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its captures whose evaluation is above 0. |
+| `see_equal_capture_count` | `exchange.see_equal_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its captures whose evaluation is 0. |
+| `see_positive_total` | `exchange.see_positive_total` | `ByColour<i32>` | `int32` | `(2,)` | The sum of the evaluations above 0. |
 
 ## `threats`
 
 What each side stands to lose, and the slider geometry behind it. Every set is read on the units it is about, and holds no king.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `threatened` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy wins material by taking. |
-| `threatened_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of those. |
-| `threat_max_gain` | `ByColour<i32>` | `int32` | `(2,)` | The largest such gain over the side's own units. |
-| `attacked_by_lesser` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units an enemy unit of strictly lower value attacks. |
-| `queen_attacked_by_lesser` | `ByColour<bool>` | `bool` | `(2,)` | One of those units is a queen. |
-| `overloaded_defenders` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's sole defenders of two or more attacked friendly units. |
-| `removable_defenders` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Its sole defenders the enemy can capture without loss. |
-| `loose` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units no unit of their own side defends. |
-| `attacker_surplus` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units more enemy units attack than its own defend. |
-| `xray_through_enemy` | `ByColour<u8>` | `uint8` | `(2,)` | The side's x-rays onto an enemy unit through one enemy unit. |
-| `battery_count` | `ByColour<u8>` | `uint8` | `(2,)` | The side's batteries: two of its own sliders on one line, agreeing in direction. |
-| `battery_at_king` | `ByColour<bool>` | `bool` | `(2,)` | One of them bears on a square of the enemy king's ring. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `threatened` | `threats.threatened` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy wins material by taking. |
+| `threatened_value` | `threats.threatened_value` | `ByColour<i32>` | `int32` | `(2,)` | The value sum of those. |
+| `threat_max_gain` | `threats.threat_max_gain` | `ByColour<i32>` | `int32` | `(2,)` | The largest such gain over the side's own units. |
+| `attacked_by_lesser` | `threats.attacked_by_lesser` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units an enemy unit of strictly lower value attacks. |
+| `queen_attacked_by_lesser` | `threats.queen_attacked_by_lesser` | `ByColour<bool>` | `bool` | `(2,)` | One of those units is a queen. |
+| `overloaded_defenders` | `threats.overloaded_defenders` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's sole defenders of two or more attacked friendly units. |
+| `removable_defenders` | `threats.removable_defenders` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Its sole defenders the enemy can capture without loss. |
+| `loose` | `threats.loose` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units no unit of their own side defends. |
+| `attacker_surplus` | `threats.attacker_surplus` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units more enemy units attack than its own defend. |
+| `xray_through_enemy` | `threats.xray_through_enemy` | `ByColour<u8>` | `uint8` | `(2,)` | The side's x-rays onto an enemy unit through one enemy unit. |
+| `battery_count` | `threats.battery_count` | `ByColour<u8>` | `uint8` | `(2,)` | The side's batteries: two of its own sliders on one line, agreeing in direction. |
+| `battery_at_king` | `threats.battery_at_king` | `ByColour<bool>` | `bool` | `(2,)` | One of them bears on a square of the enemy king's ring. |
 
 ## `tactics`
 
 Each side's one-ply tactical options. The values for the side not to move are read after a null move; when the side to move is in check that move does not exist and they are zero, which `available` reports.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `available` | `ByColour<bool>` | `bool` | `(2,)` | The side's values could be read. |
-| `check_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its moves giving check. |
-| `check_by_pawn` | `ByColour<bool>` | `bool` | `(2,)` | A pawn move of the side gives check. |
-| `check_by_knight` | `ByColour<bool>` | `bool` | `(2,)` | A knight move gives check. |
-| `check_by_bishop` | `ByColour<bool>` | `bool` | `(2,)` | A bishop move gives check. |
-| `check_by_rook` | `ByColour<bool>` | `bool` | `(2,)` | A rook move gives check. |
-| `check_by_queen` | `ByColour<bool>` | `bool` | `(2,)` | A queen move gives check. |
-| `safe_check_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its checking moves whose destination is safe. |
-| `safe_check_by_pawn` | `ByColour<bool>` | `bool` | `(2,)` | A pawn move of the side gives check from a safe square. |
-| `safe_check_by_knight` | `ByColour<bool>` | `bool` | `(2,)` | A knight move does. |
-| `safe_check_by_bishop` | `ByColour<bool>` | `bool` | `(2,)` | A bishop move does. |
-| `safe_check_by_rook` | `ByColour<bool>` | `bool` | `(2,)` | A rook move does. |
-| `safe_check_by_queen` | `ByColour<bool>` | `bool` | `(2,)` | A queen move does. |
-| `double_check_available` | `ByColour<bool>` | `bool` | `(2,)` | A move gives check from two units at once. |
-| `discovered_check_available` | `ByColour<bool>` | `bool` | `(2,)` | A move gives check with a unit that did not move. |
-| `mate_in_1` | `ByColour<bool>` | `bool` | `(2,)` | A move leaves the opponent checkmated. |
-| `stalemate_in_1` | `ByColour<bool>` | `bool` | `(2,)` | A move leaves the opponent stalemated. |
-| `promotion_files` | `ByColour<FileSet>` | `bool` | `(2, 8)` | Files a legal move of the side promotes on. |
-| `promotes_to_queen` | `ByColour<bool>` | `bool` | `(2,)` | A promotion to a queen is available. |
-| `promotes_to_rook` | `ByColour<bool>` | `bool` | `(2,)` | One to a rook is. |
-| `promotes_to_bishop` | `ByColour<bool>` | `bool` | `(2,)` | One to a bishop is. |
-| `promotes_to_knight` | `ByColour<bool>` | `bool` | `(2,)` | One to a knight is. |
-| `safe_promotion_files` | `ByColour<FileSet>` | `bool` | `(2, 8)` | Files a legal promotion with a safe destination lands on. |
-| `capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | The side's capturing moves. |
-| `winning_capture_available` | `ByColour<bool>` | `bool` | `(2,)` | One of them takes a unit that outvalues the capturer or is undefended. |
-| `winning_capture_max_gain` | `ByColour<i32>` | `int32` | `(2,)` | The largest victim value less capturer value over the captures, at least 0. |
-| `captures_hanging` | `ByColour<bool>` | `bool` | `(2,)` | A capture takes a hanging unit. |
-| `hanging_victim_max_value` | `ByColour<i32>` | `int32` | `(2,)` | The largest value among the hanging units capturable now. |
-| `equal_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Captures of a defended unit of equal value. |
-| `losing_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Captures of a defended unit of lower value. |
-| `fork_count` | `ByColour<u16>` | `uint16` | `(2,)` | Moves after which the moved unit forks. |
-| `fork_max_value` | `ByColour<i32>` | `int32` | `(2,)` | The largest single forked value. |
-| `knight_fork_available` | `ByColour<bool>` | `bool` | `(2,)` | A fork by a knight. |
-| `royal_fork_available` | `ByColour<bool>` | `bool` | `(2,)` | A fork one of whose targets is the king. |
-| `pin_creation_count` | `ByColour<u16>` | `uint16` | `(2,)` | Moves creating an absolute or a relative pin. |
-| `skewer_creation_available` | `ByColour<bool>` | `bool` | `(2,)` | A move creating a skewer. |
-| `discovered_attack_available` | `ByColour<bool>` | `bool` | `(2,)` | A move uncovering a slider's attack on a unit of value 3 or more. |
-| `legal_move_count` | `ByColour<u16>` | `uint16` | `(2,)` | The side's legal moves. |
-| `safe_check_capturing` | `ByColour<bool>` | `bool` | `(2,)` | A checking move that captures and whose destination is safe. |
-| `discovered_attack_on_queen` | `ByColour<bool>` | `bool` | `(2,)` | A move uncovering a slider's attack on the enemy queen. |
-| `back_rank_mate_threat` | `ByColour<bool>` | `bool` | `(2,)` | A move after which a rook or queen of the side checks the enemy king along that king's own rank, its back rank being blocked. |
-| `quiet_threat_available` | `ByColour<bool>` | `bool` | `(2,)` | A quiet move after which the largest gain the side threatens is greater than it is now. |
-| `no_safe_moves` | `ByColour<bool>` | `bool` | `(2,)` | No legal move of the side has a safe destination. |
-| `promotion_see_positive` | `ByColour<bool>` | `bool` | `(2,)` | A promotion of the side wins material. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `available` | `tactics.available` | `ByColour<bool>` | `bool` | `(2,)` | The side's values could be read. |
+| `check_count` | `tactics.check_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its moves giving check. |
+| `check_by_pawn` | `tactics.check_by_pawn` | `ByColour<bool>` | `bool` | `(2,)` | A pawn move of the side gives check. |
+| `check_by_knight` | `tactics.check_by_knight` | `ByColour<bool>` | `bool` | `(2,)` | A knight move gives check. |
+| `check_by_bishop` | `tactics.check_by_bishop` | `ByColour<bool>` | `bool` | `(2,)` | A bishop move gives check. |
+| `check_by_rook` | `tactics.check_by_rook` | `ByColour<bool>` | `bool` | `(2,)` | A rook move gives check. |
+| `check_by_queen` | `tactics.check_by_queen` | `ByColour<bool>` | `bool` | `(2,)` | A queen move gives check. |
+| `safe_check_count` | `tactics.safe_check_count` | `ByColour<u16>` | `uint16` | `(2,)` | Its checking moves whose destination is safe. |
+| `safe_check_by_pawn` | `tactics.safe_check_by_pawn` | `ByColour<bool>` | `bool` | `(2,)` | A pawn move of the side gives check from a safe square. |
+| `safe_check_by_knight` | `tactics.safe_check_by_knight` | `ByColour<bool>` | `bool` | `(2,)` | A knight move does. |
+| `safe_check_by_bishop` | `tactics.safe_check_by_bishop` | `ByColour<bool>` | `bool` | `(2,)` | A bishop move does. |
+| `safe_check_by_rook` | `tactics.safe_check_by_rook` | `ByColour<bool>` | `bool` | `(2,)` | A rook move does. |
+| `safe_check_by_queen` | `tactics.safe_check_by_queen` | `ByColour<bool>` | `bool` | `(2,)` | A queen move does. |
+| `double_check_available` | `tactics.double_check_available` | `ByColour<bool>` | `bool` | `(2,)` | A move gives check from two units at once. |
+| `discovered_check_available` | `tactics.discovered_check_available` | `ByColour<bool>` | `bool` | `(2,)` | A move gives check with a unit that did not move. |
+| `mate_in_1` | `tactics.mate_in_1` | `ByColour<bool>` | `bool` | `(2,)` | A move leaves the opponent checkmated. |
+| `stalemate_in_1` | `tactics.stalemate_in_1` | `ByColour<bool>` | `bool` | `(2,)` | A move leaves the opponent stalemated. |
+| `promotion_files` | `tactics.promotion_files` | `ByColour<FileSet>` | `bool` | `(2, 8)` | Files a legal move of the side promotes on. |
+| `promotes_to_queen` | `tactics.promotes_to_queen` | `ByColour<bool>` | `bool` | `(2,)` | A promotion to a queen is available. |
+| `promotes_to_rook` | `tactics.promotes_to_rook` | `ByColour<bool>` | `bool` | `(2,)` | One to a rook is. |
+| `promotes_to_bishop` | `tactics.promotes_to_bishop` | `ByColour<bool>` | `bool` | `(2,)` | One to a bishop is. |
+| `promotes_to_knight` | `tactics.promotes_to_knight` | `ByColour<bool>` | `bool` | `(2,)` | One to a knight is. |
+| `safe_promotion_files` | `tactics.safe_promotion_files` | `ByColour<FileSet>` | `bool` | `(2, 8)` | Files a legal promotion with a safe destination lands on. |
+| `capture_count` | `tactics.capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | The side's capturing moves. |
+| `winning_capture_available` | `tactics.winning_capture_available` | `ByColour<bool>` | `bool` | `(2,)` | One of them takes a unit that outvalues the capturer or is undefended. |
+| `winning_capture_max_gain` | `tactics.winning_capture_max_gain` | `ByColour<i32>` | `int32` | `(2,)` | The largest victim value less capturer value over the captures, at least 0. |
+| `captures_hanging` | `tactics.captures_hanging` | `ByColour<bool>` | `bool` | `(2,)` | A capture takes a hanging unit. |
+| `hanging_victim_max_value` | `tactics.hanging_victim_max_value` | `ByColour<i32>` | `int32` | `(2,)` | The largest value among the hanging units capturable now. |
+| `equal_capture_count` | `tactics.equal_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Captures of a defended unit of equal value. |
+| `losing_capture_count` | `tactics.losing_capture_count` | `ByColour<u16>` | `uint16` | `(2,)` | Captures of a defended unit of lower value. |
+| `fork_count` | `tactics.fork_count` | `ByColour<u16>` | `uint16` | `(2,)` | Moves after which the moved unit forks. |
+| `fork_max_value` | `tactics.fork_max_value` | `ByColour<i32>` | `int32` | `(2,)` | The largest single forked value. |
+| `knight_fork_available` | `tactics.knight_fork_available` | `ByColour<bool>` | `bool` | `(2,)` | A fork by a knight. |
+| `royal_fork_available` | `tactics.royal_fork_available` | `ByColour<bool>` | `bool` | `(2,)` | A fork one of whose targets is the king. |
+| `pin_creation_count` | `tactics.pin_creation_count` | `ByColour<u16>` | `uint16` | `(2,)` | Moves creating an absolute or a relative pin. |
+| `skewer_creation_available` | `tactics.skewer_creation_available` | `ByColour<bool>` | `bool` | `(2,)` | A move creating a skewer. |
+| `discovered_attack_available` | `tactics.discovered_attack_available` | `ByColour<bool>` | `bool` | `(2,)` | A move uncovering a slider's attack on a unit of value 3 or more. |
+| `legal_move_count` | `tactics.legal_move_count` | `ByColour<u16>` | `uint16` | `(2,)` | The side's legal moves. |
+| `safe_check_capturing` | `tactics.safe_check_capturing` | `ByColour<bool>` | `bool` | `(2,)` | A checking move that captures and whose destination is safe. |
+| `discovered_attack_on_queen` | `tactics.discovered_attack_on_queen` | `ByColour<bool>` | `bool` | `(2,)` | A move uncovering a slider's attack on the enemy queen. |
+| `back_rank_mate_threat` | `tactics.back_rank_mate_threat` | `ByColour<bool>` | `bool` | `(2,)` | A move after which a rook or queen of the side checks the enemy king along that king's own rank, its back rank being blocked. |
+| `quiet_threat_available` | `tactics.quiet_threat_available` | `ByColour<bool>` | `bool` | `(2,)` | A quiet move after which the largest gain the side threatens is greater than it is now. |
+| `no_safe_moves` | `tactics.no_safe_moves` | `ByColour<bool>` | `bool` | `(2,)` | No legal move of the side has a safe destination. |
+| `promotion_see_positive` | `tactics.promotion_see_positive` | `ByColour<bool>` | `bool` | `(2,)` | A promotion of the side wins material. |
 
 ## `endgame`
 
 Where the kings stand, how the pawn race runs, and which drawn configuration the material is.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `king_centralisation` | `ByColour<u8>` | `uint8` | `(2,)` | Chebyshev distance from the side's king to the nearest central square. |
-| `race_plies` | `ByColour<u8>` | `uint8` | `(2,)` | Plies the side's most advanced passer needs to promote unopposed; 8 for a side with no passer. |
-| `opposition` | `Option<Opposition>` | `int16` | `()` | The opposition the kings stand in, if any. |
-| `key_square_occupied` | `ByColour<bool>` | `bool` | `(2,)` | The side's king stands on a key square of one of its own passers. |
-| `wrong_colour_bishop` | `ByColour<bool>` | `bool` | `(2,)` | The side's bishops all stand on the colour none of its pawns promotes on, every one of those pawns being a rook pawn. |
-| `drawish_material` | `Option<DrawishMaterial>` | `int16` | `()` | The drawn configuration the material is, if it is one of the three. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `king_centralisation` | `endgame.king_centralisation` | `ByColour<u8>` | `uint8` | `(2,)` | Chebyshev distance from the side's king to the nearest central square. |
+| `race_plies` | `endgame.race_plies` | `ByColour<u8>` | `uint8` | `(2,)` | Plies the side's most advanced passer needs to promote unopposed; 8 for a side with no passer. |
+| `opposition` | `endgame.opposition` | `Option<Opposition>` | `int16` | `()` | The opposition the kings stand in, if any. |
+| `key_square_occupied` | `endgame.key_square_occupied` | `ByColour<bool>` | `bool` | `(2,)` | The side's king stands on a key square of one of its own passers. |
+| `wrong_colour_bishop` | `endgame.wrong_colour_bishop` | `ByColour<bool>` | `bool` | `(2,)` | The side's bishops all stand on the colour none of its pawns promotes on, every one of those pawns being a rook pawn. |
+| `drawish_material` | `endgame.drawish_material` | `Option<DrawishMaterial>` | `int16` | `()` | The drawn configuration the material is, if it is one of the three. |
 
 ## `maps`
 
 The square sets a reader most often wants side by side: what each side attacks, and what of it stands hanging, pinned or threatened. Every one of them is also a field of the `attacks` or the `threats` group; this group is where they are read together.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `controlled` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Every square the side attacks. |
-| `by_pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares the side's pawns attack. |
-| `hanging` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy attacks and their own side does not defend. |
-| `pinned` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units under an absolute pin. |
-| `threatened` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy wins material by taking. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `controlled` | `maps.controlled` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | Every square the side attacks. |
+| `by_pawns` | `maps.by_pawns` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The squares the side's pawns attack. |
+| `hanging` | `maps.hanging` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy attacks and their own side does not defend. |
+| `pinned` | `maps.pinned` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units under an absolute pin. |
+| `threatened` | `maps.threatened` | `ByColour<SquareSet>` | `bool` | `(2, 64)` | The side's units the enemy wins material by taking. |
 
 ## `move`
 
 What one legal move does, beyond what the move itself says. The mover is the
 side to move; the enemy is the other side. Every annotated move of
-`facts.moves` carries these.
+`annotated_moves()` carries these. They are not part of `Facts`, of the JSON
+form or of the tensor form, all of which describe one position rather than one
+move.
 
 | field | type | dtype | shape | meaning |
 | --- | --- | --- | --- | --- |

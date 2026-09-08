@@ -15,7 +15,9 @@ use super::convert::{colour_from, file_from, file_name};
 /// One value for White and one for Black.
 ///
 /// Read a side by name — `.white`, `.black` — or by colour, with `of("white")`
-/// or `["w"]`.
+/// or `["w"]`. Iterating gives the two values, White first, so `white, black =
+/// pair` unpacks; `items()` gives them with the colour each belongs to. A pair
+/// hashes when both of its values do.
 #[pyclass(frozen, module = "esca", name = "ByColour")]
 pub struct PyByColour {
     /// White's value.
@@ -74,6 +76,36 @@ impl PyByColour {
 
     fn __getitem__(&self, py: Python<'_>, colour: &str) -> PyResult<Py<PyAny>> {
         self.of(py, colour)
+    }
+
+    /// The two values, White first.
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let values = PyTuple::new(py, [self.white.bind(py), self.black.bind(py)])?;
+        values.try_iter()?.into_bound_py_any(py)
+    }
+
+    /// Two: a pair is always both colours.
+    fn __len__(&self) -> usize {
+        2
+    }
+
+    /// Whether `colour` names a side of the pair, which both spellings of
+    /// both colours do.
+    fn __contains__(&self, colour: &str) -> bool {
+        colour_from(colour).is_ok()
+    }
+
+    /// Each colour with its value, White first.
+    fn items<'py>(&self, py: Python<'py>) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
+        Ok(vec![
+            ("white", self.white.bind(py).clone()),
+            ("black", self.black.bind(py).clone()),
+        ])
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        let values = PyTuple::new(py, [self.white.bind(py), self.black.bind(py)])?;
+        values.hash()
     }
 
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {

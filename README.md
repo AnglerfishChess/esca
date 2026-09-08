@@ -11,14 +11,13 @@
 
 Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout.
 
-*The esca is the anglerfish's lure: the small thing that lights up what is in front of it.*
-
 `Position` is placement and state and nothing else. Rules live in `Variant` implementations —
-`Classic` and `Chess960` — so a position can be asked the same question under different rules, and
-a new variant is a new implementation and nothing else. A `Game` pairs a variant with the moves
-played, which is what repetition and claimable draws need. `Facts` answers what is true about a
-position — 221 named facts in 14 groups, and 27 more about every legal move — each of them typed,
-named after what a player would call it, and told about White and Black by name.
+`Classic` and `Chess960` — so a position answers a rules question by taking the variant that
+defines it, and a new variant is a new implementation and nothing else. A `Game` pairs a variant
+with the moves played, which is what repetition and claimable draws need. `Facts` answers what is
+true about one position — 221 named facts in 14 groups — and `annotated_moves()` answers what each
+of its legal moves does, with 27 more. Every fact is typed, named after what a player would call
+it, and told about White and Black by name.
 
 ## Rust
 
@@ -79,10 +78,11 @@ Wheels are abi3 for Python 3.12 and up. `pip install esca[tensors]` adds NumPy a
 - UCI move text in either castling spelling, and SAN with the disambiguation it needs.
 - Checkmate, stalemate, insufficient material, the fifty- and seventy-five-move rules, and
   threefold and fivefold repetition.
-- `Facts`: fourteen groups of cheap position facts — the board itself, game state, history,
-  material, pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics, endgame
-  and the attack maps side by side — plus `MoveFacts` for every legal move. Every value that
-  differs between the two sides is a `ByColour`, read as `.white`, `.black` or `.of(colour)`.
+- `Facts`: fourteen groups of cheap facts about one position — the board itself, game state,
+  history, material, pawns, pieces, king, mobility, attacks, exchanges, threats, one-ply tactics,
+  endgame and the attack maps side by side — and `MoveFacts` for every legal move, from
+  `annotated_moves()`. Every value that differs between the two sides is a `ByColour`, read as
+  `.white`, `.black` or `.of(colour)`.
 - A catalogue of those facts as data — name, type, dtype, shape and meaning — which
   `docs/features.md`, `docs/facts.schema.json`, the Python type stubs and the tensor layout are
   all generated from, and which the MCP server serves.
@@ -108,7 +108,7 @@ with the library and pins the matching `esca`, and is documented in
 ## Documentation
 
 - [`docs/esca-api.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-api.md) —
-  the API in both languages.
+  the API in both languages; §11 is the whole Python surface.
 - [`docs/features.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/features.md) —
   every fact, its type and its meaning, group by group.
 - [`docs/esca-vocabulary.md`](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-vocabulary.md) —

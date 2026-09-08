@@ -6,7 +6,7 @@
 //! use esca::{Game, classic};
 //!
 //! let mut game = Game::new(classic());
-//! let e4 = game.legal_moves().iter().copied().find(|mv| mv.to_string() == "e2e4").unwrap();
+//! let e4 = game.legal_moves().iter().copied().find(|mv| game.move_to_uci(*mv) == "e2e4").unwrap();
 //! let key = game.position().polyglot_key();
 //!
 //! let path = std::env::temp_dir().join("esca-doctest-book.bin");

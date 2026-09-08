@@ -1,4 +1,8 @@
 //! Board vocabulary: colours, roles, pieces, squares and sets of squares.
+//!
+//! Every value here writes itself as the text the crate reads back: `Display`
+//! and `Debug` agree, and [`FromStr`] parses that same text. So `{:?}` on a
+//! square is `e4`, not a wrapper around an index.
 
 use core::fmt;
 use core::ops::{
@@ -9,8 +13,35 @@ use core::str::FromStr;
 
 use cozy_chess as cc;
 
+/// The text does not name a value of the type it was read as.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct ParseError {
+    /// The type the text was read as: `colour`, `role`, `piece`, `file`,
+    /// `rank`, `square` or `move`.
+    pub expected: &'static str,
+    /// The text that was read.
+    pub input: String,
+}
+
+impl ParseError {
+    pub(crate) fn new(expected: &'static str, input: &str) -> ParseError {
+        ParseError {
+            expected,
+            input: input.to_owned(),
+        }
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "not a {}: {:?}", self.expected, self.input)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 /// A player: White or Black.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Colour {
     /// The side that moves first in the starting array.
     White,
@@ -77,6 +108,7 @@ impl Not for Colour {
 }
 
 impl fmt::Display for Colour {
+    /// The FEN letter: `w` or `b`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Colour::White => "w",
@@ -85,8 +117,28 @@ impl fmt::Display for Colour {
     }
 }
 
+impl fmt::Debug for Colour {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl FromStr for Colour {
+    type Err = ParseError;
+
+    /// The FEN letter, of either case.
+    fn from_str(s: &str) -> Result<Colour, ParseError> {
+        let mut chars = s.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Colour::from_char(c.to_ascii_lowercase()),
+            _ => None,
+        }
+        .ok_or_else(|| ParseError::new("colour", s))
+    }
+}
+
 /// What a piece is, without its colour.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Role {
     /// Pawn.
     Pawn,
@@ -185,6 +237,7 @@ impl Role {
 }
 
 impl fmt::Display for Role {
+    /// The lower-case FEN letter.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Role::Pawn => "p",
@@ -197,8 +250,28 @@ impl fmt::Display for Role {
     }
 }
 
+impl fmt::Debug for Role {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl FromStr for Role {
+    type Err = ParseError;
+
+    /// The FEN letter, of either case.
+    fn from_str(s: &str) -> Result<Role, ParseError> {
+        let mut chars = s.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Role::from_char(c),
+            _ => None,
+        }
+        .ok_or_else(|| ParseError::new("role", s))
+    }
+}
+
 /// A role plus a colour.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Piece {
     /// What the piece is.
     pub role: Role,
@@ -238,13 +311,34 @@ impl Piece {
 }
 
 impl fmt::Display for Piece {
+    /// The FEN letter: upper case for White.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_char())
     }
 }
 
+impl fmt::Debug for Piece {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl FromStr for Piece {
+    type Err = ParseError;
+
+    /// The FEN letter, its case naming the colour.
+    fn from_str(s: &str) -> Result<Piece, ParseError> {
+        let mut chars = s.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Piece::from_char(c),
+            _ => None,
+        }
+        .ok_or_else(|| ParseError::new("piece", s))
+    }
+}
+
 /// A column of the board, a to h.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum File {
     /// File a.
     A,
@@ -317,13 +411,34 @@ impl File {
 }
 
 impl fmt::Display for File {
+    /// The lower-case letter.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_char())
     }
 }
 
+impl fmt::Debug for File {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl FromStr for File {
+    type Err = ParseError;
+
+    /// The letter, of either case.
+    fn from_str(s: &str) -> Result<File, ParseError> {
+        let mut chars = s.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => File::from_char(c),
+            _ => None,
+        }
+        .ok_or_else(|| ParseError::new("file", s))
+    }
+}
+
 /// A row of the board, 1 to 8.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Rank {
     /// Rank 1.
     First,
@@ -395,8 +510,80 @@ impl Rank {
 }
 
 impl fmt::Display for Rank {
+    /// The digit.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_char())
+    }
+}
+
+impl fmt::Debug for Rank {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl FromStr for Rank {
+    type Err = ParseError;
+
+    /// The digit.
+    fn from_str(s: &str) -> Result<Rank, ParseError> {
+        let mut chars = s.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Rank::from_char(c),
+            _ => None,
+        }
+        .ok_or_else(|| ParseError::new("rank", s))
+    }
+}
+
+/// Which side of the board a castling is played on, named after where the
+/// king lands.
+///
+/// The rook it castles with is the outermost one on that side, whatever file
+/// it starts on, so the name holds in Chess960 too.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Wing {
+    /// The king lands on the g-file, the rook on the f-file.
+    Short,
+    /// The king lands on the c-file, the rook on the d-file.
+    Long,
+}
+
+impl Wing {
+    /// Both wings, short first.
+    pub const ALL: [Wing; 2] = [Wing::Short, Wing::Long];
+
+    /// The file the king lands on.
+    #[inline]
+    pub const fn king_file(self) -> File {
+        match self {
+            Wing::Short => File::G,
+            Wing::Long => File::C,
+        }
+    }
+
+    /// The file the rook lands on.
+    #[inline]
+    pub const fn rook_file(self) -> File {
+        match self {
+            Wing::Short => File::F,
+            Wing::Long => File::D,
+        }
+    }
+
+    /// `short` or `long`.
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Wing::Short => "short",
+            Wing::Long => "long",
+        }
+    }
+}
+
+impl fmt::Display for Wing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
@@ -558,7 +745,7 @@ impl IntoIterator for FileSet {
 }
 
 /// One of the 64 cells, indexed 0 to 63 with a1 = 0 and h8 = 63.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Square(u8);
 
 macro_rules! square_consts {
@@ -651,34 +838,37 @@ impl Square {
 }
 
 impl fmt::Display for Square {
+    /// The file letter and the rank digit: `e4`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.file(), self.rank())
     }
 }
 
-/// The value was not a square name such as `e4`.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct SquareParseError;
-
-impl fmt::Display for SquareParseError {
+impl fmt::Debug for Square {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("not a square name")
+        fmt::Display::fmt(self, f)
     }
 }
 
-impl std::error::Error for SquareParseError {}
+impl Square {
+    /// The square `text` names, such as `e4`.
+    pub fn from_name(text: &str) -> Option<Square> {
+        let bytes = text.as_bytes();
+        if bytes.len() != 2 {
+            return None;
+        }
+        let file = File::from_char(bytes[0] as char)?;
+        let rank = Rank::from_char(bytes[1] as char)?;
+        Some(Square::new(file, rank))
+    }
+}
 
 impl FromStr for Square {
-    type Err = SquareParseError;
+    type Err = ParseError;
 
-    fn from_str(s: &str) -> Result<Square, SquareParseError> {
-        let bytes = s.as_bytes();
-        if bytes.len() != 2 {
-            return Err(SquareParseError);
-        }
-        let file = File::from_char(bytes[0] as char).ok_or(SquareParseError)?;
-        let rank = Rank::from_char(bytes[1] as char).ok_or(SquareParseError)?;
-        Ok(Square::new(file, rank))
+    /// The square name, such as `e4`.
+    fn from_str(s: &str) -> Result<Square, ParseError> {
+        Square::from_name(s).ok_or_else(|| ParseError::new("square", s))
     }
 }
 
@@ -931,15 +1121,15 @@ impl<T> PerFile<T> {
     pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerFile<U> {
         PerFile(self.0.map(f))
     }
+
+    /// The value of `file`.
+    #[inline]
+    pub const fn of(&self, file: File) -> &T {
+        &self.0[file as usize]
+    }
 }
 
 impl<T: Copy> PerFile<T> {
-    /// The value of `file`.
-    #[inline]
-    pub const fn of(&self, file: File) -> T {
-        self.0[file as usize]
-    }
-
     /// The eight values, with `f(file)` for each file.
     #[inline]
     pub fn from_fn(mut f: impl FnMut(File) -> T) -> PerFile<T>
@@ -1021,15 +1211,15 @@ impl<T> PerRank<T> {
     pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerRank<U> {
         PerRank(self.0.map(f))
     }
+
+    /// The value of `rank`.
+    #[inline]
+    pub const fn of(&self, rank: Rank) -> &T {
+        &self.0[rank as usize]
+    }
 }
 
 impl<T: Copy> PerRank<T> {
-    /// The value of `rank`.
-    #[inline]
-    pub const fn of(&self, rank: Rank) -> T {
-        self.0[rank as usize]
-    }
-
     /// The eight values, with `f(rank)` for each rank.
     #[inline]
     pub fn from_fn(mut f: impl FnMut(Rank) -> T) -> PerRank<T>
@@ -1080,10 +1270,98 @@ impl<'a, T> IntoIterator for &'a PerRank<T> {
     }
 }
 
+/// One value per role, the pawn first and the king last.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct PerRole<T>([T; 6]);
+
+impl<T> PerRole<T> {
+    /// The six values, pawn first.
+    #[inline]
+    pub const fn new(values: [T; 6]) -> PerRole<T> {
+        PerRole(values)
+    }
+
+    /// The values as an array, pawn first.
+    #[inline]
+    pub fn into_array(self) -> [T; 6] {
+        self.0
+    }
+
+    /// The values, pawn first.
+    #[inline]
+    pub fn iter(&self) -> core::slice::Iter<'_, T> {
+        self.0.iter()
+    }
+
+    /// `f` applied to every value, role order kept.
+    #[inline]
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerRole<U> {
+        PerRole(self.0.map(f))
+    }
+
+    /// The value of `role`.
+    #[inline]
+    pub const fn of(&self, role: Role) -> &T {
+        &self.0[role as usize]
+    }
+}
+
+impl<T: Copy> PerRole<T> {
+    /// The six values, with `f(role)` for each role.
+    #[inline]
+    pub fn from_fn(mut f: impl FnMut(Role) -> T) -> PerRole<T>
+    where
+        T: Default,
+    {
+        let mut values = [T::default(); 6];
+        for role in Role::ALL {
+            values[role.index()] = f(role);
+        }
+        PerRole(values)
+    }
+}
+
+impl<T> Index<Role> for PerRole<T> {
+    type Output = T;
+
+    #[inline]
+    fn index(&self, role: Role) -> &T {
+        &self.0[role as usize]
+    }
+}
+
+impl<T> IndexMut<Role> for PerRole<T> {
+    #[inline]
+    fn index_mut(&mut self, role: Role) -> &mut T {
+        &mut self.0[role as usize]
+    }
+}
+
+impl<T> IntoIterator for PerRole<T> {
+    type Item = T;
+    type IntoIter = core::array::IntoIter<T, 6>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a PerRole<T> {
+    type Item = &'a T;
+    type IntoIter = core::slice::Iter<'a, T>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// One value for White and one for Black.
 ///
 /// Read a side's value by name — `.white`, `.black` — or by colour, with
-/// [`ByColour::of`] or `[colour]`.
+/// [`ByColour::of`] or `[colour]`. Build one with the fields named, or with
+/// [`ByColour::from_fn`]; [`ByColour::new`] takes them White first.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct ByColour<T> {
     /// White's value.
@@ -1107,15 +1385,13 @@ impl<T> ByColour<T> {
             black: f(self.black),
         }
     }
-}
 
-impl<T: Copy> ByColour<T> {
     /// The value of `colour`.
     #[inline]
-    pub const fn of(&self, colour: Colour) -> T {
+    pub const fn of(&self, colour: Colour) -> &T {
         match colour {
-            Colour::White => self.white,
-            Colour::Black => self.black,
+            Colour::White => &self.white,
+            Colour::Black => &self.black,
         }
     }
 
@@ -1126,6 +1402,23 @@ impl<T: Copy> ByColour<T> {
             white: f(Colour::White),
             black: f(Colour::Black),
         }
+    }
+
+    /// Both values with the colour each belongs to, White first.
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (Colour, &T)> {
+        [(Colour::White, &self.white), (Colour::Black, &self.black)].into_iter()
+    }
+}
+
+impl<T> IntoIterator for ByColour<T> {
+    type Item = (Colour, T);
+    type IntoIter = core::array::IntoIter<(Colour, T), 2>;
+
+    /// Both values with the colour each belongs to, White first.
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        [(Colour::White, self.white), (Colour::Black, self.black)].into_iter()
     }
 }
 
@@ -1159,7 +1452,8 @@ mod serde_impls {
     use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
 
     use super::{
-        ByColour, Colour, File, FileSet, PerFile, PerRank, Piece, Rank, Role, Square, SquareSet,
+        ByColour, Colour, File, FileSet, PerFile, PerRank, PerRole, Piece, Rank, Role, Square,
+        SquareSet,
     };
 
     impl Serialize for Colour {
@@ -1234,6 +1528,16 @@ mod serde_impls {
     impl<T: Serialize> Serialize for PerRank<T> {
         fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
             let mut seq = out.serialize_seq(Some(8))?;
+            for value in self.iter() {
+                seq.serialize_element(value)?;
+            }
+            seq.end()
+        }
+    }
+
+    impl<T: Serialize> Serialize for PerRole<T> {
+        fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+            let mut seq = out.serialize_seq(Some(6))?;
             for value in self.iter() {
                 seq.serialize_element(value)?;
             }

@@ -53,7 +53,7 @@ pub fn python_stub() -> String {
 
     for group in super::catalogue() {
         let class = class_of(group.name);
-        out.push_str(&facts_class(&class, &group.meaning(), group.fields, &class));
+        out.push_str(&facts_class(&class, group.meaning(), group.fields, &class));
     }
     out.push_str(&facts_class(
         "MoveFacts",
@@ -61,6 +61,16 @@ pub fn python_stub() -> String {
         MoveFacts::FIELDS,
         "MoveFacts",
     ));
+
+    out.push_str(
+        "#: Any one group of facts, as `Facts.group()` hands one over.\ntype AnyFacts = (\n",
+    );
+    let classes: Vec<String> = super::catalogue()
+        .iter()
+        .map(|group| class_of(group.name))
+        .collect();
+    out.push_str(&format!("    {}\n", classes.join("\n    | ")));
+    out.push_str(")\n\n");
 
     out.push_str(END);
     out.push('\n');
@@ -123,7 +133,7 @@ fn facts_class(name: &str, doc: &str, fields: &[Field], dict: &str) -> String {
             field.name,
             attribute_type(&field.kind())
         ));
-        out.push_str(&docstring(&field.meaning(), 8));
+        out.push_str(&docstring(field.meaning(), 8));
     }
     for (class, extra) in EXTRAS {
         if *class == name {
@@ -243,13 +253,110 @@ const EXTRAS: &[(&str, &str)] = &[
 
 /// The aliases every generated class is written in terms of.
 const HEADER: &str = "\
+#: A colour, as every esca surface writes one.
+type Colour = Literal[\"white\", \"black\"]
+
+#: A colour, as every esca surface reads one: either spelling, either case.
+type ColourName = Literal[\"white\", \"black\", \"White\", \"Black\", \"WHITE\", \"BLACK\", \"w\", \"b\", \"W\", \"B\"]
+
 #: A file letter.
 type FileLetter = Literal[\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\", \"h\"]
+
+#: A file, as a file argument reads one: either case.
+type FileName = Literal[
+    \"a\",
+    \"b\",
+    \"c\",
+    \"d\",
+    \"e\",
+    \"f\",
+    \"g\",
+    \"h\",
+    \"A\",
+    \"B\",
+    \"C\",
+    \"D\",
+    \"E\",
+    \"F\",
+    \"G\",
+    \"H\",
+]
 
 #: A role letter, as every esca surface spells a piece kind.
 type RoleLetter = Literal[\"p\", \"n\", \"b\", \"r\", \"q\", \"k\"]
 
-#: The side a king\'s square and its spent castling rights read as.
+#: A role, as a role argument reads one: either case.
+type RoleName = Literal[\"p\", \"n\", \"b\", \"r\", \"q\", \"k\", \"P\", \"N\", \"B\", \"R\", \"Q\", \"K\"]
+
+#: A square name, a1 through h8.
+type Square = Literal[
+    \"a1\",
+    \"b1\",
+    \"c1\",
+    \"d1\",
+    \"e1\",
+    \"f1\",
+    \"g1\",
+    \"h1\",
+    \"a2\",
+    \"b2\",
+    \"c2\",
+    \"d2\",
+    \"e2\",
+    \"f2\",
+    \"g2\",
+    \"h2\",
+    \"a3\",
+    \"b3\",
+    \"c3\",
+    \"d3\",
+    \"e3\",
+    \"f3\",
+    \"g3\",
+    \"h3\",
+    \"a4\",
+    \"b4\",
+    \"c4\",
+    \"d4\",
+    \"e4\",
+    \"f4\",
+    \"g4\",
+    \"h4\",
+    \"a5\",
+    \"b5\",
+    \"c5\",
+    \"d5\",
+    \"e5\",
+    \"f5\",
+    \"g5\",
+    \"h5\",
+    \"a6\",
+    \"b6\",
+    \"c6\",
+    \"d6\",
+    \"e6\",
+    \"f6\",
+    \"g6\",
+    \"h6\",
+    \"a7\",
+    \"b7\",
+    \"c7\",
+    \"d7\",
+    \"e7\",
+    \"f7\",
+    \"g7\",
+    \"h7\",
+    \"a8\",
+    \"b8\",
+    \"c8\",
+    \"d8\",
+    \"e8\",
+    \"f8\",
+    \"g8\",
+    \"h8\",
+]
+
+#: The side a king's square and its spent castling rights read as.
 type CastledSide = Literal[\"short\", \"long\"]
 
 #: Which opposition the kings stand in.
@@ -272,7 +379,12 @@ class ColourPair[T](TypedDict):
 
 @final
 class ByColour[T]:
-    \"\"\"One value for White and one for Black.\"\"\"
+    \"\"\"One value for White and one for Black.
+
+    Iterating gives the two values, White first, so `white, black = pair`
+    unpacks; `items()` gives each with the colour it belongs to. A pair hashes
+    when both of its values do.
+    \"\"\"
 
     __match_args__: Final[tuple[Literal[\"white\"], Literal[\"black\"]]]
 
@@ -281,9 +393,14 @@ class ByColour[T]:
     def white(self) -> T: ...
     @property
     def black(self) -> T: ...
-    def of(self, colour: str) -> T: ...
-    def __getitem__(self, colour: str) -> T: ...
+    def of(self, colour: ColourName) -> T: ...
+    def items(self) -> list[tuple[Colour, T]]: ...
+    def __getitem__(self, colour: ColourName) -> T: ...
+    def __iter__(self) -> Iterator[T]: ...
+    def __len__(self) -> int: ...
+    def __contains__(self, colour: str) -> bool: ...
     def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
     def __class_getitem__(cls, item: Any) -> Any: ...
 
 ";

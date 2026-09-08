@@ -145,7 +145,7 @@ fn check_roles(tactics: &TacticsFacts, colour: Colour) -> [bool; 5] {
         tactics.check_by_rook,
         tactics.check_by_queen,
     ]
-    .map(|flag| flag.of(colour))
+    .map(|flag| *flag.of(colour))
 }
 
 /// The same for the checks whose destination is safe.
@@ -157,7 +157,7 @@ fn safe_check_roles(tactics: &TacticsFacts, colour: Colour) -> [bool; 5] {
         tactics.safe_check_by_rook,
         tactics.safe_check_by_queen,
     ]
-    .map(|flag| flag.of(colour))
+    .map(|flag| *flag.of(colour))
 }
 
 /// The four promotion flags of `colour`, queen first.
@@ -168,7 +168,7 @@ fn promotion_roles(tactics: &TacticsFacts, colour: Colour) -> [bool; 4] {
         tactics.promotes_to_bishop,
         tactics.promotes_to_knight,
     ]
-    .map(|flag| flag.of(colour))
+    .map(|flag| *flag.of(colour))
 }
 
 /// The five counted roles, named by their letters in the order the schema
@@ -756,8 +756,8 @@ fn a_discovered_attack_on_the_queen_wants_the_queen_and_no_lesser_unit(
     assert_eq!(tactics.discovered_attack_on_queen.black, uncovered[1]);
     for colour in Colour::ALL {
         assert!(
-            tactics.discovered_attack_available.of(colour)
-                || !tactics.discovered_attack_on_queen.of(colour)
+            *tactics.discovered_attack_available.of(colour)
+                || !*tactics.discovered_attack_on_queen.of(colour)
         );
     }
 }

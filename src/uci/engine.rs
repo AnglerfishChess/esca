@@ -31,10 +31,10 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// dies without closing its pipes is still noticed.
 pub(super) const POLL: Duration = Duration::from_millis(200);
 
-/// The instant `budget` from now, saturating rather than overflowing.
-pub(super) fn deadline(budget: Duration) -> Instant {
+/// The instant `wait` from now, saturating rather than overflowing.
+pub(super) fn deadline(wait: Duration) -> Instant {
     let now = Instant::now();
-    now.checked_add(budget)
+    now.checked_add(wait)
         .unwrap_or_else(|| now + Duration::from_secs(60 * 60 * 24 * 365))
 }
 
@@ -116,9 +116,10 @@ pub struct Answer {
     pub ponder: Option<Move>,
 }
 
-/// What a running search produces.
+/// What a running search produces. The client's own step, not part of the
+/// protocol.
 #[derive(Clone, PartialEq, Debug)]
-pub enum Progress {
+pub(crate) enum Progress {
     /// One search report.
     Info(Box<Info>),
     /// The search is over.
@@ -468,13 +469,8 @@ impl Engine {
         Ok(())
     }
 
-    /// Sends `go`, leaving its reports to be read one at a time.
-    pub fn start_search(&mut self, limits: &Limits) -> Result<(), Error> {
-        self.send(Command::Go(limits.clone()))
-    }
-
     /// The next report of the search in flight, waiting at most `timeout`.
-    pub fn next_progress(&mut self, timeout: Duration) -> Result<Progress, Error> {
+    pub(crate) fn next_progress(&mut self, timeout: Duration) -> Result<Progress, Error> {
         let game = self.searched();
         let until = deadline(timeout);
         loop {
@@ -491,37 +487,55 @@ impl Engine {
         }
     }
 
-    /// Starts a search, which must produce its `bestmove` within `budget`.
-    pub fn go(&mut self, limits: &Limits, budget: Duration) -> Result<Search<'_>, Error> {
+    /// Starts a search under `limits`.
+    ///
+    /// The [`Search`] is the whole of the answer: iterate it for the reports
+    /// as they arrive, and ask it for [`Search::answer`] when only the move
+    /// matters. Dropping it stops the search.
+    ///
+    /// ```no_run
+    /// use esca::uci::{Engine, Limits};
+    ///
+    /// let mut engine = Engine::spawn("stockfish", ["--quiet"])?;
+    /// engine.handshake()?;
+    /// let mut search = engine.go(&Limits::depth(12))?;
+    /// while let Some(info) = search.next().transpose()? {
+    ///     println!("{:?} {:?}", info.depth, info.score);
+    /// }
+    /// let answer = search.answer()?;
+    /// # Ok::<(), esca::uci::Error>(())
+    /// ```
+    pub fn go(&mut self, limits: &Limits) -> Result<Search<'_>, Error> {
         self.start_search(limits)?;
         let game = self.searched();
+        let silence = limits.movetime.unwrap_or_default() + self.timeout;
         Ok(Search {
-            until: deadline(budget),
-            budget,
+            until: deadline(silence),
+            silence,
             engine: self,
             game,
             answer: None,
         })
     }
 
-    /// Sets the position, searches it, and answers.
-    pub fn play(
-        &mut self,
-        game: &Game,
-        limits: &Limits,
-        budget: Duration,
-    ) -> Result<Answer, Error> {
+    /// Sends `go`, leaving the reports to a caller that reads them itself.
+    pub(crate) fn start_search(&mut self, limits: &Limits) -> Result<(), Error> {
+        self.send(Command::Go(limits.clone()))
+    }
+
+    /// Sets the position, searches it under `limits`, and answers.
+    pub fn play(&mut self, game: &Game, limits: &Limits) -> Result<Answer, Error> {
         self.set_position(game)?;
-        self.go(limits, budget)?.answer()
+        self.go(limits)?.answer()
     }
 
     /// Asks the search in flight to finish now.
-    pub fn stop(&mut self) -> Result<(), Error> {
+    pub(crate) fn stop(&mut self) -> Result<(), Error> {
         self.send(Command::Stop)
     }
 
     /// Tells the engine the move it is pondering on was played.
-    pub fn ponderhit(&mut self) -> Result<(), Error> {
+    pub(crate) fn ponderhit(&mut self) -> Result<(), Error> {
         self.send(Command::PonderHit)
     }
 
@@ -634,13 +648,18 @@ impl Drop for Engine {
     }
 }
 
-/// A search in flight. Dropping one stops it and waits for the engine's
+/// A search in flight.
+///
+/// Iterating it gives every report the engine sends, up to the move it
+/// chooses; [`Search::answer`] skips to that move. A search that says nothing
+/// for what its limits asked for plus [`Engine::timeout`] fails with
+/// [`Error::Timeout`]. Dropping one stops it and waits for the engine's
 /// answer, so the engine is left idle.
 pub struct Search<'a> {
     engine: &'a mut Engine,
     game: Game,
     until: Instant,
-    budget: Duration,
+    silence: Duration,
     answer: Option<Answer>,
 }
 
@@ -658,6 +677,12 @@ impl Search<'_> {
     /// Whether the engine has answered.
     pub fn is_done(&self) -> bool {
         self.answer.is_some()
+    }
+
+    /// How many lines the engine wrote that were never read, because it wrote
+    /// them faster than they were read.
+    pub fn dropped_lines(&self) -> u64 {
+        self.engine.dropped_lines()
     }
 
     /// The next report, or `None` once the engine has answered.
@@ -693,19 +718,17 @@ impl Search<'_> {
     }
 
     /// The next report, or the answer that ends the search.
-    ///
-    /// # Panics
-    /// If the engine has already answered.
-    pub fn progress(&mut self) -> Result<Progress, Error> {
+    fn progress(&mut self) -> Result<Progress, Error> {
         assert!(!self.is_done(), "the search is over");
         let left = self.until.saturating_duration_since(Instant::now());
         if left.is_zero() {
             return Err(Error::Timeout {
                 awaited: "bestmove",
-                after: self.budget,
+                after: self.silence,
             });
         }
         let progress = self.engine.next_progress(left)?;
+        self.until = deadline(self.silence);
         if let Progress::Done(answer) = progress {
             self.answer = Some(answer);
         }
@@ -728,8 +751,8 @@ impl Drop for Search<'_> {
             return;
         }
         if self.engine.stop().is_ok() {
-            self.until = deadline(self.engine.timeout);
-            self.budget = self.engine.timeout;
+            self.silence = self.engine.timeout;
+            self.until = deadline(self.silence);
             if let Err(error) = self.answer() {
                 debug!("Abandoning the search: {error}");
             }

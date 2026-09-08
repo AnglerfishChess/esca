@@ -498,7 +498,7 @@ fn a_bestmove_reads_as_a_move_of_the_position_searched() {
     let chosen = best.best_move(&game).expect("e2e4 is legal");
     assert_eq!(game.move_to_san(chosen), "e4");
     let reply = best.ponder_move(&game).expect("e7e5 is legal after e2e4");
-    assert_eq!(reply.to_string(), "e7e5");
+    assert_eq!(game.move_to_uci(reply), "e7e5");
 }
 
 #[test]

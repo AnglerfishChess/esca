@@ -7,9 +7,12 @@ off, and every reason that applies is present, not the first of them.
 """
 
 from collections.abc import Iterable
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import esca
+
+if TYPE_CHECKING:
+    from esca._esca import ColourName, RoleName, Square, Wing
 
 #: A colour letter as the answers spell it.
 COLOURS = {"w": "white", "b": "black", "white": "white", "black": "black"}
@@ -49,7 +52,7 @@ def squares(square_set: esca.SquareSet) -> list[str]:
 
 def unit(position: esca.Position, square: str) -> dict[str, str] | None:
     """The unit standing on `square`, or `None` when it is empty."""
-    letter = position.piece_at(square)
+    letter = position.piece_at(cast("Square", square))
     if letter is None:
         return None
     return {"square": square, "colour": colour("w" if letter.isupper() else "b"), "role": role(letter)}
@@ -110,7 +113,7 @@ def castling_wing(position: esca.Position, side: str, wing: str) -> dict[str, An
     own evidence; it is empty exactly when `allowed` is true.
     """
     letter = "w" if side == "white" else "b"
-    answer = position.castling(letter, wing)
+    answer = position.castling(cast("ColourName", letter), cast("Wing", wing))
     rank = "1" if side == "white" else "8"
     obstacles: list[dict[str, Any]] = []
     if not answer.right:
@@ -308,11 +311,14 @@ def signature(item: esca.endings.MaterialSignature) -> dict[str, Any]:
         "stronger": colour(item.stronger),
         "pawns": item.pawns,
         "count": {
-            name: {role_name: item.count(letter, ROLE_LETTERS[role_name]) for role_name in ROLE_ORDER}
+            name: {
+                role_name: item.count(cast("ColourName", letter), cast("RoleName", ROLE_LETTERS[role_name]))
+                for role_name in ROLE_ORDER
+            }
             for letter, name in COLOURS.items()
         },
-        "pieces": {name: item.pieces(letter) for letter, name in COLOURS.items()},
-        "value": {name: item.value(letter) for letter, name in COLOURS.items()},
+        "pieces": {name: item.pieces(cast("ColourName", letter)) for letter, name in COLOURS.items()},
+        "value": {name: item.value(cast("ColourName", letter)) for letter, name in COLOURS.items()},
     }
 
 

@@ -6,6 +6,7 @@
 mod board;
 mod convert;
 mod endings;
+pub(crate) mod errors;
 mod explain;
 mod facts;
 #[cfg(feature = "openings")]
@@ -32,6 +33,7 @@ fn default_variant() -> PyVariant {
 #[pymodule]
 #[pyo3(name = "_esca")]
 fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    errors::register(module)?;
     module.add_class::<board::PyVariant>()?;
     module.add_class::<board::PySquareSet>()?;
     module.add_class::<values::PyFileSet>()?;

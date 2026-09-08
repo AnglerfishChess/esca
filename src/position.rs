@@ -4,10 +4,11 @@ use core::fmt;
 
 use cozy_chess as cc;
 
-use crate::error::FenError;
+use crate::error::{FenError, MoveParseError};
 use crate::fen;
-use crate::moves::Move;
-use crate::types::{Colour, File, Piece, Rank, Role, Square, SquareSet};
+use crate::moves::{Move, MoveList};
+use crate::types::{Colour, File, Piece, Rank, Role, Square, SquareSet, Wing};
+use crate::variant::{CastlingOutput, Outcome, Variant};
 
 /// A Zobrist key.
 ///
@@ -34,12 +35,40 @@ impl fmt::Display for Key {
 /// An evaluation of a position. Positive favours the side to move; `Mate(n)`
 /// is a forced mate in *n* moves, negative when it is against the side to
 /// move.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+///
+/// Scores order the way a searcher wants them: a mate to give beats every
+/// centipawn score and the sooner of two such mates is the greater, a mate to
+/// suffer loses to every centipawn score and the later of two such mates is
+/// the greater.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Score {
     /// Centipawns.
     Cp(i32),
     /// Moves to a forced mate.
     Mate(i32),
+}
+
+impl Score {
+    /// The tier a comparison sorts by, then the value within it.
+    fn rank(self) -> (i8, i32) {
+        match self {
+            Score::Mate(n) if n > 0 => (1, -n),
+            Score::Cp(cp) => (0, cp),
+            Score::Mate(n) => (-1, -n),
+        }
+    }
+}
+
+impl Ord for Score {
+    fn cmp(&self, other: &Score) -> core::cmp::Ordering {
+        self.rank().cmp(&other.rank())
+    }
+}
+
+impl PartialOrd for Score {
+    fn partial_cmp(&self, other: &Score) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl fmt::Display for Score {
@@ -70,16 +99,22 @@ impl CastlingRights {
         files: [[Some(File::H), Some(File::A)]; 2],
     };
 
+    /// The file of the rook `colour` may castle on `wing` with.
+    #[inline]
+    pub fn of(&self, colour: Colour, wing: Wing) -> Option<File> {
+        self.files[colour.index()][usize::from(wing == Wing::Long)]
+    }
+
     /// The file of the rook `colour` may castle short with.
     #[inline]
     pub fn short(&self, colour: Colour) -> Option<File> {
-        self.files[colour.index()][0]
+        self.of(colour, Wing::Short)
     }
 
     /// The file of the rook `colour` may castle long with.
     #[inline]
     pub fn long(&self, colour: Colour) -> Option<File> {
-        self.files[colour.index()][1]
+        self.of(colour, Wing::Long)
     }
 
     /// Whether `colour` may still castle either way.
@@ -151,7 +186,11 @@ impl fmt::Display for CastlingRights {
 /// An immutable, variant-agnostic snapshot: placement, side to move, castling
 /// rights, en-passant square and clocks.
 ///
-/// Every question that needs rules is asked of a `Variant` or of a `Game`.
+/// A question that needs rules takes the variant that answers it —
+/// [`legal_moves`](Position::legal_moves), [`play`](Position::play),
+/// [`san`](Position::san), [`facts`](Position::facts). A question that needs
+/// the moves played before it — repetition, claimable draws, the opening —
+/// belongs to a [`Game`](crate::Game).
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Position {
     board: cc::Board,
@@ -426,9 +465,77 @@ impl Position {
     }
 }
 
+/// The rules questions, each answered by the `variant` that defines it.
+impl Position {
+    /// Every legal move here.
+    ///
+    /// ```
+    /// use esca::{CLASSIC, Position};
+    ///
+    /// let position = Position::from_fen("6k1/8/8/8/8/8/8/K6R w - - 0 1")?;
+    /// assert_eq!(position.legal_moves(&CLASSIC).len(), 16);
+    /// # Ok::<(), esca::FenError>(())
+    /// ```
+    pub fn legal_moves(&self, variant: &dyn Variant) -> MoveList {
+        let mut moves = MoveList::new();
+        variant.legal_moves(self, &mut moves);
+        moves
+    }
+
+    /// Whether `mv` may be played here.
+    pub fn is_legal(&self, variant: &dyn Variant, mv: Move) -> bool {
+        variant.is_legal(self, mv)
+    }
+
+    /// The position after `mv`.
+    ///
+    /// # Panics
+    /// If `mv` is not legal here.
+    pub fn play(&self, variant: &dyn Variant, mv: Move) -> Position {
+        variant.play(self, mv)
+    }
+
+    /// The SAN text of `mv`, with its check or mate mark.
+    pub fn san(&self, variant: &dyn Variant, mv: Move) -> String {
+        variant.move_to_san(self, mv)
+    }
+
+    /// The move `text` names in SAN.
+    pub fn parse_san(&self, variant: &dyn Variant, text: &str) -> Result<Move, MoveParseError> {
+        variant.move_from_san(self, text)
+    }
+
+    /// The UCI text of `mv`, castling spelled as `style` asks.
+    pub fn uci(&self, variant: &dyn Variant, mv: Move, style: CastlingOutput) -> String {
+        variant.move_to_uci(self, mv, style)
+    }
+
+    /// The move `text` names in UCI notation, either castling spelling.
+    pub fn parse_uci(&self, variant: &dyn Variant, text: &str) -> Result<Move, MoveParseError> {
+        variant.move_from_uci(self, text)
+    }
+
+    /// The terminal condition this position has reached on its own.
+    ///
+    /// Repetition needs the moves played, so it belongs to
+    /// [`Game::outcome`](crate::Game::outcome).
+    pub fn outcome(&self, variant: &dyn Variant) -> Option<Outcome> {
+        variant.outcome(self)
+    }
+}
+
 impl fmt::Display for Position {
     /// The six-field FEN.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.fen())
+    }
+}
+
+impl std::str::FromStr for Position {
+    type Err = FenError;
+
+    /// A six-field FEN, or a four-field one.
+    fn from_str(s: &str) -> Result<Position, FenError> {
+        Position::from_fen(s)
     }
 }

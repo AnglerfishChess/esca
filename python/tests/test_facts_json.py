@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import esca
 import jsonschema
@@ -30,7 +30,7 @@ IDS = [entry["name"] for entry in NAMED]
 def facts_of(entry: dict[str, str]) -> esca.Facts:
     """The facts of one named position, under the variant it names."""
     variant = esca.CHESS960 if entry["variant"] == "chess960" else esca.CLASSIC
-    return esca.Position.from_fen(entry["fen"]).facts(variant)
+    return esca.Position.from_fen(entry["fen"]).facts(variant=variant)
 
 
 @pytest.mark.parametrize("entry", NAMED, ids=IDS)
@@ -69,7 +69,8 @@ def test_a_group_writes_the_same_data_as_the_whole() -> None:
 )
 def test_every_shape_the_form_carries(group: str, field: str, expected: object) -> None:
     facts = esca.Position.from_fen("8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1").facts()
-    assert facts.group(group).to_dict()[field] == expected
+    written = cast("dict[str, object]", facts.group(group).to_dict())
+    assert written[field] == expected
 
 
 def test_an_open_file_set_is_the_list_of_its_letters() -> None:

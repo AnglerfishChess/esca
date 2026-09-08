@@ -7,6 +7,13 @@ JSON form `docs/facts.schema.json` describes.
 
 `esca.tensors` turns a run of positions into one typed array per fact; it needs
 NumPy, which the base install leaves out: `pip install esca[tensors]`.
+
+Every error raised here is an `esca.Error` and a `ValueError`: `FenError`,
+`IllegalMove`, `MoveParseError`, `PositionError` and `ParseError`.
+
+The three pages to read first are the README's Python block,
+<https://github.com/AnglerfishChess/esca/blob/main/docs/esca-api.md> §11, and
+<https://github.com/AnglerfishChess/esca/blob/main/docs/features.md>.
 """
 
 from . import endings, explain, openings, pgn, polyglot, uci
@@ -19,21 +26,27 @@ from ._esca import (
     AttackFacts,
     ByColour,
     EndgameFacts,
+    Error,
     ExchangeFacts,
     Facts,
+    FenError,
     FileSet,
     Game,
     HistoryFacts,
+    IllegalMove,
     KingFacts,
     MapFacts,
     MaterialFacts,
     MobilityFacts,
     Move,
     MoveFacts,
+    MoveParseError,
+    ParseError,
     PawnFacts,
     PieceFacts,
     PlacementFacts,
     Position,
+    PositionError,
     SquareSet,
     StateFacts,
     TacticsFacts,
@@ -53,21 +66,27 @@ __all__ = [
     "AttackFacts",
     "ByColour",
     "EndgameFacts",
+    "Error",
     "ExchangeFacts",
     "Facts",
+    "FenError",
     "FileSet",
     "Game",
     "HistoryFacts",
+    "IllegalMove",
     "KingFacts",
     "MapFacts",
     "MaterialFacts",
     "MobilityFacts",
     "Move",
     "MoveFacts",
+    "MoveParseError",
+    "ParseError",
     "PawnFacts",
     "PieceFacts",
     "PlacementFacts",
     "Position",
+    "PositionError",
     "SquareSet",
     "StateFacts",
     "TacticsFacts",

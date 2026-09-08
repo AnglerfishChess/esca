@@ -1,8 +1,8 @@
 //! UCI and SAN text, in both directions.
 
 use esca::{
-    CHESS960, CLASSIC, CastlingOutput, Game, Move, MoveList, MoveParseError, Position, Variant,
-    chess960, classic,
+    CHESS960, CLASSIC, CastlingOutput, Game, MoveList, MoveParseError, Position, Variant, chess960,
+    classic,
 };
 
 fn legal_moves(variant: &dyn Variant, position: &Position) -> MoveList {
@@ -251,7 +251,11 @@ fn a_game_plays_text_of_either_notation() {
         game.position().fen(),
         "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
     );
-    let played: Vec<String> = game.moves().iter().map(Move::to_string).collect();
+    let played: Vec<String> = game
+        .moves()
+        .iter()
+        .map(|mv| game.move_to_uci(*mv))
+        .collect();
     assert_eq!(played, ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]);
 
     let mut game = Game::with_seed(chess960(), 518);

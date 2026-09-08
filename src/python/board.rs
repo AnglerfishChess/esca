@@ -3,20 +3,21 @@
 use std::sync::Arc;
 
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyList, PyTuple};
 
 use crate::game::Game;
-use crate::moves::Move;
+use crate::moves::{Move, MoveKind};
 use crate::position::Position;
 use crate::types::{Piece, SquareSet};
-use crate::variant::Variant as VariantTrait;
+use crate::variant::{CastlingOutput, Variant as VariantTrait};
 
 use super::convert::{
     castling_output_from, castling_output_name, claim_name, colour_from, colour_name,
     move_kind_from, move_kind_name, outcome_name, role_from, role_name, square_from, square_name,
-    value_error, variant_by_name, wing_from,
+    variant_by_name, wing_from,
 };
 use super::endings::PyEnding;
+use super::errors::{fen_error, illegal_move, move_parse_error, parse_error, position_error};
 use super::explain::{
     PyCastling, PyClaimableDraw, PyDrawStatus, PyEnPassant, PyFiftyMove, PyPin, PyRepetition,
     PySkewer, claims,
@@ -218,13 +219,36 @@ impl PyMove {
         is_capture: bool,
     ) -> PyResult<PyMove> {
         let promotion = promotion.map(role_from).transpose()?;
+        let kind = move_kind_from(kind)?;
+        let takes = match kind {
+            MoveKind::Capture | MoveKind::EnPassant => true,
+            MoveKind::Quiet | MoveKind::Castling => false,
+            MoveKind::Promotion => is_capture,
+        };
+        if is_capture != takes && !matches!(kind, MoveKind::Promotion) {
+            return Err(parse_error(
+                "move whose kind and is_capture agree",
+                &format!("{}, is_capture={is_capture}", move_kind_name(kind)),
+            ));
+        }
         let mv = Move::new(
             square_from(origin)?,
             square_from(destination)?,
             promotion,
-            move_kind_from(kind)?,
+            kind,
         );
-        Ok(PyMove::new(mv.with_capture(is_capture)))
+        Ok(PyMove::new(mv.with_capture(takes)))
+    }
+
+    /// The move `text` names in UCI notation, four or five characters.
+    ///
+    /// The move carries no kind: only a position says what it captures and
+    /// whether it castles, so a move to play is read with
+    /// `Position.parse_uci` or played with `Game.play`.
+    #[staticmethod]
+    fn from_uci(text: &str) -> PyResult<PyMove> {
+        let mv: Move = text.parse().map_err(|_| parse_error("move", text))?;
+        Ok(PyMove::new(mv))
     }
 
     /// The square the moving unit starts on; for castling, the king's.
@@ -266,19 +290,21 @@ impl PyMove {
         self.inner.is_en_passant()
     }
 
-    /// Origin, destination and promotion role, castling king-to-rook. The
-    /// spelling a variant asks for comes from `Game.move_to_uci`.
-    #[getter]
-    fn uci(&self) -> String {
-        self.inner.to_string()
+    /// The UCI text, castling spelled as `castling` asks: `king_to_rook`,
+    /// correct in every variant, or `king_two_squares`, classic geometry
+    /// only. A Chess960 game spells its own castlings with
+    /// `Game.move_to_uci`.
+    #[pyo3(signature = (*, castling = "king_to_rook"))]
+    fn uci(&self, castling: &str) -> PyResult<String> {
+        Ok(self.inner.uci(castling_output_from(castling)?))
     }
 
     fn __str__(&self) -> String {
-        self.inner.to_string()
+        self.inner.uci(CastlingOutput::KingToRook)
     }
 
     fn __repr__(&self) -> String {
-        format!("<Move {}>", self.inner)
+        format!("<Move {:?}>", self.inner)
     }
 
     fn __getnewargs__(&self) -> (String, String, Option<String>, &'static str, bool) {
@@ -323,7 +349,7 @@ impl PyPosition {
     fn from_fen(fen: &str) -> PyResult<PyPosition> {
         Position::from_fen(fen)
             .map(PyPosition::new)
-            .map_err(value_error)
+            .map_err(|error| fen_error(error, fen))
     }
 
     /// The six-field FEN.
@@ -437,10 +463,101 @@ impl PyPosition {
     }
 
     /// The facts of this position under `variant`.
-    #[pyo3(signature = (variant = None))]
+    #[pyo3(signature = (*, variant = None))]
     fn facts(&self, variant: Option<PyVariant>) -> PyFacts {
         let variant = variant.unwrap_or_else(super::default_variant);
         PyFacts::of_position(&self.inner, variant)
+    }
+
+    /// Every legal move here, under `variant`.
+    #[pyo3(signature = (*, variant = None))]
+    fn legal_moves(&self, variant: Option<PyVariant>) -> Vec<PyMove> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        self.inner
+            .legal_moves(variant.rules())
+            .iter()
+            .copied()
+            .map(PyMove::new)
+            .collect()
+    }
+
+    /// Every legal move here with what it does, under `variant`.
+    #[pyo3(signature = (*, variant = None))]
+    fn annotated_moves(&self, variant: Option<PyVariant>) -> Vec<PyAnnotatedMove> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        self.inner
+            .annotated_moves(variant.rules())
+            .iter()
+            .copied()
+            .map(PyAnnotatedMove::new)
+            .collect()
+    }
+
+    /// The SAN text of `mv` here, with its check or mate mark.
+    #[pyo3(signature = (mv, *, variant = None))]
+    fn san(&self, mv: &PyMove, variant: Option<PyVariant>) -> String {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        self.inner.san(variant.rules(), mv.inner)
+    }
+
+    /// The move `text` names in SAN here.
+    #[pyo3(signature = (text, *, variant = None))]
+    fn parse_san(&self, text: &str, variant: Option<PyVariant>) -> PyResult<PyMove> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        self.inner
+            .parse_san(variant.rules(), text)
+            .map(PyMove::new)
+            .map_err(|error| move_parse_error(error, text, &self.inner.fen()))
+    }
+
+    /// The UCI text of `mv` here, castling spelled as `castling` asks.
+    #[pyo3(signature = (mv, *, variant = None, castling = "king_to_rook"))]
+    fn uci(&self, mv: &PyMove, variant: Option<PyVariant>, castling: &str) -> PyResult<String> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        Ok(self
+            .inner
+            .uci(variant.rules(), mv.inner, castling_output_from(castling)?))
+    }
+
+    /// The move `text` names in UCI notation here, either castling spelling.
+    #[pyo3(signature = (text, *, variant = None))]
+    fn parse_uci(&self, text: &str, variant: Option<PyVariant>) -> PyResult<PyMove> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        self.inner
+            .parse_uci(variant.rules(), text)
+            .map(PyMove::new)
+            .map_err(|error| move_parse_error(error, text, &self.inner.fen()))
+    }
+
+    /// The position after `mv`, given as a `Move` or as UCI text.
+    #[pyo3(signature = (mv, *, variant = None))]
+    fn play(&self, mv: &Bound<'_, PyAny>, variant: Option<PyVariant>) -> PyResult<PyPosition> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        let rules = variant.rules();
+        let mv = match mv.extract::<PyMove>() {
+            Ok(mv) => mv.inner,
+            Err(_) => {
+                let text: String = mv.extract()?;
+                self.inner
+                    .parse_uci(rules, &text)
+                    .map_err(|error| move_parse_error(error, &text, &self.inner.fen()))?
+            }
+        };
+        if !self.inner.is_legal(rules, mv) {
+            return Err(illegal_move(
+                &mv.uci(CastlingOutput::KingToRook),
+                &self.inner.fen(),
+            ));
+        }
+        Ok(PyPosition::new(self.inner.play(rules, mv)))
+    }
+
+    /// The terminal condition this position has reached on its own.
+    /// Repetition needs the moves played, so it is `Game.outcome()`.
+    #[pyo3(signature = (*, variant = None))]
+    fn outcome(&self, variant: Option<PyVariant>) -> Option<&'static str> {
+        let variant = variant.unwrap_or_else(super::default_variant);
+        self.inner.outcome(variant.rules()).map(outcome_name)
     }
 
     /// What stands in the way of `colour` castling on `wing`, which is
@@ -526,6 +643,14 @@ impl PyPosition {
     }
 }
 
+/// What `Game.__reduce__` hands pickle: the class, no arguments, and the
+/// state `__setstate__` reads.
+type Pickled<'py> = (
+    Bound<'py, PyAny>,
+    Bound<'py, PyTuple>,
+    (String, String, Vec<String>, &'static str),
+);
+
 /// A variant, a start position and the moves played from it.
 #[pyclass(module = "esca", name = "Game")]
 pub struct PyGame {
@@ -559,7 +684,8 @@ impl PyGame {
     #[pyo3(signature = (fen, *, variant = None))]
     fn from_fen(fen: &str, variant: Option<PyVariant>) -> PyResult<PyGame> {
         let variant = variant.unwrap_or_else(super::default_variant);
-        let game = Game::from_fen(variant.inner.clone(), fen).map_err(value_error)?;
+        let game =
+            Game::from_fen(variant.inner.clone(), fen).map_err(|error| fen_error(error, fen))?;
         Ok(PyGame::seeded(game, variant))
     }
 
@@ -569,7 +695,7 @@ impl PyGame {
     fn from_position(position: &PyPosition, variant: Option<PyVariant>) -> PyResult<PyGame> {
         let variant = variant.unwrap_or_else(super::default_variant);
         let game = Game::from_position(variant.inner.clone(), position.inner.clone())
-            .map_err(value_error)?;
+            .map_err(|error| position_error(error, &position.inner.fen()))?;
         Ok(PyGame::seeded(game, variant))
     }
 
@@ -652,16 +778,25 @@ impl PyGame {
 
     /// Plays a move, given as a `Move` or as UCI text.
     fn play(&mut self, mv: &Bound<'_, PyAny>) -> PyResult<()> {
+        let fen = self.inner.position().fen();
         if let Ok(mv) = mv.extract::<PyMove>() {
-            return self.inner.play(mv.inner).map_err(value_error);
+            return self
+                .inner
+                .play(mv.inner)
+                .map_err(|_| illegal_move(&mv.inner.uci(CastlingOutput::KingToRook), &fen));
         }
         let text: String = mv.extract()?;
-        self.inner.play_uci(&text).map_err(value_error)
+        self.inner
+            .play_uci(&text)
+            .map_err(|error| move_parse_error(error, &text, &fen))
     }
 
     /// Plays the move `text` names in SAN.
     fn play_san(&mut self, text: &str) -> PyResult<()> {
-        self.inner.play_san(text).map_err(value_error)
+        let fen = self.inner.position().fen();
+        self.inner
+            .play_san(text)
+            .map_err(|error| move_parse_error(error, text, &fen))
     }
 
     /// Takes back the last move, returning it.
@@ -744,6 +879,25 @@ impl PyGame {
         super::pgn::PyPgnGame::new(self.inner.to_pgn())
     }
 
+    /// A game with the same variant, start position and moves, playable on
+    /// without touching this one.
+    fn copy(&self) -> PyGame {
+        PyGame {
+            inner: self.inner.clone(),
+            variant: self.variant.clone(),
+        }
+    }
+
+    fn __copy__(&self) -> PyGame {
+        self.copy()
+    }
+
+    #[pyo3(signature = (memo = None))]
+    fn __deepcopy__(&self, memo: Option<&Bound<'_, PyAny>>) -> PyGame {
+        let _ = memo;
+        self.copy()
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<Game {} ply {} {}>",
@@ -751,5 +905,44 @@ impl PyGame {
             self.inner.ply(),
             self.inner.position().fen()
         )
+    }
+
+    /// The variant, the start position, the moves and the castling spelling:
+    /// enough to build this game again, and what pickling stores.
+    fn __getstate__(&self) -> (String, String, Vec<String>, &'static str) {
+        (
+            self.inner.variant().name().to_string(),
+            self.inner.start_position().fen(),
+            self.inner
+                .moves()
+                .iter()
+                .map(|mv| mv.uci(CastlingOutput::KingToRook))
+                .collect(),
+            castling_output_name(self.inner.castling_output()),
+        )
+    }
+
+    fn __setstate__(&mut self, state: (String, String, Vec<String>, String)) -> PyResult<()> {
+        let (variant, fen, moves, castling_output) = state;
+        let rules = variant_by_name(&variant)?;
+        let mut game =
+            Game::from_fen(rules.clone(), &fen).map_err(|error| fen_error(error, &fen))?;
+        game.set_castling_output(castling_output_from(&castling_output)?);
+        for text in &moves {
+            let position_fen = game.position().fen();
+            game.play_uci(text)
+                .map_err(|error| move_parse_error(error, text, &position_fen))?;
+        }
+        self.inner = game;
+        self.variant = PyVariant::new(rules);
+        Ok(())
+    }
+
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<Pickled<'py>> {
+        Ok((
+            slf.get_type().into_any(),
+            PyTuple::empty(slf.py()),
+            slf.borrow().__getstate__(),
+        ))
     }
 }

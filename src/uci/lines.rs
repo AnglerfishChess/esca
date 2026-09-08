@@ -52,6 +52,7 @@ impl Queue {
     }
 
     /// Whether there is nothing to read.
+    #[cfg(feature = "tokio")]
     pub(super) fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }

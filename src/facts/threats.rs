@@ -22,7 +22,7 @@ pub(super) fn threat_facts(position: &Position, scan: &Scan) -> ThreatFacts {
     for colour in Colour::ALL {
         let them = !colour;
         // A king is never captured, so it is in none of these sets.
-        let units = scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()];
+        let units = *scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()];
         // The sole defenders of an attacked friendly unit; the second such unit
         // a defender holds makes it overloaded.
         let mut sole = SquareSet::EMPTY;
@@ -37,7 +37,7 @@ pub(super) fn threat_facts(position: &Position, scan: &Scan) -> ThreatFacts {
                 facts.threatened[colour].insert(square);
                 facts.threatened_value[colour] += material_value(role);
             }
-            facts.threat_max_gain[colour] = facts.threat_max_gain.of(colour).max(see);
+            facts.threat_max_gain[colour] = facts.threat_max_gain[colour].max(see);
 
             if attackers
                 .into_iter()
@@ -91,9 +91,9 @@ fn xrays_through_enemy(scan: &Scan, colour: Colour) -> u8 {
     for role in [Role::Bishop, Role::Rook, Role::Queen] {
         for slider in scan.role_units.of(colour)[role.index()] {
             let attacks = scan.attacks_from[slider.index()];
-            for front in attacks & scan.units.of(them) {
+            for front in attacks & *scan.units.of(them) {
                 let xray = attacks_of(role, slider, colour, scan.occupied - front.to_set());
-                let behind = (xray - attacks) & line(slider, front) & scan.units.of(them);
+                let behind = (xray - attacks) & line(slider, front) & *scan.units.of(them);
                 if !behind.is_empty() {
                     count = count.saturating_add(1);
                 }
@@ -111,7 +111,7 @@ fn batteries(position: &Position, scan: &Scan, colour: Colour) -> (u8, bool) {
         | scan.role_units.of(colour)[Role::Queen.index()];
     let ring = attacks_of(
         Role::King,
-        scan.kings.of(!colour),
+        *scan.kings.of(!colour),
         !colour,
         SquareSet::EMPTY,
     );

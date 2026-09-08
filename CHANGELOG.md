@@ -2,25 +2,94 @@
 
 ## Unreleased
 
-- The typed facts are the API. `Position::facts()` answers 221 named facts in
-  14 groups, and 27 more about every legal move, each with its own type: a
-  `bool`, a count, a `SquareSet`, a `FileSet`, an `Option` or a named enum.
-  Nothing is scaled, capped or one-hot, and nothing has to be looked up in a
-  manifest to be read.
+### Breaking
+
+Each line is `old` → `new`, against 0.3.0. Where the name it renames is itself
+new in this cycle, the line is for a dependent tracking `main`.
+
+- `Facts` describes one position and carries no move data. `facts.moves` →
+  `position.annotated_moves(variant)` or `game.annotated_moves()` in Rust,
+  `position.annotated_moves()` or `game.annotated_moves()` in Python. `Facts`
+  is `Copy` as a result, and its JSON form and its tensor form hold no move
+  data either.
+- `Facts::variant()` → `Facts::variant_name()`, which is the `&'static str` it
+  always answered; `Game::variant()` keeps its own meaning, the rules
+  themselves. Python's `facts.variant` is the `Variant` object, unchanged.
+- Python: a rules question takes its variant by keyword.
+  `position.facts(variant)` → `position.facts(variant=variant)`.
+- `Move` has no `Display` and no `Default`. `mv.to_string()` and
+  `format!("{mv}")` → `mv.uci(CastlingOutput::KingToRook)`, or the variant's
+  `move_to_uci` where a Chess960 castling must not be misspelled; `{:?}` still
+  prints the king-to-rook UCI text. `Move::default()` has no replacement: a
+  move comes from generation or from parsing.
+- Python: `move.uci` → `move.uci()`, and `move.uci(castling="king_two_squares")`
+  for the other spelling. Cheap data a value already holds stays a property;
+  anything that takes an argument or does work is a method.
+- `Move`'s `FromStr` reads UCI coordinates and carries no kind, so a move to
+  *play* is `Variant::move_from_uci`, `Position::parse_uci` or
+  `Game::play_uci`. Its equality and hash are origin, destination and promotion
+  only, which is what its documentation always claimed, so a parsed move equals
+  the generated one and can be looked up by it.
+- `MoveList<T>` needs `T: Copy` where it needed `T: Copy + Default`.
+- `SquareParseError` → `esca::ParseError`, one type for every vocabulary parse,
+  carrying `expected` and `input`.
+- `ByColour::of`, `PerFile::of` and `PerRank::of` answer with `&T` for every
+  `T`, where they answered with `T` under a `Copy` bound:
+  `pair.of(colour)` → `*pair.of(colour)` where the value itself was wanted.
+- `endings::Signature::counts` is a `ByColour<PerRole<u8>>` and `value` a
+  `ByColour<u32>`, where both were arrays indexed by hand:
+  `sig.counts[colour.index()][role.index()]` → `*sig.counts.of(colour).of(role)`,
+  and `sig.value[colour.index()]` → `*sig.value.of(colour)`. `Signature::count`
+  is unchanged.
+- One spelling per draw condition, everywhere.
+  `explain::AutomaticDraw::Fivefold` → `FivefoldRepetition` and
+  `explain::ClaimableDraw::Threefold` → `ThreefoldRepetition`; in Python the
+  `kind` strings `"fivefold"` → `"fivefold_repetition"` and `"threefold"` →
+  `"threefold_repetition"`. Both enums answer `name()` with the same spelling
+  `Outcome` and `DrawClaim` use.
+- The catalogue allocates nothing. `Field::type_name`, `Field::meaning` and
+  `Group::meaning` answer `&'static str` where they answered `String`,
+  `Field::shape` a `&'static [usize]` where it answered `Vec<usize>`, and
+  `tensors::Entry`'s `name`, `declared`, `order`, `meaning`, `shape` and
+  `encoding` are `&'static` as well: drop the `&` or the `.clone()` a caller
+  had around them.
+- One UCI search API. `engine.go(&limits, budget)` → `engine.go(&limits)` and
+  `engine.play(&game, &limits, budget)` → `engine.play(&game, &limits)`.
+  `Engine::start_search`, `Engine::next_progress`, `Engine::stop`,
+  `Engine::ponderhit` and `Progress` are no longer public: a search is steered
+  through the `Search` it handed back, so `engine.stop()` → `search.stop()` and
+  `engine.ponderhit()` → `search.ponderhit()`. `Search` is the whole search —
+  `next_info()`, `Iterator` on the blocking client, `answer()`, `stop()`,
+  `ponderhit()`, `is_done()`, `game()`, `state()`, `dropped_lines()`. The same
+  on `uci::tokio::Engine`, whose `Search` awaits `next_info()` and has no
+  `Iterator`.
+- The wall-clock guard is on silence, not on the search. A search fails with
+  `Error::Timeout` once the engine has said nothing for what its limits ask for
+  (`Limits::movetime`) plus `Engine::timeout`, so a long `movetime` no longer
+  needs a long timeout; `Engine::set_timeout` is the per-call knob.
+- Python: `uci.Engine.stop()` and `uci.Engine.ponderhit()` are gone — use the
+  `Search`. `AsyncEngine.go(...)` is no longer a coroutine:
+  `async for report in await engine.go(limits)` →
+  `async for report in engine.go(limits)`, and `await engine.go(limits).answer()`
+  is the whole call when only the move matters. `AsyncEngine.stop` and
+  `ponderhit` are private; the `AsyncSearch` carries them.
+- Python: `Move(origin, destination, kind=…, is_capture=…)` refuses a kind and
+  an `is_capture` that disagree, where it used to keep both.
+- Python: the exceptions have names. What raised `ValueError` now raises
+  `esca.FenError`, `esca.IllegalMove`, `esca.MoveParseError`,
+  `esca.PositionError` or `esca.ParseError`, each of them both an `esca.Error`
+  and a `ValueError`, so `except ValueError` keeps working. A message names the
+  offending input and the position that refused it.
+- `describe()` says one thing: every sentence is about the value it is called
+  on and nothing else, and a value never repeats what a value it holds would
+  say. `EpCapture`, `DrawStatus`, `Ending` and `Evidence` answer differently
+  for it, each leaving the rest to the values it holds.
 - Every fact names the colour it is about. A value that differs between the
   two sides is a `ByColour<T>` — `.white`, `.black`, `.of(colour)`, `[colour]`
   — so the same placement reads the same whoever is to move. `Side`, `Us`,
   `Them`, `esca.US`, `esca.THEM` and every side-to-move-relative index are
   gone; a fact that really is about the side to move, such as `state.in_check`,
   is a plain value that says so.
-- The facts describe themselves. A catalogue carries every group, field, type
-  and meaning as data, `docs/features.md` is generated from it, and Python
-  walks a group without knowing it: `Facts.groups()`, `facts.group(name)` and
-  `to_dict()`. Rust serialises the same shape behind the new `serde` feature.
-- Python gains `esca.ByColour` and a first-class `esca.FileSet`, and
-  `SquareSet.files` says which files a set of squares stands on. A colour is
-  written `"white"` or `"black"` everywhere it is answered, and read from
-  either name, or from `"w"` or `"b"`, in any case.
 - The `f32` machinery is gone: `Schema`, `SchemaId`, `GroupSet`, `FeatureSet`,
   the feature manifests, `Facts::encode`, `encode_positions`, `encode_fens`,
   `MoveFacts::encode_into`, the Python `encode`, `encode_into`, `encode_moves`,
@@ -29,9 +98,7 @@
   replaces it is the typed tensor export below, which keeps every fact's own
   width and sign. The Rust `lichess` reader, which hands over typed records,
   stays.
-- `bishops_light` and `bishops_dark` now count the square colours they name.
-  They were read in the mover's view, so with Black to move they answered the
-  other way round.
+- NumPy is no longer a dependency of `esca`; it is the `tensors` extra.
 - Renames the same audit made: `state.can_castle_short` and `can_castle_long`,
   `state.en_passant_capture_legal`, `material.phase_points` (the count, not a
   fraction), `material.insufficient_material`, `pawns.queenside_majority` and
@@ -44,6 +111,58 @@
   are named for the side they are about: `mover_hanging_delta`,
   `enemy_hanging_delta`, `mover_king_attackers_delta`,
   `enemy_king_attackers_delta`.
+
+### Added
+
+- The typed facts are the API. `Position::facts()` answers 221 named facts in
+  14 groups about one position, and `annotated_moves()` 27 more about every
+  legal move, each with its own type: a `bool`, a count, a `SquareSet`, a
+  `FileSet`, an `Option` or a named enum. Nothing is scaled, capped or one-hot,
+  and nothing has to be looked up in a manifest to be read.
+- A `Position` answers the rules questions itself, each taking the variant that
+  defines it: `legal_moves`, `is_legal`, `play`, `san`, `parse_san`, `uci`,
+  `parse_uci`, `outcome`, `facts`, `annotated_moves`, and the `_in` pair that
+  reuses a `Scratch`. Python mirrors every one of them with a keyword-only
+  `variant`, and `Position.play` takes a `Move` or UCI text.
+- The board vocabulary writes the text it reads back. `Debug` is now `Display`
+  for `Colour` (`w`), `Role` (`n`), `Piece` (`N`), `File` (`d`), `Rank` (`4`),
+  `Square` (`e4`) and `Move` (`e2e4`) — `{:?}` on a square is `e4`, not a
+  wrapper around an index — and `FromStr` parses each of them back, a
+  `Position` from its FEN included.
+- `PerRole<T>` beside `PerFile<T>` and `PerRank<T>`; `ByColour::iter` and
+  `IntoIterator` hand over both values with the colour each belongs to, White
+  first.
+- `Wing` is a crate-root type — `esca::Wing`, still `explain::Wing` — with
+  `king_file`, `rook_file`, `name` and `Display`, and
+  `CastlingRights::of(colour, wing)` beside `short` and `long`.
+- `Score` orders and hashes the way a searcher wants: a mate to give beats
+  every `Cp` and the sooner of two such mates is the greater; a mate to suffer
+  loses to every `Cp` and the later is the greater.
+- `Outcome` and `DrawClaim` gained `name()`, `describe()`, `Display` and
+  `Hash`, and `Outcome::winner()`.
+- The facts describe themselves. A catalogue carries every group, field, type
+  and meaning as data, `docs/features.md` is generated from it, and Python
+  walks a group without knowing it: `Facts.groups()`, `facts.group(name)` and
+  `to_dict()`. Rust serialises the same shape behind the new `serde` feature.
+- Rust walks a group without knowing it too: `Facts::group(name)` hands out a
+  `&dyn FactsGroup`, whose `entry()`, `value(field)` and `fields()` answer in
+  catalogue order with `FieldValue` — `Bool`, `Int`, `Float`, `Name`,
+  `Squares`, `Files`, `Absent`, `Run` and `ByColour` — as the value.
+- Python gains `esca.ByColour` and a first-class `esca.FileSet`, and
+  `SquareSet.files` says which files a set of squares stands on. A colour is
+  written `"white"` or `"black"` everywhere it is answered, and read from
+  either name, or from `"w"` or `"b"`, in any case.
+- Python: a `Game` copies and pickles — `copy()`, `copy.copy`,
+  `copy.deepcopy`, `pickle` — over the variant's name, the start FEN, the moves
+  in UCI and the castling spelling.
+- Python: `Move.from_uci(text)`; and a `ByColour` iterates as its two values,
+  White first, so `white, black = pair` unpacks, with `items()`, `__len__`,
+  `__contains__` over colour names, and `__hash__` when its values hash.
+- `esca.tensors.names(groups=None)` publishes every array name, `group.field`,
+  which `docs/features.md` now carries in an `array` column as well.
+- docs.rs builds every feature and badges each gated item with the feature it
+  needs, and the crate-root documentation carries a feature table and links to
+  the API guide, the vocabulary and the facts.
 - `endings` names the ending a position is, needing no feature: a canonical
   material signature (`KRPvKR`, stronger side first), a catalogue of 32 named
   classes from `KvK` to the pawn endings, what theory says the result is, and
@@ -73,7 +192,6 @@
 - The crate lives at the root of its own repository,
   <https://github.com/AnglerfishChess/esca>; the engine and its trainer go on
   at <https://github.com/AnglerfishChess/anglerfish>.
-
 - Facts are typed for their purpose. A per-file count is a `PerFile<u8>` and a
   per-rank count a `PerRank<u8>` — eight values whose order is in the type, not
   in a comment — and every fact whose value is a run of positions states which
@@ -109,12 +227,35 @@
   values; `ByColour` gained `__match_args__` and `ByColour[T]` at runtime.
 - `history.last_move_victim` and the other role-valued facts keep their letter
   spelling (`p n b r q k`); only the three named enums are snake-case names.
-- `tactics.winning_capture_max_gain` reads "the largest victim value less
-  capturer value", the same quantity said without a Unicode minus.
-- NumPy is no longer a dependency of `esca`; it is the `tensors` extra.
 - The MCP `facts` tool answers in that one JSON form, its hand-written
   positional labels dropped, and carries a `field_notes` entry giving the
   catalogue meaning of every field whose value is a run of positions.
+
+### Fixed
+
+- `bishops_light` and `bishops_dark` now count the square colours they name.
+  They were read in the mover's view, so with Black to move they answered the
+  other way round.
+- `tactics.winning_capture_max_gain` reads "the largest victim value less
+  capturer value", the same quantity said without a Unicode minus.
+- `docs/esca-api.md` had a Python colour reading out as `"w"`; every Python
+  surface answers `"white"` or `"black"`, and reads either spelling.
+- `docs/esca-vocabulary.md` said the castling wings are named after the rook's
+  starting wing. They are named after where the king lands, which is what
+  `Wing` has always documented.
+- `docs/esca-vocabulary.md` defines the terms the API used without introducing:
+  *scratch*, *annotated move*, *group*, *field*, *entry*, *array name*,
+  *layout*, *form*, *batch*, `describe()` as a contract, and the UCI client's
+  *timeout* as against `Limits::movetime`.
+- `docs/esca-api.md` says where a Rust reader and a Python reader each start,
+  and which parts of the API exist on one surface only.
+- `tensors::Entry::order` numbers the axes of the stored array, so axis 0 is
+  the run of positions and the rest start at 1, which is how `Batch::shape_of`
+  has always numbered them. The two said different things about the same
+  array: `"axis 0: white, black"` is now `"axis 1: white, black"`.
+- `pgn::Game::mainline_game` and `pgn::Game::from_game` name `crate::Game` in
+  their signatures. An import alias made rustdoc render a `PlayedGame` type
+  the API does not have.
 - pyrefly now checks `python/`, which the paths it had named did not; that
   turned up a test helper still calling the encoder removed at 0.3.0.
 

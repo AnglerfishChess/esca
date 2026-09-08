@@ -24,28 +24,30 @@ use crate::variant::Variant;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Entry {
     /// The array's name: the group and the field, `pawns.passed`.
-    pub name: String,
+    pub name: &'static str,
     /// The group the fact belongs to.
     pub group: &'static str,
     /// The fact's own name.
     pub field: &'static str,
     /// What the fact holds, as the declaration spells it.
-    pub declared: String,
+    pub declared: &'static str,
     /// The element type, expanded.
     pub dtype: Dtype,
     /// The shape of one position's value, the batch axis left off.
-    pub shape: Vec<usize>,
-    /// What each axis means, outermost first; empty for a single value.
-    pub order: String,
+    pub shape: &'static [usize],
+    /// What each axis means, numbered the way [`Batch::shape_of`] numbers
+    /// them: axis 0 is the run of positions, so these start at 1. Empty for a
+    /// fact that is one value.
+    pub order: &'static str,
     /// How to read the values themselves, where the shape does not say.
-    pub encoding: Option<String>,
+    pub encoding: Option<&'static str>,
     /// The element type of the packed form.
     pub packed_dtype: Dtype,
     /// The shape of one position's packed value, or `None` where the packing
     /// runs across the batch and there is no per-position shape.
     pub packed_shape: Option<Vec<usize>>,
     /// The fact's own meaning, as the catalogue states it.
-    pub meaning: String,
+    pub meaning: &'static str,
     kind: FieldType,
 }
 
@@ -144,11 +146,11 @@ impl Layout {
                 "| `{}` | `{}` | `{}` | {} | {} |\n",
                 entry.name,
                 entry.dtype,
-                shape_text(&entry.shape),
+                shape_text(entry.shape),
                 if entry.order.is_empty() {
-                    "one value".to_string()
+                    "one value"
                 } else {
-                    entry.order.clone()
+                    entry.order
                 },
                 entry.meaning,
             ));
@@ -174,19 +176,25 @@ pub fn layout() -> &'static Layout {
 fn entry_of(group: &'static str, field: &'static Field) -> Entry {
     let kind = field.kind();
     Entry {
-        name: format!("{group}.{}", field.name),
+        name: kept(format!("{group}.{}", field.name)),
         group,
         field: field.name,
         declared: field.type_name(),
         dtype: kind.dtype(),
-        shape: kind.shape(),
-        order: kind.order(),
-        encoding: kind.encoding(),
+        shape: field.shape(),
+        order: kept(kind.order()),
+        encoding: kind.encoding().map(kept),
         packed_dtype: kind.packed_dtype(),
         packed_shape: kind.packed_shape(),
         meaning: field.meaning(),
         kind,
     }
+}
+
+/// Text the layout hands out for the life of the process. The layout is built
+/// once, so this runs once per fact.
+fn kept(text: String) -> &'static str {
+    Box::leak(text.into_boxed_str())
 }
 
 /// One array of a batch, typed as the layout says.

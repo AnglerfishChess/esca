@@ -12,7 +12,6 @@
 //! next call waits that search out before it says anything of its own.
 //!
 //! ```no_run
-//! use std::time::Duration;
 //! use esca::uci::tokio::Engine;
 //! use esca::uci::Limits;
 //! use esca::{Game, classic};
@@ -23,9 +22,7 @@
 //! engine.new_game().await?;
 //!
 //! let game = Game::new(classic());
-//! let answer = engine
-//!     .play(&game, &Limits::depth(12), Duration::from_secs(30))
-//!     .await?;
+//! let answer = engine.play(&game, &Limits::depth(12)).await?;
 //! engine.quit().await?;
 //! # Ok(())
 //! # }
@@ -232,8 +229,8 @@ impl Engine {
     }
 
     /// The next line the engine wrote, or `None` if it wrote none in time.
-    pub async fn next_line(&mut self, budget: Duration) -> Result<Option<String>, Error> {
-        let until = deadline(budget);
+    pub async fn next_line(&mut self, wait: Duration) -> Result<Option<String>, Error> {
+        let until = deadline(wait);
         loop {
             let (line, over) = {
                 let mut queue = held(&self.lines);
@@ -371,17 +368,12 @@ impl Engine {
         Ok(())
     }
 
-    /// Sends `go`, leaving its reports to be read one at a time.
-    pub async fn start_search(&mut self, limits: &Limits) -> Result<(), Error> {
-        self.issue(Command::Go(limits.clone())).await
-    }
-
-    /// The next report of the search in flight, waiting at most `budget`.
-    pub async fn next_progress(&mut self, budget: Duration) -> Result<Progress, Error> {
+    /// The next report of the search in flight, waiting at most `timeout`.
+    async fn next_progress(&mut self, timeout: Duration) -> Result<Progress, Error> {
         let game = self.searched();
-        let until = deadline(budget);
+        let until = deadline(timeout);
         loop {
-            match self.receive(until, budget, "bestmove").await? {
+            match self.receive(until, timeout, "bestmove").await? {
                 Message::Info(info) => return Ok(Progress::Info(info)),
                 Message::BestMove(best) => {
                     return Ok(Progress::Done(Answer {
@@ -394,37 +386,37 @@ impl Engine {
         }
     }
 
-    /// Starts a search, which must produce its `bestmove` within `budget`.
-    pub async fn go(&mut self, limits: &Limits, budget: Duration) -> Result<Search<'_>, Error> {
-        self.start_search(limits).await?;
+    /// Starts a search under `limits`.
+    ///
+    /// The [`Search`] is the whole of the answer: read [`Search::next_info`]
+    /// for the reports as they arrive, and [`Search::answer`] when only the
+    /// move matters. Letting it go unanswered stops the search.
+    pub async fn go(&mut self, limits: &Limits) -> Result<Search<'_>, Error> {
+        self.issue(Command::Go(limits.clone())).await?;
         let game = self.searched();
+        let silence = limits.movetime.unwrap_or_default() + self.timeout;
         Ok(Search {
-            until: deadline(budget),
-            budget,
+            until: deadline(silence),
+            silence,
             engine: self,
             game,
             answer: None,
         })
     }
 
-    /// Sets the position, searches it, and answers.
-    pub async fn play(
-        &mut self,
-        game: &Game,
-        limits: &Limits,
-        budget: Duration,
-    ) -> Result<Answer, Error> {
+    /// Sets the position, searches it under `limits`, and answers.
+    pub async fn play(&mut self, game: &Game, limits: &Limits) -> Result<Answer, Error> {
         self.set_position(game).await?;
-        self.go(limits, budget).await?.answer().await
+        self.go(limits).await?.answer().await
     }
 
     /// Asks the search in flight to finish now.
-    pub async fn stop(&mut self) -> Result<(), Error> {
+    async fn stop(&mut self) -> Result<(), Error> {
         self.issue(Command::Stop).await
     }
 
     /// Tells the engine the move it is pondering on was played.
-    pub async fn ponderhit(&mut self) -> Result<(), Error> {
+    async fn ponderhit(&mut self) -> Result<(), Error> {
         self.issue(Command::PonderHit).await
     }
 
@@ -564,14 +556,19 @@ impl Engine {
     }
 }
 
-/// A search in flight. Letting one go unanswered asks the engine to stop; the
+/// A search in flight.
+///
+/// [`Search::next_info`] gives every report the engine sends, up to the move
+/// it chooses; [`Search::answer`] skips to that move. A search that says
+/// nothing for what its limits asked for plus [`Engine::timeout`] fails with
+/// [`Error::Timeout`]. Letting one go unanswered asks the engine to stop; the
 /// engine's next call waits that search out, so it is idle again from there
 /// on.
 pub struct Search<'a> {
     engine: &'a mut Engine,
     game: Game,
     until: Instant,
-    budget: Duration,
+    silence: Duration,
     answer: Option<Answer>,
 }
 
@@ -589,6 +586,12 @@ impl Search<'_> {
     /// Whether the engine has answered.
     pub fn is_done(&self) -> bool {
         self.answer.is_some()
+    }
+
+    /// How many lines the engine wrote that were never read, because it wrote
+    /// them faster than they were read.
+    pub fn dropped_lines(&self) -> u64 {
+        self.engine.dropped_lines()
     }
 
     /// The next report, or `None` once the engine has answered.
@@ -624,19 +627,17 @@ impl Search<'_> {
     }
 
     /// The next report, or the answer that ends the search.
-    ///
-    /// # Panics
-    /// If the engine has already answered.
-    pub async fn progress(&mut self) -> Result<Progress, Error> {
+    async fn progress(&mut self) -> Result<Progress, Error> {
         assert!(!self.is_done(), "the search is over");
         let left = self.until.saturating_duration_since(Instant::now());
         if left.is_zero() {
             return Err(Error::Timeout {
                 awaited: "bestmove",
-                after: self.budget,
+                after: self.silence,
             });
         }
         let progress = self.engine.next_progress(left).await?;
+        self.until = deadline(self.silence);
         if let Progress::Done(answer) = progress {
             self.answer = Some(answer);
         }

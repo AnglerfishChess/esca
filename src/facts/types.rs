@@ -123,7 +123,14 @@ pub enum FieldType {
 }
 
 /// The type a declaration spells, or an explanation of what could not be read.
+///
+/// Whitespace is ignored, so a type stringified with spaces around its
+/// punctuation reads the same as the source spelling.
 pub fn parse(ty: &str) -> Result<FieldType, String> {
+    if ty.contains(char::is_whitespace) {
+        let tight: String = ty.split_whitespace().collect();
+        return parse(&tight);
+    }
     let ty = ty.trim();
     let inner = |head: &str| -> Option<&str> {
         ty.strip_prefix(head)
@@ -350,8 +357,9 @@ impl FieldType {
         }
     }
 
-    /// What each axis of the expanded shape means, outermost first. Empty for
-    /// a fact that is one value.
+    /// What each axis of the expanded array means, numbered the way
+    /// `Batch::shape_of` numbers them: axis 0 is the run of positions, so
+    /// these start at 1. Empty for a fact that is one value.
     pub fn order(&self) -> String {
         let mut axes = Vec::new();
         self.axes(&mut axes);
@@ -361,20 +369,21 @@ impl FieldType {
     fn axes(&self, out: &mut Vec<String>) {
         match self {
             FieldType::ByColour(item) => {
-                out.push(format!("axis {}: white, black", out.len()));
+                out.push(format!("axis {}: white, black", out.len() + 1));
                 item.axes(out);
             }
             FieldType::Fixed { item, run, .. } => {
-                out.push(format!("axis {}: {}", out.len(), run.order()));
+                out.push(format!("axis {}: {}", out.len() + 1, run.order()));
                 item.axes(out);
             }
             FieldType::SquareSet => out.push(format!(
                 "axis {}: the 64 squares, a1 first, then b1 through h1, then a2",
-                out.len()
+                out.len() + 1
             )),
-            FieldType::FileSet => {
-                out.push(format!("axis {}: the eight files, file a first", out.len()))
-            }
+            FieldType::FileSet => out.push(format!(
+                "axis {}: the eight files, file a first",
+                out.len() + 1
+            )),
             _ => {}
         }
     }

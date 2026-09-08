@@ -572,7 +572,7 @@ pub(crate) fn claims(claims: &[explain::ClaimableDraw]) -> Vec<PyClaimableDraw> 
 )]
 #[derive(Clone)]
 pub struct PyAutomaticDraw {
-    /// `stalemate`, `insufficient_material`, `fivefold` or
+    /// `stalemate`, `insufficient_material`, `fivefold_repetition` or
     /// `seventy_five_moves`.
     #[pyo3(get)]
     kind: String,
@@ -610,8 +610,8 @@ impl PyAutomaticDraw {
                 out.kind = "insufficient_material".to_string();
                 out.material = Some(material_name(*config).to_string());
             }
-            explain::AutomaticDraw::Fivefold(repetition) => {
-                out.kind = "fivefold".to_string();
+            explain::AutomaticDraw::FivefoldRepetition(repetition) => {
+                out.kind = "fivefold_repetition".to_string();
                 out.repetition = Some(PyRepetition::of(repetition));
             }
             explain::AutomaticDraw::SeventyFiveMoves(fifty) => {
@@ -654,7 +654,7 @@ fn material_name(config: explain::MaterialConfig) -> &'static str {
 )]
 #[derive(Clone)]
 pub struct PyClaimableDraw {
-    /// `threefold` or `fifty_moves`.
+    /// `threefold_repetition` or `fifty_moves`.
     #[pyo3(get)]
     kind: String,
     /// The plies the position has stood at.
@@ -669,8 +669,8 @@ pub struct PyClaimableDraw {
 impl PyClaimableDraw {
     fn of(claim: &explain::ClaimableDraw) -> PyClaimableDraw {
         match claim {
-            explain::ClaimableDraw::Threefold(repetition) => PyClaimableDraw {
-                kind: "threefold".to_string(),
+            explain::ClaimableDraw::ThreefoldRepetition(repetition) => PyClaimableDraw {
+                kind: "threefold_repetition".to_string(),
                 repetition: Some(PyRepetition::of(repetition)),
                 fifty_move: None,
                 inner: claim.clone(),

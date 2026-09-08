@@ -5,6 +5,24 @@ repository and a Python package of the same name built from it. Terms used below
 defined in [`esca-vocabulary.md`](esca-vocabulary.md); every fact, its type and
 its meaning in [`features.md`](features.md).
 
+## How to read this
+
+Rust and Python are one API under one set of names. The signature blocks below
+are Rust.
+
+- **A Rust reader** starts here and reads §1–§8 in order: variant, position,
+  move, game, facts, catalogue, JSON form, tensors.
+- **A Python reader** starts at [§11, the Python surface](#11-python-surface),
+  which is the whole of it in one place, and comes back to a numbered section
+  for what a name means.
+
+Four things exist on the Python surface only: `uci.Engine.analyse`,
+`uci.AsyncEngine` (`uci::tokio::Engine` is the Rust counterpart, not the same
+type), `Facts.to_dict()` (Rust serialises the same bytes through `serde`), and
+`esca.tensors`, whose arrays are NumPy's. Three exist on the Rust surface only:
+the `Scratch` buffers and the `*_in` methods that reuse them, `uci::tokio`, and
+`facts::tensors::Batch`.
+
 Board representation and move generation come from `cozy-chess`. Its types
 are an implementation detail: no `cozy_chess` item appears in any signature,
 constant or error of esca's public API, in either language.
@@ -98,6 +116,7 @@ that cannot pay it calls a concrete implementation (`Classic.legal_moves(…)`)
 directly.
 
 ```rust
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Outcome {
     Checkmate { winner: Colour },
     Stalemate,
@@ -106,15 +125,42 @@ pub enum Outcome {
     FivefoldRepetition,
 }
 
+impl Outcome {
+    /// `checkmate`, `stalemate`, `insufficient_material`,
+    /// `seventy_five_moves`, `fivefold_repetition`.
+    pub const fn name(self) -> &'static str;
+    /// The colour the result favours; `None` for the draws.
+    pub const fn winner(self) -> Option<Colour>;
+    pub fn describe(self) -> String;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DrawClaim { FiftyMoves, ThreefoldRepetition }
+
+impl DrawClaim {
+    /// `fifty_moves`, `threefold_repetition`.
+    pub const fn name(self) -> &'static str;
+    pub fn describe(self) -> &'static str;
+}
+
+/// The name, for both.
+impl fmt::Display for Outcome { /* … */ }
+impl fmt::Display for DrawClaim { /* … */ }
 ```
+
+Each draw condition has one spelling everywhere it is named — in `Outcome`, in
+`DrawClaim`, in `explain`'s two draw enums, in the Python strings and in the
+MCP payloads: `stalemate`, `insufficient_material`, `fivefold_repetition`,
+`seventy_five_moves`, `threefold_repetition`, `fifty_moves`.
 
 ---
 
 ## 2. Position
 
-Immutable and variant-agnostic: placement and state, no rules. Every query
-that needs rules takes a `&dyn Variant`, or is asked of a `Game`.
+Immutable and variant-agnostic: placement and state, no rules. A question that
+needs rules is asked of the position and takes the variant that answers it; a
+question that needs the moves played before it — repetition, claimable draws,
+the opening — belongs to a `Game`.
 
 ```rust
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -157,17 +203,45 @@ impl Position {
     pub fn see(&self, sq: Square) -> i32;
     pub fn see_capture(&self, mv: Move) -> i32;
 
-    /// Facts of this position under `variant`.
-    pub fn facts(&self, variant: &dyn Variant) -> Facts;
-    /// Same, reusing buffers; no allocation.
-    pub fn facts_in(&self, variant: &dyn Variant, scratch: &mut Scratch) -> Facts;
-
     /// Colours swapped and ranks flipped.
     pub fn mirrored(&self) -> Position;
 
     /// Board, side to move and state, for a human reader. Text not stable.
     pub fn summary(&self) -> String;
 }
+
+/// The rules questions, each answered by the `variant` that defines it.
+impl Position {
+    pub fn legal_moves(&self, variant: &dyn Variant) -> MoveList;
+    pub fn is_legal(&self, variant: &dyn Variant, mv: Move) -> bool;
+    /// Panics if `mv` is not legal here.
+    pub fn play(&self, variant: &dyn Variant, mv: Move) -> Position;
+
+    /// The SAN text of `mv`, with its check or mate mark.
+    pub fn san(&self, variant: &dyn Variant, mv: Move) -> String;
+    pub fn parse_san(&self, variant: &dyn Variant, text: &str) -> Result<Move, MoveParseError>;
+    /// The UCI text of `mv`, castling spelled as `style` asks.
+    pub fn uci(&self, variant: &dyn Variant, mv: Move, style: CastlingOutput) -> String;
+    /// Either castling spelling is read.
+    pub fn parse_uci(&self, variant: &dyn Variant, text: &str) -> Result<Move, MoveParseError>;
+
+    /// The terminal condition this position has reached on its own. Repetition
+    /// needs the moves played, so it is `Game::outcome`.
+    pub fn outcome(&self, variant: &dyn Variant) -> Option<Outcome>;
+
+    /// Facts of this position under `variant`.
+    pub fn facts(&self, variant: &dyn Variant) -> Facts;
+    /// Every legal move with what it does.
+    pub fn annotated_moves(&self, variant: &dyn Variant) -> MoveList<AnnotatedMove>;
+    /// The same two, reusing buffers; nothing is allocated.
+    pub fn facts_in(&self, variant: &dyn Variant, scratch: &mut Scratch) -> Facts;
+    pub fn annotated_moves_in(&self, variant: &dyn Variant, scratch: &mut Scratch)
+        -> MoveList<AnnotatedMove>;
+}
+
+/// The six-field FEN, and the FEN read back.
+impl fmt::Display for Position { /* … */ }
+impl FromStr for Position { type Err = FenError; /* … */ }
 
 /// A Zobrist key.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -179,17 +253,31 @@ impl Key {
 
 /// An evaluation of a position. Positive favours the side to move; `Mate(n)`
 /// is a forced mate in *n* moves, negative when it is against the side to move.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// The UCI spelling is its `Display`: `cp 25`, `mate -3`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Score { Cp(i32), Mate(i32) }
+```
 
+Scores order the way a searcher wants them: a mate to give beats every
+centipawn score and the sooner of two such mates is the greater; a mate to
+suffer loses to every centipawn score and the later of two such mates is the
+greater. So `slice.sort()` and `iter.max()` mean what they read as.
+
+```rust
 /// Chess960-compatible: each right names the rook's starting file.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct CastlingRights { /* [[Option<File>; 2]; 2] */ }
 
 impl CastlingRights {
+    pub const EMPTY: CastlingRights;
+    /// The rights of a classic starting array.
+    pub const CLASSIC: CastlingRights;
+    /// The file of the rook `colour` may castle on `wing` with.
+    pub fn of(&self, colour: Colour, wing: Wing) -> Option<File>;
     pub fn short(&self, colour: Colour) -> Option<File>;
     pub fn long(&self, colour: Colour) -> Option<File>;
     pub fn any(&self, colour: Colour) -> bool;
+    pub fn is_empty(&self) -> bool;
     /// `KQkq` when the rook files are the classic ones, `AHah` otherwise.
     pub fn to_fen_field(&self) -> String;
 }
@@ -200,7 +288,7 @@ impl CastlingRights {
 ## 3. Move
 
 ```rust
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy)]
 pub struct Move { /* from, to, promotion, kind */ }
 
 impl Move {
@@ -212,7 +300,22 @@ impl Move {
     pub fn is_capture(&self) -> bool;
     pub fn is_castling(&self) -> bool;
     pub fn is_en_passant(&self) -> bool;
+
+    /// The UCI text, castling spelled as `output` asks.
+    pub fn uci(&self, output: CastlingOutput) -> String;
 }
+
+/// Origin, destination and promotion only: the flags say what the move did in
+/// one position, and the same move is the same move in another.
+impl PartialEq for Move { /* … */ }
+impl Eq for Move {}
+impl Hash for Move { /* … */ }
+
+/// The UCI text, castling king-to-rook.
+impl fmt::Debug for Move { /* … */ }
+
+/// Origin, destination and promotion letter, four or five characters.
+impl FromStr for Move { type Err = ParseError; /* … */ }
 
 /// `kind` is the first case that applies, in the order castling, en passant,
 /// promotion, capture, quiet; `is_capture` is true for a capturing promotion
@@ -220,20 +323,28 @@ impl Move {
 pub enum MoveKind { Quiet, Capture, EnPassant, Castling, Promotion }
 
 /// Inline storage for the largest legal move count; never allocates.
+/// Derefs to `[T]`, so `iter`, `first`, `contains` and `sort_by_key` are there.
 pub struct MoveList<T = Move> { /* … */ }
 
-impl<T: Copy + Default> MoveList<T> {
+impl<T: Copy> MoveList<T> {
     pub fn new() -> MoveList<T>;
     pub fn clear(&mut self);
     pub fn push(&mut self, item: T);
     pub fn as_slice(&self) -> &[T];
+    pub fn as_mut_slice(&mut self) -> &mut [T];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
 }
 ```
 
-Text is produced through the `Variant`, which owns the castling encoding and
-SAN disambiguation.
+A move has no `Display` and no `Default`: the spelling is a choice, so it is
+made explicitly, by `Move::uci` for a move standing alone or by the `Variant`,
+which owns the castling encoding and SAN disambiguation. A move read with
+`FromStr` carries no kind — only a position says what a move captures and
+whether it castles — so a move to *play* comes from `Variant::move_from_uci`,
+`Position::parse_uci` or `Game::play_uci`. It still compares equal to the
+generated move it names, which is what makes a parsed move usable as a key and
+as a lookup.
 
 ---
 
@@ -328,42 +439,91 @@ carry — the three files around a king — states it in its own meaning.
 [`features.md`](features.md) has every field, its type, its `dtype`, its
 `shape` and its meaning, and is generated from these definitions.
 
+### The vocabulary types
+
+`Colour`, `Role`, `Piece`, `File`, `Rank`, `Square` and `Move` each write
+themselves as the text esca reads back, and `Debug` is that same text — `{:?}`
+on a square is `e4`, not a wrapper around an index. `FromStr` parses it:
+
+| `Colour` | `Role` | `Piece` | `File` | `Rank` | `Square` | `Move` |
+|---|---|---|---|---|---|---|
+| `w` | `n` | `N` | `d` | `4` | `e4` | `e2e4` |
+
+```rust
+/// The text does not name a value of the type it was read as.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct ParseError {
+    /// `colour`, `role`, `piece`, `file`, `rank`, `square` or `move`.
+    pub expected: &'static str,
+    pub input: String,
+}
+
+/// Which side of the board a castling is played on, named after where the king
+/// lands. The rook it castles with is the outermost one on that side, whatever
+/// file it starts on, so the name holds in Chess960 too.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Wing { Short, Long }
+
+impl Wing {
+    pub const ALL: [Wing; 2];
+    /// `G` for `Short`, `C` for `Long`.
+    pub const fn king_file(self) -> File;
+    /// `F` for `Short`, `D` for `Long`.
+    pub const fn rook_file(self) -> File;
+    /// `short` or `long`, which is its `Display` too.
+    pub const fn name(self) -> &'static str;
+}
+```
+
+`Wing` is a crate-root type — `esca::Wing`, re-exported as `esca::explain::Wing`
+for the layer that reads castling.
+
+### The per-something containers
+
 ```rust
 pub struct ByColour<T> {
     pub white: T,
     pub black: T,
 }
 
-/// Eight values, file a first; `PerRank<T>` is the same, rank 1 first.
+impl<T> ByColour<T> {
+    pub const fn new(white: T, black: T) -> ByColour<T>;
+    pub const fn of(&self, colour: Colour) -> &T;
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> ByColour<U>;
+    pub fn from_fn(f: impl FnMut(Colour) -> T) -> ByColour<T>;
+    /// Both values with the colour each belongs to, White first.
+    pub fn iter(&self) -> impl Iterator<Item = (Colour, &T)>;
+}
+
+impl<T> IntoIterator for ByColour<T> { type Item = (Colour, T); /* … */ }
+impl<T> Index<Colour> for ByColour<T> { /* … */ }
+impl<T> IndexMut<Colour> for ByColour<T> { /* … */ }
+
+/// Eight values, file a first. `PerRank<T>` is the same, rank 1 first, and
+/// `PerRole<T>` is six, pawn first, in `Role::ALL` order.
 pub struct PerFile<T>(/* [T; 8] */);
 
 impl<T> PerFile<T> {
     pub const fn new(values: [T; 8]) -> PerFile<T>;
+    pub const fn of(&self, file: File) -> &T;
     pub fn into_array(self) -> [T; 8];
     pub fn iter(&self) -> impl Iterator<Item = &T>;
     pub fn map<U>(self, f: impl FnMut(T) -> U) -> PerFile<U>;
 }
 
-impl<T: Copy> PerFile<T> {
-    pub const fn of(&self, file: File) -> T;
+impl<T: Copy + Default> PerFile<T> {
+    pub fn from_fn(f: impl FnMut(File) -> T) -> PerFile<T>;
 }
 
 impl<T> Index<File> for PerFile<T> { /* … */ }
 impl<T> IndexMut<File> for PerFile<T> { /* … */ }
+```
 
-impl<T> ByColour<T> {
-    pub const fn new(white: T, black: T) -> ByColour<T>;
-    pub fn map<U>(self, f: impl FnMut(T) -> U) -> ByColour<U>;
-}
+`of` answers with a reference whatever `T` is, so a `ByColour<Vec<_>>` reads the
+same way a `ByColour<u8>` does; a `Copy` value is copied out by the caller.
 
-impl<T: Copy> ByColour<T> {
-    pub const fn of(&self, colour: Colour) -> T;
-    pub fn from_fn(f: impl FnMut(Colour) -> T) -> ByColour<T>;
-}
-
-impl<T> Index<Colour> for ByColour<T> { /* … */ }
-impl<T> IndexMut<Colour> for ByColour<T> { /* … */ }
-
+```rust
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Facts {
     pub placement: PlacementFacts,
     pub state: StateFacts,
@@ -379,7 +539,6 @@ pub struct Facts {
     pub tactics: TacticsFacts,
     pub endgame: EndgameFacts,
     pub maps: MapFacts,
-    pub moves: MoveList<AnnotatedMove>,
 }
 
 pub struct PlacementFacts {
@@ -418,18 +577,22 @@ pub struct EndgameFacts {
     pub drawish_material: Option<DrawishMaterial>,
 }
 
+/// A legal move and its facts.
 pub struct AnnotatedMove {
     pub mv: Move,
     pub facts: MoveFacts,
 }
 
 impl Facts {
-    /// The variant the facts were computed under.
-    pub fn variant(&self) -> &'static str;
+    /// The name of the variant the facts were computed under: `chess` or
+    /// `chess960`.
+    pub fn variant_name(&self) -> &'static str;
     /// The colour to move.
     pub fn side_to_move(&self) -> Colour;
     /// The names of the groups, in the order they are declared.
     pub fn groups() -> impl Iterator<Item = &'static str>;
+    /// The group of that name, read without naming its type.
+    pub fn group(&self, name: &str) -> Option<&dyn FactsGroup>;
     /// A page of prose: material, structure, king safety, threats. Text not stable.
     pub fn summary(&self) -> String;
 }
@@ -456,6 +619,11 @@ pub struct Scratch { /* … */ }
 impl Scratch { pub fn new() -> Scratch; }
 ```
 
+`Facts` describes one position and holds no move data: what each legal move
+*does* is a separate answer, `Position::annotated_moves` or
+`Game::annotated_moves`, one `MoveFacts` per move. That is why the JSON form
+(§7) and the tensor form (§8) hold no move data either.
+
 Facts are computed from the position and the variant's legal move list, so a
 fact holds under every variant whose rules its definition assumes. A `Variant`
 supplies rules, never facts.
@@ -463,6 +631,42 @@ supplies rules, never facts.
 The `history` facts other than the halfmove clock come from `Game::facts` and
 `Game::facts_in`, which have the history; `Position::facts` and
 `Position::facts_in` emit them as zero, `known` included.
+
+### Walking a group without knowing it
+
+```rust
+/// One group of facts, read without naming its type.
+pub trait FactsGroup {
+    fn entry(&self) -> &'static Group;
+    fn value(&self, field: &str) -> Option<FieldValue>;
+    /// Every field's name and value, in catalogue order.
+    fn fields(&self) -> Vec<(&'static str, FieldValue)>;
+}
+
+/// One fact's value, read without naming its type: the shapes `FieldType`
+/// describes and the JSON form writes.
+pub enum FieldValue {
+    Bool(bool),
+    Int(i64),
+    Float(f32),
+    /// One of a fixed list of names, as its text: `n`, `d`, `e4`, `short`.
+    Name(&'static str),
+    Squares(SquareSet),
+    Files(FileSet),
+    /// An `Option` that is absent.
+    Absent,
+    /// A fixed run, in the order the field's type or meaning states.
+    Run(Vec<FieldValue>),
+    ByColour { white: Box<FieldValue>, black: Box<FieldValue> },
+}
+```
+
+```rust
+let facts = position.facts(&CLASSIC);
+for (name, value) in facts.group("material").unwrap().fields() {
+    println!("{name}: {value:?}");
+}
+```
 
 ### Worked example: which files carry a passed pawn
 
@@ -503,9 +707,9 @@ pub struct Field {
 
 impl Field {
     /// The field's type, as the declaration spells it.
-    pub fn type_name(&self) -> String;
+    pub const fn type_name(&self) -> &'static str;
     /// What the field holds, in one sentence.
-    pub fn meaning(&self) -> String;
+    pub fn meaning(&self) -> &'static str;
 }
 
 pub struct Group {
@@ -515,7 +719,7 @@ pub struct Group {
 }
 
 impl Group {
-    pub fn meaning(&self) -> String;
+    pub fn meaning(&self) -> &'static str;
     pub fn field(&self, name: &str) -> Option<&'static Field>;
 }
 
@@ -558,9 +762,13 @@ pub mod types {
 impl Field {
     pub fn kind(&self) -> FieldType;
     pub fn dtype(&self) -> Dtype;
-    pub fn shape(&self) -> Vec<usize>;
+    /// The shape of one position's value, the batch axis left off.
+    pub fn shape(&self) -> &'static [usize];
 }
 ```
+
+Everything a field or a group says about itself is fixed at compile time and
+handed out as `&'static`, so walking the catalogue allocates nothing.
 
 `cargo run --example catalogue --all-features` rewrites all of it:
 `docs/features.md`, `docs/facts.schema.json`, the generated section of
@@ -585,6 +793,9 @@ Python's `to_dict()`, byte for byte the same:
 | `Option<T>` | `null` when absent |
 | `Role`, `File` | the letter; `Square` its name |
 | `Opposition`, `DrawishMaterial`, `CastledSide` | the snake-case name |
+
+`Facts` writes its fourteen groups and no move data; a `MoveFacts` writes the
+same way when it is serialised on its own.
 
 `docs/facts.schema.json` is that format as a JSON Schema (draft 2020-12),
 generated from the same catalogue. `tests/data/facts/<name>.json` holds the
@@ -634,33 +845,47 @@ use esca::facts::tensors::{Batch, Form, layout};
 pub fn layout() -> &'static Layout;      // one Entry per fact, in declaration order
 
 pub struct Entry {
-    pub name: String,          // "pawns.passed"
+    pub name: &'static str,        // "pawns.passed"
     pub group: &'static str,
     pub field: &'static str,
-    pub declared: String,      // "ByColour<SquareSet>"
+    pub declared: &'static str,    // "ByColour<SquareSet>"
     pub dtype: Dtype,
-    pub shape: Vec<usize>,     // batch axis left off
-    pub order: String,         // "axis 0: white, black; axis 1: the 64 squares, a1 first, …"
-    pub encoding: Option<String>,
+    pub shape: &'static [usize],   // batch axis left off
+    pub order: &'static str,       // "axis 1: white, black; axis 2: the 64 squares, a1 first, …"
+    pub encoding: Option<&'static str>,
     pub packed_dtype: Dtype,
     pub packed_shape: Option<Vec<usize>>,
-    pub meaning: String,
+    pub meaning: &'static str,
 }
 
 impl Batch {
     pub fn from_positions(positions: &[Position], variant: &dyn Variant) -> Batch;
     pub fn from_games(games: &[Game]) -> Batch;
+    pub fn len(&self) -> usize;
+    pub fn form(&self) -> Form;
     pub fn layout(&self) -> &'static Layout;
     pub fn buffer(&self, name: &str) -> Option<&Buffer>;
+    /// The shape one array has in this form, batch axis included.
+    pub fn shape_of(&self, entry: &Entry) -> Vec<usize>;
     pub fn packed(&self) -> Batch;
     pub fn expanded(&self) -> Batch;
     pub fn to_safetensors(&self) -> Vec<u8>;
 }
 ```
 
+**The batch axis.** `Entry::shape` is one position's value, batch axis left
+off; `Batch::shape_of` is the array as it is stored, batch axis included. A
+`ByColour<SquareSet>` is `shape` `(2, 64)` and `shape_of` `(n, 2, 64)`.
+`Entry::order` names the axes of the stored array, so it counts the batch axis
+as axis 0 and starts at 1: "axis 1: white, black; axis 2: the 64 squares".
+The Python `layout()` entries carry the same `shape` and `order`, and the
+arrays `facts()` answers with are the `shape_of` ones.
+
 ```python
 import esca.tensors as tensors
 
+tensors.names()  # every array name, "group.field", in declaration order
+tensors.names(["pawns"])  # the names of one group
 tensors.layout()  # the same entries, as dicts, each with its `kind` type tree
 arrays = tensors.facts(fens_or_games, groups=["pawns"], layout="expanded")
 arrays["pawns.passed"].shape  # (n, 2, 64), dtype bool
@@ -747,11 +972,14 @@ colours, one unit per square. Rules beyond that need the model widened first.
 
 ## 11. Python surface
 
+This is the whole Python surface. Every name in it is the name the Rust
+sections above give the same thing; a numbered section says what it means.
+
 Built from the same crate with feature `python`; distributed with `.pyi` stubs,
 so every signature below is typed and checkable. Squares, roles, colours,
-outcomes and castling styles are text on this surface; a colour is written
-`"white"` or `"black"` and read from either, or from `"w"` or `"b"`, in any
-case. The classes are `Variant`, `SquareSet`, `Move`,
+outcomes and castling styles are text on this surface; a colour is **written**
+`"white"` or `"black"` everywhere it is answered, and **read** from either, or
+from `"w"` or `"b"`, in any case. The classes are `Variant`, `SquareSet`, `Move`,
 `Position`, `Game`, `Facts` with its groups, `ByColour`, `FileSet`,
 `pgn.Game`, `polyglot.Book` with its `Entry`, `Raw` and
 `Builder`, `openings.Opening`, `endings.Ending` with its class, verdict, technique and
@@ -759,6 +987,33 @@ evidence, `uci.Engine` and `uci.AsyncEngine` with their
 `Limits`, `Option`, `Info` and `Answer`, and `uci.protocol` with `Command`,
 `Message` and `Session`. `esca.tensors` is a module of its own, behind the
 `tensors` extra.
+
+**Method or property.** Cheap constant data a value already holds is a
+property: `position.fen`, `move.origin`, `game.ply`. Anything that takes an
+argument or does work is a method: `move.uci()`, `position.legal_moves()`,
+`game.outcome()`. So `Move.uci` is a method — it takes the castling spelling.
+
+**A rules question takes its variant by keyword**, and `variant` defaults to
+classic chess wherever it is optional: `position.facts(variant=esca.CHESS960)`,
+never positionally.
+
+### Errors
+
+`esca.Error` is the base of every exception the library raises, and each member
+is a `ValueError` as well, so `except ValueError` keeps working:
+
+| exception | raised when |
+|---|---|
+| `esca.FenError` | the text is not a FEN esca can read |
+| `esca.IllegalMove` | the move is not legal in the position |
+| `esca.MoveParseError` | the text names no one legal move of the position |
+| `esca.PositionError` | the position is not one this variant can play on |
+| `esca.ParseError` | the text names no square, file, rank, role, colour or move |
+
+A message names the offending input and, where a position is what refused it,
+that position's FEN. The UCI client has its own family, rooted at
+`esca.uci.UciError`: `EngineTimeout`, `EngineDied` and `ProtocolError`. It is
+not part of `esca.Error`.
 
 ```python
 import esca
@@ -779,22 +1034,44 @@ g.undo()
 g.position  # Position, immutable and hashable
 g.moves  # list[Move] played
 g.legal_moves()  # list[Move]
-g.annotated_moves()  # list[AnnotatedMove]
-g.outcome()  # "checkmate", "stalemate", … or None
+g.annotated_moves()  # list[AnnotatedMove]: am.move, am.facts
+g.outcome()  # see below, or None
 g.claims()  # ["threefold_repetition", …]
 print(g.position.summary())
 
-# Position on its own; rules come from the variant argument
+# A game copies and pickles: variant name, start FEN, moves and castling style
+import copy, pickle
+
+g2 = g.copy()  # or copy.copy(g), copy.deepcopy(g), pickle.loads(pickle.dumps(g))
+
+# Position on its own; a rules question takes `variant` by keyword
 p = esca.Position.from_fen(fen)
 p.fen, p.epd, p.side_to_move, p.en_passant, p.in_check  # str, str, "white", "e6", bool
 p.piece_at("e1")  # "K"
-f = p.facts(esca.CLASSIC)
+
+p.legal_moves()  # list[Move]; every one of these takes variant=…
+p.annotated_moves()  # list[AnnotatedMove]
+p.san(mv), p.parse_san("Nf3")  # str, Move
+p.uci(mv), p.uci(mv, castling="king_two_squares")  # str
+p.parse_uci("e1h1")  # Move; either castling spelling is read
+p.play("e2e4")  # Position after the move, from a Move or UCI text
+p.outcome()  # "checkmate", "stalemate", … or None
+f = p.facts(variant=esca.CLASSIC)  # keyword-only
 f = g.facts()  # variant taken from the game
+
+# A Move: origin, destination and promotion are what it is
+mv = esca.Move.from_uci("e7e8q")  # only a position says what a move takes or castles,
+mv.origin, mv.destination, mv.promotion  # so read one with p.parse_uci to play it
+mv.uci()  # "e7e8q"; mv.uci(castling="king_two_squares") for the other spelling
+esca.Move("e1", "h1", kind="castling")  # a kind and an is_capture that disagree are refused
 
 p.see("e5"), p.see_capture(mv)  # static exchange evaluation, in value units
 
 f.pawns.passed.white  # SquareSet
 f.pawns.passed.of("black")  # the same by colour; f.pawns.passed["b"] too
+white, black = f.pawns.passed  # a pair iterates as its two values, White first
+f.pawns.passed.items()  # [("white", SquareSet(…)), ("black", SquareSet(…))]
+len(f.pawns.passed), "w" in f.pawns.passed  # 2, True
 list(f.attacks.hanging.black)  # ["e5", …]
 f.king.ring_attack_weight.white  # int
 list(f.pawns.open_files)  # FileSet, iterated as ["c", "e", "h"]
@@ -881,11 +1158,13 @@ with uci.Engine("stockfish") as engine:
     lines = engine.analyse(game, uci.Limits(depth=20), multipv=3)  # list[uci.Info]
     lines[0].cp, lines[0].mate, lines[0].pv  # int | None, int | None, list[Move]
 
+    # A search is stopped through the Search it gave, not through the engine
+    engine.set_position(game)
     with engine.go(uci.Limits(infinite=True)) as search:  # streams reports
         for report in search:
             if report.depth and report.depth >= 12:
                 search.stop()
-        best = search.answer()
+        best = search.answer()  # search.done says whether it has one
 
 # The same surface, awaited: asyncio all the way down, no thread and no
 # blocking call under it.
@@ -893,8 +1172,13 @@ async with uci.AsyncEngine("stockfish") as engine:
     await engine.handshake()
     await engine.set_option("Hash", 256)
     answer = await engine.play(game, uci.Limits(movetime=0.5))
-    async for report in await engine.go(uci.Limits(depth=20)):
+    # `go` is not a coroutine: it hands back an AsyncSearch that sends `go`
+    # when it is first read, so each of these is one whole call.
+    async for report in engine.go(uci.Limits(depth=20)):
         print(report.depth, report.cp)
+    answer = await engine.go(uci.Limits(depth=20)).answer()
+    async with engine.go(uci.Limits(infinite=True)) as search:
+        await search.stop()  # and ponderhit(), on the search
     engine.timeout = 30.0  # bounds every wait that takes no timeout of its own
     engine.dropped_lines  # reports the engine wrote faster than they were read
 
@@ -912,9 +1196,24 @@ session.received(protocol.parse("uciok"))
 session.state  # "idle"
 ```
 
+### How a game ended
+
+`Game.outcome()` and `Position.outcome()` answer with one of `"checkmate"`,
+`"stalemate"`, `"insufficient_material"`, `"seventy_five_moves"`,
+`"fivefold_repetition"`, or `None`.
+
+`None` does not mean the game is playable. A claimable draw leaves the position
+playable until a player asks for it, so `outcome()` stays `None` while
+`claims()` is non-empty. "How did this game end" needs both: `outcome()` for
+what ended it on its own, `claims()` for what either player may end it with.
+`game.draw_status()` (§14) answers with every condition of both kinds at once,
+each carrying its evidence.
+
 | Contract | |
 |---|---|
 | `Position`, `Move`, `Facts` and their groups are immutable and picklable; `Position` and `Move` are hashable. | |
+| `Game` copies and pickles: `copy()`, `copy.copy`, `copy.deepcopy`, `pickle`. The state is the variant's name, the start FEN, the moves in UCI and the castling spelling. | |
+| `ByColour` iterates as its two values, White first, so `white, black = pair` unpacks; `items()` pairs each with its colour name, and a pair hashes when both its values do. | |
 | A malformed game raises `ValueError` naming the line and column; the stream goes on with the next game. | |
 
 ---
@@ -1102,20 +1401,40 @@ pub mod uci {
         pub fn set_option(&mut self, name: &str, value: OptionValue) -> Result<(), Error>;
         pub fn new_game(&mut self) -> Result<(), Error>;
         pub fn set_position(&mut self, game: &Game) -> Result<(), Error>;
-        pub fn go(&mut self, limits: &Limits, budget: Duration) -> Result<Search<'_>, Error>;
-        pub fn play(&mut self, game: &Game, limits: &Limits, budget: Duration)
-            -> Result<Answer, Error>;
+        /// Starts a search. The `Search` is the whole of the answer.
+        pub fn go(&mut self, limits: &Limits) -> Result<Search<'_>, Error>;
+        pub fn play(&mut self, game: &Game, limits: &Limits) -> Result<Answer, Error>;
         pub fn is_ready(&mut self) -> Result<(), Error>;
-        pub fn stop(&mut self) -> Result<(), Error>;
-        pub fn ponderhit(&mut self) -> Result<(), Error>;
+        /// How long a wait that is not given its own limit may take.
+        pub fn timeout(&self) -> Duration;
+        pub fn set_timeout(&mut self, timeout: Duration);
         pub fn quit(&mut self) -> Result<Option<i32>, Error>;
+        pub fn kill(&mut self);
         /// The line-level interface, for tools and diagnostics.
         pub fn send_line(&mut self, text: &str) -> Result<(), Error>;
         pub fn next_line(&mut self, timeout: Duration) -> Result<Option<String>, Error>;
+        pub fn dropped_lines(&self) -> u64;
     }
 
-    /// An iterator over a search's reports, ending with the engine's answer.
+    /// A search in flight: the whole of one search, and the only way to steer
+    /// one. Iterating gives every report up to the move the engine chooses.
     pub struct Search<'a> { /* … */ }
+
+    impl Search<'_> {
+        pub fn next_info(&mut self) -> Result<Option<Info>, Error>;
+        /// The answer, with the reports still to come dropped.
+        pub fn answer(&mut self) -> Result<Answer, Error>;
+        pub fn stop(&mut self) -> Result<(), Error>;
+        pub fn ponderhit(&mut self) -> Result<(), Error>;
+        pub fn is_done(&self) -> bool;
+        pub fn game(&self) -> &Game;
+        pub fn state(&self) -> State;
+        pub fn dropped_lines(&self) -> u64;
+    }
+
+    /// Blocking only; the tokio client awaits `next_info` instead.
+    impl Iterator for Search<'_> { type Item = Result<Info, Error>; }
+
     pub struct Answer { pub best: Option<Move>, pub ponder: Option<Move> }
 
     pub enum Error { Io(io::Error), Timeout { .. }, Died { .. }, Protocol(ProtocolError),
@@ -1132,17 +1451,19 @@ pub mod uci {
             pub async fn handshake(&mut self) -> Result<&Identity, Error>;
             pub async fn set_option(&mut self, name: &str, value: OptionValue) -> Result<(), Error>;
             pub async fn set_position(&mut self, game: &Game) -> Result<(), Error>;
-            pub async fn go(&mut self, limits: &Limits, budget: Duration)
-                -> Result<Search<'_>, Error>;
-            pub async fn play(&mut self, game: &Game, limits: &Limits, budget: Duration)
+            pub async fn go(&mut self, limits: &Limits) -> Result<Search<'_>, Error>;
+            pub async fn play(&mut self, game: &Game, limits: &Limits)
                 -> Result<Answer, Error>;
             pub async fn quit(&mut self) -> Result<Option<i32>, Error>;
+            pub fn timeout(&self) -> Duration;
+            pub fn set_timeout(&mut self, timeout: Duration);
             pub fn dropped_lines(&self) -> u64;
-            /* new_game, is_ready, start_search, next_progress, stop, ponderhit,
-               send_line, next_line, kill: the blocking ones, awaited */
+            /* new_game, is_ready, send_line, next_line, kill: the blocking
+               ones, awaited */
         }
 
-        /// A search in flight; its reports come one `next_info` at a time.
+        /// The same `Search`, its reports one awaited `next_info` at a time;
+        /// no `Iterator`, which cannot await.
         pub struct Search<'a> { /* … */ }
     }
 
@@ -1152,7 +1473,8 @@ pub mod uci {
 
 | Contract | |
 |---|---|
-| Every wait is bounded. A search takes its own budget; everything else takes the engine's `timeout`. | |
+| One way to search: `go` starts one and hands back the `Search`, which is the whole of it — iterate it for the reports, ask it for the answer, stop it, tell it a ponder hit. `play` is `set_position` plus `go` plus the answer. Nothing else drives a search. | |
+| Every wait is bounded, and the bound is on **silence**, not on the search. A search fails with `Error::Timeout` once the engine has said nothing for what its limits asked for (`Limits::movetime`) plus the engine's `timeout`; every other wait takes the `timeout` alone. `set_timeout` is the per-call knob. | |
 | An engine that has exited is `Error::Died` on every call after, and is killed when the `Engine` is dropped. | |
 | A line that breaks the grammar is `Message::Raw`, and a token that does lands in `Info::unknown`. Reading engine output never fails. | |
 | A message the [`Session`] has no room for — a second `bestmove`, a `readyok` no `isready` asked for — is logged and dropped, not delivered. | |
@@ -1176,15 +1498,11 @@ feature schema.
 
 ```rust
 pub mod explain {
-    /// Which castling, named by where the king lands: `Short` on the g-file,
-    /// `Long` on the c-file. Not the wing the rook starts on, which a
-    /// shuffled back rank can put on either side of the king.
-    pub enum Wing { Short, Long }
-
-    impl Wing {
-        /// Both wings, short first.
-        pub const ALL: [Wing; 2];
-    }
+    /// `esca::Wing`, re-exported: which castling, named by where the king
+    /// lands — `Short` on the g-file, `Long` on the c-file. Not the wing the
+    /// rook starts on, which a shuffled back rank can put on either side of
+    /// the king.
+    pub use crate::Wing;
 
     /// One castling of one colour, and everything standing in its way.
     pub struct Castling {
@@ -1306,11 +1624,16 @@ pub mod explain {
     pub enum AutomaticDraw {
         Stalemate(StalemateDetail),
         InsufficientMaterial(MaterialConfig),
-        Fivefold(Repetition),
+        FivefoldRepetition(Repetition),
         SeventyFiveMoves(FiftyMove),
     }
 
-    pub enum ClaimableDraw { Threefold(Repetition), FiftyMoves(FiftyMove) }
+    pub enum ClaimableDraw { ThreefoldRepetition(Repetition), FiftyMoves(FiftyMove) }
+
+    /// The one spelling every surface uses, the same names `Outcome` and
+    /// `DrawClaim` answer with (§1).
+    impl AutomaticDraw { pub const fn name(&self) -> &'static str; }
+    impl ClaimableDraw { pub const fn name(&self) -> &'static str; }
 
     /// The material `Variant::outcome` calls insufficient, named. Either side
     /// may be the one holding the minor.
@@ -1417,13 +1740,25 @@ draws = game.draw_status()
 [d.kind for d in draws.automatic]  # ["stalemate", "insufficient_material"]
 draws.automatic[0].stalemate.stuck_units  # [("a7", Stuck)]
 draws.automatic[1].material  # "kb_v_k"
-[d.kind for d in game.claims_after(mv)]  # ["threefold"]
+[d.kind for d in game.claims_after(mv)]  # ["threefold_repetition"]
 ```
+
+A `kind` is the condition's one spelling: `stalemate`,
+`insufficient_material`, `fivefold_repetition`, `seventy_five_moves`,
+`threefold_repetition`, `fifty_moves` — the same names `Game.outcome()` and
+`Game.claims()` answer with.
 
 Every value of every enum here, and every aggregate a one-line summary reads
 naturally off, answers `describe()` with one plain English sentence: what the
 value means, in the words a beginner or a language model would use. The enum
 value stays the answer; the sentence is derived from it and never replaces it.
+
+**The `describe()` rule**, which `endings` (§15) follows too: a sentence is
+about the value it is called on and nothing else. A value never repeats what a
+value it holds would say — `DrawStatus::describe` says whether the game is
+drawn, and each condition in its lists says for itself what it is. So printing
+a value and then its parts reads as a report rather than as an echo, and
+printing only the part that matters loses nothing else.
 
 ```rust
 impl Wing { pub fn describe(self) -> &'static str; }
@@ -1452,7 +1787,7 @@ applies, in the order its fields carry them.
 
 ```python
 c = game.position.castling("w", "short")
-c.colour, c.wing  # "w", "short"
+c.colour, c.wing  # "white", "short" — a colour is answered in full, read either way
 c.describe()
 # "White cannot castle short: the king is in check from e8, and a king may not
 #  castle out of check; the enemy covers f1, which the king must cross or land
@@ -1492,11 +1827,10 @@ pub mod endings {
         /// before rook before bishop before knight before pawn; White when
         /// even that is even.
         pub stronger: Colour,
-        /// Units per role per colour, indexed by `Colour::index` and
-        /// `Role::index`.
-        pub counts: [[u8; 6]; 2],
+        /// Units per role per colour: `counts.white.of(Role::Rook)`.
+        pub counts: ByColour<PerRole<u8>>,
         /// Conventional material per colour, the king counting nothing.
-        pub value: [u32; 2],
+        pub value: ByColour<u32>,
     }
 
     impl Signature {
@@ -1646,7 +1980,7 @@ from esca import endings
 
 e = endings.classify(position)  # also position.ending(), game.ending()
 e.class_, e.verdict, e.technique  # "krp_v_kr", "usually_win", "lucena"
-e.verdict.winner  # "w"
+e.verdict.winner  # "white"
 e.signature.text  # "KRPvKR"
 e.signature.count("w", "p")  # 1
 e.signature.pieces("b")  # 1

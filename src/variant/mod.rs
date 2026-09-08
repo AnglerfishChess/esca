@@ -4,6 +4,7 @@ mod chess960;
 mod classic;
 mod rules;
 
+use core::fmt;
 use std::sync::{Arc, OnceLock};
 
 pub use chess960::Chess960;
@@ -25,7 +26,7 @@ pub enum CastlingOutput {
 }
 
 /// How a game ended, without a player having to claim it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Outcome {
     /// The side to move is in check and has no legal move.
     Checkmate {
@@ -42,13 +43,110 @@ pub enum Outcome {
     FivefoldRepetition,
 }
 
+impl Outcome {
+    /// The condition's name, the one spelling every surface uses:
+    /// `checkmate`, `stalemate`, `insufficient_material`,
+    /// `seventy_five_moves`, `fivefold_repetition`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Outcome::Checkmate { .. } => "checkmate",
+            Outcome::Stalemate => "stalemate",
+            Outcome::InsufficientMaterial => "insufficient_material",
+            Outcome::SeventyFiveMoves => "seventy_five_moves",
+            Outcome::FivefoldRepetition => "fivefold_repetition",
+        }
+    }
+
+    /// The colour the result favours; `None` for the draws.
+    pub const fn winner(self) -> Option<Colour> {
+        match self {
+            Outcome::Checkmate { winner } => Some(winner),
+            _ => None,
+        }
+    }
+
+    /// One plain sentence: how the game ended.
+    pub fn describe(self) -> String {
+        match self {
+            Outcome::Checkmate { winner } => format!(
+                "{} is checkmated, so {} wins.",
+                spelled(!winner),
+                spelled(winner)
+            ),
+            Outcome::Stalemate => {
+                "The side to move is not in check and has no legal move, which is stalemate: a \
+                 draw."
+                    .to_string()
+            }
+            Outcome::InsufficientMaterial => {
+                "Neither side has material that could ever deliver mate, so the game is drawn."
+                    .to_string()
+            }
+            Outcome::SeventyFiveMoves => {
+                "Seventy-five moves have passed with no capture and no pawn move, which draws the \
+                 game with no claim."
+                    .to_string()
+            }
+            Outcome::FivefoldRepetition => {
+                "The position has stood five times, which draws the game with no claim.".to_string()
+            }
+        }
+    }
+}
+
+impl fmt::Display for Outcome {
+    /// The condition's name.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
 /// A draw a player may claim, leaving the position playable until one does.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DrawClaim {
     /// The halfmove clock has reached 100.
     FiftyMoves,
     /// The current position has occurred three times.
     ThreefoldRepetition,
+}
+
+impl DrawClaim {
+    /// The condition's name, the one spelling every surface uses:
+    /// `fifty_moves`, `threefold_repetition`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            DrawClaim::FiftyMoves => "fifty_moves",
+            DrawClaim::ThreefoldRepetition => "threefold_repetition",
+        }
+    }
+
+    /// One plain sentence: what a player may claim, and on what ground.
+    pub fn describe(self) -> &'static str {
+        match self {
+            DrawClaim::FiftyMoves => {
+                "Fifty moves have passed with no capture and no pawn move, so either player may \
+                 claim a draw."
+            }
+            DrawClaim::ThreefoldRepetition => {
+                "The position has stood three times, so either player may claim a draw."
+            }
+        }
+    }
+}
+
+impl fmt::Display for DrawClaim {
+    /// The condition's name.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// A colour written out, for a sentence.
+fn spelled(colour: Colour) -> &'static str {
+    match colour {
+        Colour::White => "White",
+        Colour::Black => "Black",
+    }
 }
 
 /// A complete set of chess rules. Adding rules means adding an

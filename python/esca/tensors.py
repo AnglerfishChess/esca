@@ -5,8 +5,9 @@ own width, a flag is a `bool`, a set of squares is 64 flags. Nothing is scaled,
 normalised or cast to a float, and nothing is written in the mover's view — the
 leading axis of a per-colour fact is White then Black, always.
 
-`layout()` says what each array is called, what it holds and how to read its
-axes; `facts()` is the arrays themselves, batch axis first. `save()` and
+`names()` is every array name, `layout()` says what each array is called, what
+it holds and how to read its axes, and `facts()` is the arrays themselves,
+batch axis first. `save()` and
 `load()` write and read the safetensors format — a JSON header naming each
 array, then the raw bytes — which NumPy and PyTorch both read.
 
@@ -36,6 +37,7 @@ __all__ = [
     "layout",
     "load",
     "metadata",
+    "names",
     "pack",
     "save",
 ]
@@ -94,6 +96,15 @@ def layout() -> list[dict[str, Any]]:
     return _LAYOUT
 
 
+def names(groups: Sequence[str] | None = None) -> list[str]:
+    """Every array name, `group.field`, in the order the groups declare them.
+
+    These are the keys `facts()` answers with and the names a safetensors file
+    carries. `docs/features.md` lists them in its `array` column.
+    """
+    return [entry["name"] for entry in _entries(groups)]
+
+
 def _entries(groups: Sequence[str] | None) -> list[dict[str, Any]]:
     """The layout entries of the named groups, or of every group."""
     if groups is None:
@@ -113,7 +124,7 @@ def _facts_of(item: str | Position | Game | Facts, variant: Variant | None) -> F
     if isinstance(item, str):
         item = Position.from_fen(item)
     if isinstance(item, Position):
-        return item.facts(variant) if variant is not None else item.facts()
+        return item.facts(variant=variant) if variant is not None else item.facts()
     if isinstance(item, Game):
         return item.facts()
     raise TypeError(f"not a position, game or facts: {item!r}")
@@ -165,6 +176,9 @@ def facts(
     narrows the answer to the named groups, `variant` names the rules a FEN or
     a position is read under, and `layout` chooses the form: `"expanded"` is
     one value per element, `"packed"` the same facts as bits.
+
+    The keys are the array names `names()` lists: the group and the field,
+    joined by a dot, as in `"pawns.passed"`.
     """
     if layout not in ("expanded", "packed"):
         raise ValueError(f'a layout is "expanded" or "packed", not {layout!r}')

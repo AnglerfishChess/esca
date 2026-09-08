@@ -27,8 +27,38 @@
 //! assert_eq!(facts.tactics.legal_move_count.white, 29);
 //! assert!(facts.pawns.passed.white.files().is_empty());
 //! ```
+//!
+//! # Features
+//!
+//! Everything above is always there. The rest is behind a feature, and each
+//! feature-gated item carries its own badge here:
+//!
+//! | feature | what it adds |
+//! | --- | --- |
+//! | `pgn` | [`pgn`]: reading and writing PGN. |
+//! | `uci` | [`uci`]: the protocol as values, and engines as subprocesses. |
+//! | `tokio` | [`uci::tokio`]: the same client on a tokio runtime. |
+//! | `polyglot` | [`polyglot`]: opening books in the Polyglot format. |
+//! | `openings` | [`openings`]: the bundled ECO catalogue. |
+//! | `lichess` | [`lichess`]: the Lichess evaluation dump reader. |
+//! | `serde` | `serde::Serialize` for the facts and the board vocabulary. |
+//! | `tensors` | [`facts::tensors`]: a run of positions as one typed array per fact. |
+//! | `python` | the PyO3 module the `esca` Python package is built from. |
+//!
+//! # The three pages to read first
+//!
+//! The published crate carries none of them, so they are linked to the
+//! repository:
+//!
+//! - [the API guide](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-api.md),
+//!   variant, position, move, game and facts first;
+//! - [the vocabulary](https://github.com/AnglerfishChess/esca/blob/main/docs/esca-vocabulary.md),
+//!   which fixes what every term here means;
+//! - [the facts](https://github.com/AnglerfishChess/esca/blob/main/docs/features.md),
+//!   every fact with its type, its tensor array name and its meaning.
 
 #![deny(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod endings;
 mod error;
@@ -37,25 +67,30 @@ pub mod facts;
 mod fen;
 mod game;
 #[cfg(feature = "lichess")]
+#[cfg_attr(docsrs, doc(cfg(feature = "lichess")))]
 pub mod lichess;
 mod moves;
 #[cfg(feature = "openings")]
+#[cfg_attr(docsrs, doc(cfg(feature = "openings")))]
 pub mod openings;
 #[cfg(feature = "pgn")]
+#[cfg_attr(docsrs, doc(cfg(feature = "pgn")))]
 pub mod pgn;
 #[cfg(feature = "polyglot")]
+#[cfg_attr(docsrs, doc(cfg(feature = "polyglot")))]
 pub mod polyglot;
 mod position;
 #[cfg(feature = "python")]
 mod python;
 mod types;
 #[cfg(feature = "uci")]
+#[cfg_attr(docsrs, doc(cfg(feature = "uci")))]
 pub mod uci;
 mod variant;
 mod zobrist;
 
 pub use error::{FenError, IllegalMove, MoveParseError, PositionError};
-pub use facts::catalogue::{Field, Group};
+pub use facts::catalogue::{FactsGroup, Field, FieldValue, Group};
 pub use facts::{
     AnnotatedMove, AttackFacts, CastledSide, DrawishMaterial, EndgameFacts, ExchangeFacts, Facts,
     HistoryFacts, KingFacts, MapFacts, MaterialFacts, MobilityFacts, MoveFacts, Opposition,
@@ -66,8 +101,8 @@ pub use game::Game;
 pub use moves::{MAX_MOVES, Move, MoveKind, MoveList};
 pub use position::{CastlingRights, Key, Position, Score};
 pub use types::{
-    ByColour, Colour, File, FileSet, FileSetIter, PerFile, PerRank, Piece, Rank, Role, Square,
-    SquareParseError, SquareSet, SquareSetIter,
+    ByColour, Colour, File, FileSet, FileSetIter, ParseError, PerFile, PerRank, PerRole, Piece,
+    Rank, Role, Square, SquareSet, SquareSetIter, Wing,
 };
 pub use variant::{
     CHESS960, CLASSIC, CastlingOutput, Chess960, Classic, DrawClaim, Outcome, Variant, chess960,

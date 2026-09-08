@@ -1,11 +1,14 @@
 //! Moves and the fixed-capacity list they are generated into.
 
 use core::fmt;
+use core::mem::MaybeUninit;
 use core::ops::Deref;
+use core::str::FromStr;
 
 use cozy_chess as cc;
 
-use crate::types::{Role, Square};
+use crate::types::{ParseError, Role, Square};
+use crate::variant::CastlingOutput;
 
 /// The most moves any list has to hold. The largest legal move count of a
 /// position is 218.
@@ -35,8 +38,9 @@ pub enum MoveKind {
 ///
 /// Castling is stored king-to-rook, so the destination is the rook's own
 /// square. Moves are produced by move generation and by move-text parsing;
-/// two moves are equal when their origins, destinations and promotions are.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+/// two moves are equal when their origins, destinations and promotions are,
+/// whether or not both were told what they capture.
+#[derive(Clone, Copy)]
 pub struct Move {
     from: Square,
     to: Square,
@@ -130,39 +134,107 @@ impl Move {
     pub fn is_en_passant(&self) -> bool {
         self.flags & FLAG_EN_PASSANT != 0
     }
-}
 
-impl Default for Move {
-    /// A placeholder that is not a playable move: a1 to a1, quiet.
-    fn default() -> Move {
-        Move::new(Square::A1, Square::A1, None, MoveKind::Quiet)
+    /// The UCI text, with castling spelled as `output` asks.
+    ///
+    /// [`CastlingOutput::KingTwoSquares`] assumes classic geometry, so a
+    /// Chess960 game asks its variant instead, through
+    /// [`Variant::move_to_uci`](crate::Variant::move_to_uci) or
+    /// [`Game::move_to_uci`](crate::Game::move_to_uci), which never spells a
+    /// castling a Chess960 engine would misread.
+    pub fn uci(&self, output: CastlingOutput) -> String {
+        let to = match output {
+            CastlingOutput::KingTwoSquares if self.is_castling() => {
+                let file = if self.to.file() > self.from.file() {
+                    crate::types::File::G
+                } else {
+                    crate::types::File::C
+                };
+                Square::new(file, self.from.rank())
+            }
+            _ => self.to,
+        };
+        let mut text = format!("{}{to}", self.from);
+        if let Some(role) = self.promotion {
+            text.push(role.to_char());
+        }
+        text
     }
 }
 
-impl fmt::Display for Move {
-    /// Origin, destination and promotion role, castling king-to-rook. The
-    /// spelling a variant asks for comes from `Variant::move_to_uci`.
+/// Origin, destination and promotion role only: the flags say what the move
+/// did in one position, and the same move is the same move in another.
+impl PartialEq for Move {
+    fn eq(&self, other: &Move) -> bool {
+        self.from == other.from && self.to == other.to && self.promotion == other.promotion
+    }
+}
+
+impl Eq for Move {}
+
+impl core::hash::Hash for Move {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.from.hash(state);
+        self.to.hash(state);
+        self.promotion.hash(state);
+    }
+}
+
+impl fmt::Debug for Move {
+    /// The UCI text, castling king-to-rook.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.from, self.to)?;
-        if let Some(role) = self.promotion {
-            write!(f, "{role}")?;
+        f.write_str(&self.uci(CastlingOutput::KingToRook))
+    }
+}
+
+impl FromStr for Move {
+    type Err = ParseError;
+
+    /// Origin, destination and promotion letter, four or five characters.
+    ///
+    /// A move read this way carries no kind: only a position says what it
+    /// captures and whether it castles, so a move to play is parsed with
+    /// [`Variant::move_from_uci`](crate::Variant::move_from_uci) or played
+    /// with [`Game::play_uci`](crate::Game::play_uci).
+    fn from_str(s: &str) -> Result<Move, ParseError> {
+        let fail = || ParseError::new("move", s);
+        let bytes = s.as_bytes();
+        if bytes.len() != 4 && bytes.len() != 5 {
+            return Err(fail());
         }
-        Ok(())
+        let from = Square::from_name(&s[0..2]).ok_or_else(fail)?;
+        let to = Square::from_name(&s[2..4]).ok_or_else(fail)?;
+        let promotion = match bytes.get(4) {
+            None => None,
+            Some(&c) => match Role::from_char(c as char) {
+                Some(role) if role != Role::Pawn && role != Role::King => Some(role),
+                _ => return Err(fail()),
+            },
+        };
+        Ok(Move {
+            from,
+            to,
+            promotion,
+            flags: 0,
+        })
     }
 }
 
 /// An ordered list of at most [`MAX_MOVES`] items, stored inline.
-#[derive(Clone)]
+///
+/// Derefs to `[T]`, so the slice methods — `iter`, `first`, `contains`,
+/// `sort_by_key` — are all there.
 pub struct MoveList<T = Move> {
-    items: [T; MAX_MOVES],
+    /// The first `len` are initialised; the rest are never read.
+    items: [MaybeUninit<T>; MAX_MOVES],
     len: usize,
 }
 
-impl<T: Copy + Default> MoveList<T> {
+impl<T: Copy> MoveList<T> {
     /// An empty list.
     pub fn new() -> MoveList<T> {
         MoveList {
-            items: [T::default(); MAX_MOVES],
+            items: [const { MaybeUninit::uninit() }; MAX_MOVES],
             len: 0,
         }
     }
@@ -178,18 +250,21 @@ impl<T: Copy + Default> MoveList<T> {
     /// If the list already holds [`MAX_MOVES`] items.
     pub fn push(&mut self, item: T) {
         assert!(self.len < MAX_MOVES, "move list overflow");
-        self.items[self.len] = item;
+        self.items[self.len] = MaybeUninit::new(item);
         self.len += 1;
     }
 
     /// The items, in the order they were pushed.
     pub fn as_slice(&self) -> &[T] {
-        &self.items[..self.len]
+        // SAFETY: `push` initialised every item below `len`, and `T: Copy`
+        // leaves nothing to drop, so no item below `len` is ever stale.
+        unsafe { core::slice::from_raw_parts(self.items.as_ptr().cast::<T>(), self.len) }
     }
 
     /// The items, mutably.
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        &mut self.items[..self.len]
+        // SAFETY: as `as_slice`.
+        unsafe { core::slice::from_raw_parts_mut(self.items.as_mut_ptr().cast::<T>(), self.len) }
     }
 
     /// How many items the list holds.
@@ -203,13 +278,22 @@ impl<T: Copy + Default> MoveList<T> {
     }
 }
 
-impl<T: Copy + Default> Default for MoveList<T> {
+impl<T: Copy> Clone for MoveList<T> {
+    fn clone(&self) -> MoveList<T> {
+        MoveList {
+            items: self.items,
+            len: self.len,
+        }
+    }
+}
+
+impl<T: Copy> Default for MoveList<T> {
     fn default() -> MoveList<T> {
         MoveList::new()
     }
 }
 
-impl<T: Copy + Default> Deref for MoveList<T> {
+impl<T: Copy> Deref for MoveList<T> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
@@ -217,21 +301,21 @@ impl<T: Copy + Default> Deref for MoveList<T> {
     }
 }
 
-impl<T: Copy + Default + fmt::Debug> fmt::Debug for MoveList<T> {
+impl<T: Copy + fmt::Debug> fmt::Debug for MoveList<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()
     }
 }
 
-impl<T: Copy + Default + PartialEq> PartialEq for MoveList<T> {
+impl<T: Copy + PartialEq> PartialEq for MoveList<T> {
     fn eq(&self, other: &MoveList<T>) -> bool {
         self.as_slice() == other.as_slice()
     }
 }
 
-impl<T: Copy + Default + Eq> Eq for MoveList<T> {}
+impl<T: Copy + Eq> Eq for MoveList<T> {}
 
-impl<'a, T: Copy + Default> IntoIterator for &'a MoveList<T> {
+impl<'a, T: Copy> IntoIterator for &'a MoveList<T> {
     type Item = &'a T;
     type IntoIter = core::slice::Iter<'a, T>;
 
@@ -240,7 +324,7 @@ impl<'a, T: Copy + Default> IntoIterator for &'a MoveList<T> {
     }
 }
 
-impl<T: Copy + Default> FromIterator<T> for MoveList<T> {
+impl<T: Copy> FromIterator<T> for MoveList<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> MoveList<T> {
         let mut list = MoveList::new();
         for item in iter {

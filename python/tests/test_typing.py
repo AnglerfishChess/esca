@@ -13,7 +13,8 @@ import esca
 
 START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-FACTS = esca.Position.from_fen(START).facts()
+POSITION = esca.Position.from_fen(START)
+FACTS = POSITION.facts()
 
 
 def test_a_square_set_fact_is_a_square_set_per_colour() -> None:
@@ -66,7 +67,7 @@ def test_the_plain_data_is_typed_group_by_group_and_field_by_field() -> None:
 
 
 def test_a_move_carries_its_own_typed_facts() -> None:
-    move = FACTS.moves[0].facts
+    move = POSITION.annotated_moves()[0].facts
     assert_type(move.see, int)
     assert_type(move.gives_check, bool)
     assert_type(move.to_dict()["gives_check"], bool)

@@ -281,8 +281,8 @@ fn the_three_counts_partition_the_captures(#[case] fen: &str) {
     let position = Position::from_fen(fen).expect("a test FEN is a legal position");
     let mover = facts.side_to_move();
     let exchange = facts.exchange;
-    let captures: Vec<i32> = facts
-        .moves
+    let captures: Vec<i32> = position
+        .annotated_moves(&CLASSIC)
         .iter()
         .filter(|annotated| annotated.facts.victim.is_some())
         .map(|annotated| position.see_capture(annotated.mv))
@@ -296,11 +296,11 @@ fn the_three_counts_partition_the_captures(#[case] fen: &str) {
         captures.len() as u16
     );
     assert_eq!(
-        exchange.see_positive_total.of(mover),
+        *exchange.see_positive_total.of(mover),
         captures.iter().filter(|see| **see > 0).sum::<i32>()
     );
     assert_eq!(
-        exchange.see_best_capture.of(mover),
+        *exchange.see_best_capture.of(mover),
         captures.iter().copied().max().unwrap_or(0)
     );
 }

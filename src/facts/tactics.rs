@@ -61,8 +61,9 @@ fn role_units(position: &Position, colour: Colour) -> [SquareSet; 6] {
 /// The units of `colour` that an enemy unit attacks and no friendly unit
 /// defends. A king is never among them.
 fn hanging_of(scan: &Scan, colour: Colour) -> SquareSet {
-    ((scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()]) & scan.by.of(!colour))
-        - scan.by.of(colour)
+    ((*scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()])
+        & *scan.by.of(!colour))
+        - *scan.by.of(colour)
 }
 
 /// The units of `colour` worth 3 or more: its knights, bishops, rooks and
@@ -79,7 +80,7 @@ fn heavy_units(scan: &Scan, colour: Colour) -> SquareSet {
 /// ring.
 fn ring_attackers(scan: &Scan, colour: Colour) -> i32 {
     let king = scan.kings.of(colour);
-    let ring = attacks_of(Role::King, king, colour, scan.occupied);
+    let ring = attacks_of(Role::King, *king, colour, scan.occupied);
     [Role::Knight, Role::Bishop, Role::Rook, Role::Queen]
         .into_iter()
         .flat_map(|role| scan.role_units.of(!colour)[role.index()])
@@ -187,7 +188,7 @@ impl Before<'_> {
         let counts = |set: SquareSet| set.len() as i32;
         let hanging_mover = hanging_of(&scan, mover);
         let hanging_enemy = hanging_of(&scan, enemy);
-        let heavy_before = self.attacks.hanging.of(mover) & heavy_units(self.scan, mover);
+        let heavy_before = *self.attacks.hanging.of(mover) & heavy_units(self.scan, mover);
         let more = |pick: fn(&PawnFacts, Colour) -> SquareSet| match &structure {
             Some(structure) => counts(pick(structure, mover)) > counts(pick(self.pawns, mover)),
             None => false,
@@ -195,31 +196,31 @@ impl Before<'_> {
 
         After {
             // A unit no unit of the mover's attacks has an exchange value of 0.
-            threat_created_max: (scan.by.of(mover)
-                & (scan.units.of(enemy) - scan.role_units.of(enemy)[Role::King.index()]))
+            threat_created_max: (*scan.by.of(mover)
+                & (*scan.units.of(enemy) - scan.role_units.of(enemy)[Role::King.index()]))
             .into_iter()
             .map(|square| after.see(square))
             .max()
             .unwrap_or(0)
             .max(0),
-            creates_passer: more(|facts, colour| facts.passed.of(colour)),
-            creates_isolated: more(|facts, colour| facts.isolated.of(colour)),
-            creates_doubled: more(|facts, colour| facts.doubled.of(colour)),
-            creates_backward: more(|facts, colour| facts.backward.of(colour)),
+            creates_passer: more(|facts, colour| *facts.passed.of(colour)),
+            creates_isolated: more(|facts, colour| *facts.isolated.of(colour)),
+            creates_doubled: more(|facts, colour| *facts.doubled.of(colour)),
+            creates_backward: more(|facts, colour| *facts.backward.of(colour)),
             opens_file_at_enemy_king: structure.is_some_and(|structure| {
                 king::shield_files(self.scan.kings.of(enemy).file())
                     .into_iter()
                     .any(|file| {
-                        self.pawns.count_by_file.of(mover).of(file) > 0
-                            && structure.count_by_file.of(mover).of(file) == 0
+                        *self.pawns.count_by_file.of(mover).of(file) > 0
+                            && *structure.count_by_file.of(mover).of(file) == 0
                     })
             }),
             enemy_king_attackers_delta: ring_attackers(&scan, enemy)
                 - ring_attackers(self.scan, enemy),
             mover_king_attackers_delta: ring_attackers(&scan, mover)
                 - ring_attackers(self.scan, mover),
-            mover_hanging_delta: counts(hanging_mover) - counts(self.attacks.hanging.of(mover)),
-            enemy_hanging_delta: counts(hanging_enemy) - counts(self.attacks.hanging.of(enemy)),
+            mover_hanging_delta: counts(hanging_mover) - counts(*self.attacks.hanging.of(mover)),
+            enemy_hanging_delta: counts(hanging_enemy) - counts(*self.attacks.hanging.of(enemy)),
             leaves_unit_hanging: !((hanging_mover & heavy_units(&scan, mover)) - heavy_before)
                 .is_empty(),
         }
@@ -330,7 +331,7 @@ pub(super) fn tactics(
             let blocks_check = checkers.len() == 1
                 && between(
                     checkers.first().expect("one checker is a checker"),
-                    scan.kings.of(mover),
+                    *scan.kings.of(mover),
                 )
                 .contains(to);
             let delta = before.after(&after, mv, mover_role);
@@ -403,7 +404,7 @@ pub(super) fn tactics(
             if !(checkers - moved_to(mv)).is_empty() {
                 facts.discovered_check_available[mover] = true;
             }
-            if back_rank_open {
+            if *back_rank_open {
                 facts.back_rank_mate_threat[mover] |= checkers.into_iter().any(|from| {
                     from.rank() == their_king.rank()
                         && matches!(
@@ -445,13 +446,13 @@ pub(super) fn tactics(
             facts.capture_count[mover] += 1;
             facts.winning_capture_available[mover] |= see > 0;
             facts.winning_capture_max_gain[mover] =
-                facts.winning_capture_max_gain.of(mover).max(see.max(0));
+                *facts.winning_capture_max_gain.of(mover).max(&see.max(0));
             if captures_hanging {
                 facts.captures_hanging[mover] = true;
-                facts.hanging_victim_max_value[mover] = facts
+                facts.hanging_victim_max_value[mover] = *facts
                     .hanging_victim_max_value
                     .of(mover)
-                    .max(material_value(role));
+                    .max(&material_value(role));
             }
             match see.cmp(&0) {
                 Ordering::Equal => facts.equal_capture_count[mover] += 1,
@@ -479,7 +480,7 @@ pub(super) fn tactics(
         }
         if forked >= 2 {
             facts.fork_count[mover] += 1;
-            facts.fork_max_value[mover] = facts.fork_max_value.of(mover).max(fork_value);
+            facts.fork_max_value[mover] = *facts.fork_max_value.of(mover).max(&fork_value);
             facts.knight_fork_available[mover] |= landed_role == Role::Knight;
             facts.royal_fork_available[mover] |= royal;
         }

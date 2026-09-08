@@ -215,7 +215,7 @@ fn a_signature_counts_the_pieces_and_the_material_of_a_side(
 ) {
     let signature = endings::classify(&position(fen)).signature;
     assert_eq!(signature.pieces(colour(side)), pieces);
-    assert_eq!(signature.value[colour(side).index()], value);
+    assert_eq!(signature.value[colour(side)], value);
 }
 
 // ------------------------------------------------------------- the threshold
@@ -550,28 +550,36 @@ fn evidence_that_applies_to_nothing_says_so() {
     );
 }
 
-/// The whole answer reads as the material, the ending, the result and the
-/// method, in that order.
+/// An ending names itself in one sentence and leaves the detail to the parts,
+/// each of which describes itself.
 #[test]
-fn an_ending_describes_itself_from_its_parts() {
+fn an_ending_names_itself_and_repeats_none_of_its_parts() {
     let ending = endings::classify(&position(LONE_ROOK));
     let prose = ending.describe();
-    assert!(prose.starts_with(&ending.signature.describe()));
-    assert!(prose.contains(ending.class.describe()));
-    assert!(prose.contains(&ending.verdict.describe()));
-    assert!(prose.ends_with(ending.technique.describe()));
+    assert_eq!(
+        prose,
+        format!("This is the {} ending.", ending.signature.text)
+    );
+    for part in [
+        ending.signature.describe(),
+        ending.class.describe().to_string(),
+        ending.verdict.describe(),
+        ending.technique.describe().to_string(),
+        ending.evidence.describe(),
+    ] {
+        assert!(!prose.contains(&part), "{prose} repeats {part}");
+    }
 }
 
-/// A position that is not an ending is answered with its material and no
-/// theory.
+/// A position that is not an ending says so, and says no more.
 #[test]
-fn a_position_that_is_not_an_ending_describes_only_its_material() {
+fn a_position_that_is_not_an_ending_says_so() {
     let ending = endings::classify(&position(START));
     assert_eq!(
         ending.describe(),
         format!(
-            "{} Too much material is left for this to be an ending at all.",
-            ending.signature.describe()
+            "The material is {}, which is more than an ending has.",
+            ending.signature.text
         )
     );
 }

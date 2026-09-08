@@ -5,7 +5,8 @@
 //! Where a fact is about the side to move — that it stands in check, say — it
 //! is a plain value and its meaning says so.
 //!
-//! [`catalogue`] lists every group, field, type and meaning as data.
+//! [`catalogue`](mod@catalogue) lists every group, field, type and meaning
+//! as data.
 
 pub mod catalogue;
 mod endgame;
@@ -16,11 +17,14 @@ mod pawns;
 mod pieces;
 pub(crate) mod scan;
 #[cfg(feature = "serde")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 pub mod schema;
 #[cfg(feature = "serde")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 pub mod stub;
 mod tactics;
 #[cfg(feature = "tensors")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tensors")))]
 pub mod tensors;
 mod threats;
 pub mod types;
@@ -32,7 +36,7 @@ use crate::position::Position;
 use crate::types::{ByColour, Colour, File, FileSet, PerFile, PerRank, Role, Square, SquareSet};
 use crate::variant::Variant;
 
-use catalogue::{Group, facts_group};
+use catalogue::{FactsGroup, Group, facts_group};
 pub(crate) use history::from_history;
 pub(crate) use scan::Scan;
 use scan::{
@@ -65,12 +69,12 @@ impl PlacementFacts {
     #[inline]
     pub fn of(&self, colour: Colour, role: Role) -> SquareSet {
         match role {
-            Role::Pawn => self.pawns.of(colour),
-            Role::Knight => self.knights.of(colour),
-            Role::Bishop => self.bishops.of(colour),
-            Role::Rook => self.rooks.of(colour),
-            Role::Queen => self.queens.of(colour),
-            Role::King => self.kings.of(colour),
+            Role::Pawn => *self.pawns.of(colour),
+            Role::Knight => *self.knights.of(colour),
+            Role::Bishop => *self.bishops.of(colour),
+            Role::Rook => *self.rooks.of(colour),
+            Role::Queen => *self.queens.of(colour),
+            Role::King => *self.kings.of(colour),
         }
     }
 }
@@ -398,8 +402,8 @@ impl KingFacts {
     #[inline]
     pub fn ring_attacker_surplus(&self) -> ByColour<i16> {
         ByColour::from_fn(|colour| {
-            i16::from(self.ring_attack_weight.of(colour))
-                - i16::from(self.ring_defence_weight.of(colour))
+            i16::from(*self.ring_attack_weight.of(colour))
+                - i16::from(*self.ring_defence_weight.of(colour))
         })
     }
 }
@@ -775,7 +779,7 @@ impl TacticsFacts {
     #[inline]
     pub fn only_moves(&self) -> ByColour<bool> {
         ByColour::from_fn(|colour| {
-            self.available.of(colour) && self.legal_move_count.of(colour) <= 2
+            *self.available.of(colour) && *self.legal_move_count.of(colour) <= 2
         })
     }
 }
@@ -884,7 +888,7 @@ impl Default for MoveFacts {
 }
 
 /// A legal move and its facts.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct AnnotatedMove {
     /// The move.
     pub mv: Move,
@@ -918,8 +922,13 @@ impl fmt::Debug for Scratch {
     }
 }
 
-/// Every group of facts about one position, plus its annotated legal moves.
-#[derive(Clone, PartialEq, Debug)]
+/// Every group of facts about one position.
+///
+/// What each *move* of the position does is a separate answer:
+/// [`Position::annotated_moves`] and [`Game::annotated_moves`](crate::Game::annotated_moves)
+/// give a [`MoveFacts`] per legal move. `Facts` is about the position alone,
+/// which is what its JSON form and its tensor form hold as well.
+#[derive(Clone, Copy, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Facts {
     /// Where the units stand.
@@ -950,9 +959,6 @@ pub struct Facts {
     pub endgame: EndgameFacts,
     /// The square sets read side by side.
     pub maps: MapFacts,
-    /// Every legal move, annotated.
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub moves: MoveList<AnnotatedMove>,
     #[cfg_attr(feature = "serde", serde(skip))]
     variant: &'static str,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -981,9 +987,10 @@ pub fn catalogue() -> &'static [Group] {
 }
 
 impl Facts {
-    /// The variant these facts were computed under.
+    /// The name of the variant these facts were computed under: `chess` or
+    /// `chess960`.
     #[inline]
-    pub fn variant(&self) -> &'static str {
+    pub fn variant_name(&self) -> &'static str {
         self.variant
     }
 
@@ -996,6 +1003,37 @@ impl Facts {
     /// The names of the groups, in the order they are declared.
     pub fn groups() -> impl Iterator<Item = &'static str> {
         catalogue().iter().map(|group| group.name)
+    }
+
+    /// The group of that name, read without naming its type.
+    ///
+    /// ```
+    /// use esca::{CLASSIC, Position};
+    ///
+    /// let facts = Position::from_fen("8/8/8/8/8/8/6k1/K7 w - - 0 1")?.facts(&CLASSIC);
+    /// let material = facts.group("material").expect("a material group");
+    /// let (name, _value) = &material.fields()[0];
+    /// assert_eq!(*name, "pawns");
+    /// # Ok::<(), esca::FenError>(())
+    /// ```
+    pub fn group(&self, name: &str) -> Option<&dyn FactsGroup> {
+        Some(match name {
+            "placement" => &self.placement,
+            "state" => &self.state,
+            "history" => &self.history,
+            "material" => &self.material,
+            "pawns" => &self.pawns,
+            "pieces" => &self.pieces,
+            "king" => &self.king,
+            "mobility" => &self.mobility,
+            "attacks" => &self.attacks,
+            "exchange" => &self.exchange,
+            "threats" => &self.threats,
+            "tactics" => &self.tactics,
+            "endgame" => &self.endgame,
+            "maps" => &self.maps,
+            _ => return None,
+        })
     }
 
     /// Material, structure, king safety and threats, for a human reader. The
@@ -1040,7 +1078,7 @@ impl Facts {
             self.tactics.check_count.of(self.us),
             self.tactics.capture_count.of(self.us),
             self.tactics.fork_count.of(self.us),
-            if self.tactics.mate_in_1.of(self.us) {
+            if *self.tactics.mate_in_1.of(self.us) {
                 ", mate in 1"
             } else {
                 ""
@@ -1054,6 +1092,16 @@ impl Position {
     /// The facts of this position under `variant`.
     ///
     /// The repetition and history values are zero: a position has no history.
+    ///
+    /// ```
+    /// use esca::{CLASSIC, Position};
+    ///
+    /// let position = Position::from_fen("4k3/8/8/8/2P5/8/8/4K3 w - - 0 1")?;
+    /// let facts = position.facts(&CLASSIC);
+    /// assert_eq!(facts.material.phase_points, 0);
+    /// assert_eq!(facts.pawns.passed.white.files().into_iter().count(), 1);
+    /// # Ok::<(), esca::FenError>(())
+    /// ```
     pub fn facts(&self, variant: &dyn Variant) -> Facts {
         let mut scratch = Scratch::new();
         self.facts_in(variant, &mut scratch)
@@ -1062,7 +1110,37 @@ impl Position {
     /// The facts of this position under `variant`, reusing `scratch`. Nothing
     /// is allocated.
     pub fn facts_in(&self, variant: &dyn Variant, scratch: &mut Scratch) -> Facts {
-        compute(self, variant, scratch)
+        compute(self, variant, scratch, None)
+    }
+
+    /// Every legal move of this position with what it does.
+    ///
+    /// ```
+    /// use esca::{CLASSIC, Position};
+    ///
+    /// let position = Position::from_fen("6k1/8/8/8/8/8/8/K6R w - - 0 1")?;
+    /// let checks = position
+    ///     .annotated_moves(&CLASSIC)
+    ///     .iter()
+    ///     .filter(|annotated| annotated.facts.gives_check)
+    ///     .count();
+    /// assert_eq!(checks, 2);
+    /// # Ok::<(), esca::FenError>(())
+    /// ```
+    pub fn annotated_moves(&self, variant: &dyn Variant) -> MoveList<AnnotatedMove> {
+        let mut scratch = Scratch::new();
+        self.annotated_moves_in(variant, &mut scratch)
+    }
+
+    /// The same, reusing `scratch`.
+    pub fn annotated_moves_in(
+        &self,
+        variant: &dyn Variant,
+        scratch: &mut Scratch,
+    ) -> MoveList<AnnotatedMove> {
+        let mut moves = MoveList::new();
+        compute(self, variant, scratch, Some(&mut moves));
+        moves
     }
 }
 
@@ -1093,8 +1171,14 @@ fn files_listed(files: FileSet) -> String {
     files.into_iter().map(File::to_char).collect()
 }
 
-/// The whole extraction, in the order the groups are written.
-fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) -> Facts {
+/// The whole extraction, in the order the groups are written. The annotated
+/// moves are collected into `annotated` when one is given.
+fn compute(
+    position: &Position,
+    variant: &dyn Variant,
+    scratch: &mut Scratch,
+    annotated: Option<&mut MoveList<AnnotatedMove>>,
+) -> Facts {
     let Scratch {
         moves: legal,
         their_moves,
@@ -1119,7 +1203,6 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
     };
 
     let us = scan.us;
-    let mut moves = MoveList::new();
     let mut tactics = TacticsFacts::default();
     let mut exchange = ExchangeFacts::default();
     tactics::tactics(
@@ -1132,7 +1215,7 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
         &king,
         legal,
         replies,
-        Some(&mut moves),
+        annotated,
         &mut tactics,
     );
     exchange::exchange_facts(position, legal, us, &mut exchange);
@@ -1179,7 +1262,6 @@ fn compute(position: &Position, variant: &dyn Variant, scratch: &mut Scratch) ->
             pinned: attacks.pinned,
             threatened: threats.threatened,
         },
-        moves,
         variant: variant.name(),
         us,
     }
@@ -1248,7 +1330,7 @@ fn material_facts(scan: &Scan) -> MaterialFacts {
                 _ => 0,
             };
         }
-        facts.insufficient_material[colour] = insufficient(&scan.role_units.of(colour));
+        facts.insufficient_material[colour] = insufficient(scan.role_units.of(colour));
     }
     facts.phase_points = phase_points.min(255) as u8;
     facts.both_queens = facts.queens.white > 0 && facts.queens.black > 0;
@@ -1293,8 +1375,8 @@ fn attack_facts(position: &Position, scan: &Scan) -> AttackFacts {
 
     for colour in Colour::ALL {
         let them = !colour;
-        facts.defended[colour] = scan.units.of(colour) & scan.by.of(colour);
-        for square in scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()] {
+        facts.defended[colour] = *scan.units.of(colour) & *scan.by.of(colour);
+        for square in *scan.units.of(colour) - scan.role_units.of(colour)[Role::King.index()] {
             let role = position
                 .piece_at(square)
                 .expect("a unit stands on its own square")
@@ -1350,11 +1432,11 @@ fn absolute_pins(scan: &Scan, colour: Colour) -> SquareSet {
         | scan.role_units.of(them)[Role::Queen.index()];
     let rooks = scan.role_units.of(them)[Role::Rook.index()]
         | scan.role_units.of(them)[Role::Queen.index()];
-    let candidates = (attacks_of(Role::Bishop, king, colour, SquareSet::EMPTY) & bishops)
-        | (attacks_of(Role::Rook, king, colour, SquareSet::EMPTY) & rooks);
+    let candidates = (attacks_of(Role::Bishop, *king, colour, SquareSet::EMPTY) & bishops)
+        | (attacks_of(Role::Rook, *king, colour, SquareSet::EMPTY) & rooks);
     for slider in candidates {
-        let blockers = between(slider, king) & scan.occupied;
-        if blockers.len() == 1 && blockers.is_subset(scan.units.of(colour)) {
+        let blockers = between(slider, *king) & scan.occupied;
+        if blockers.len() == 1 && blockers.is_subset(*scan.units.of(colour)) {
             pinned |= blockers;
         }
     }
@@ -1369,13 +1451,13 @@ fn skewers(position: &Position, scan: &Scan, colour: Colour) -> u8 {
     for role in [Role::Bishop, Role::Rook, Role::Queen] {
         for slider in scan.role_units.of(colour)[role.index()] {
             let attacks = scan.attacks_from[slider.index()];
-            for front in attacks & scan.units.of(them) {
+            for front in attacks & *scan.units.of(them) {
                 let front_role = position
                     .piece_at(front)
                     .expect("a unit stands on its own square")
                     .role;
                 let xray = attacks_of(role, slider, colour, scan.occupied - front.to_set());
-                let behind = (xray - attacks) & line(slider, front) & scan.units.of(them);
+                let behind = (xray - attacks) & line(slider, front) & *scan.units.of(them);
                 for back in behind {
                     let back_role = position
                         .piece_at(back)
@@ -1402,7 +1484,7 @@ fn mobility_facts(scan: &Scan) -> MobilityFacts {
             Role::Rook,
             Role::Queen,
         ] {
-            let free = scan.by_role.of(colour)[role.index()] - scan.units.of(colour);
+            let free = scan.by_role.of(colour)[role.index()] - *scan.units.of(colour);
             let all = free.len() as u16;
             let safe = (free - enemy_pawns).len() as u16;
             match role {
@@ -1414,15 +1496,17 @@ fn mobility_facts(scan: &Scan) -> MobilityFacts {
             }
             facts.total[colour] += all;
         }
-        facts.space[colour] = (scan.by.of(colour) & scan.own_half(!colour)).len() as u16;
-        facts.centre_control[colour] = (scan.by.of(colour) & CENTRE).len() as u8;
-        facts.extended_centre_control[colour] = (scan.by.of(colour) & EXTENDED_CENTRE).len() as u8;
-        let pieces = scan.units.of(colour)
+        facts.space[colour] = (*scan.by.of(colour) & scan.own_half(!colour)).len() as u16;
+        facts.centre_control[colour] = (*scan.by.of(colour) & CENTRE).len() as u8;
+        facts.extended_centre_control[colour] = (*scan.by.of(colour) & EXTENDED_CENTRE).len() as u8;
+        let pieces = *scan.units.of(colour)
             - scan.role_units.of(colour)[Role::Pawn.index()]
             - scan.role_units.of(colour)[Role::King.index()];
         facts.immobile_pieces[colour] = pieces
             .into_iter()
-            .filter(|square| (scan.attacks_from[square.index()] - scan.units.of(colour)).is_empty())
+            .filter(|square| {
+                (scan.attacks_from[square.index()] - *scan.units.of(colour)).is_empty()
+            })
             .count()
             .min(255) as u8;
     }

@@ -17,7 +17,7 @@ def test_the_variants_are_the_two_named_ones() -> None:
     assert esca.CLASSIC != esca.CHESS960
     assert esca.CLASSIC.promotion_roles == ["q", "r", "b", "n"]
     with pytest.raises(ValueError, match="not a variant"):
-        esca.Variant.named("horde")
+        esca.Variant.named("horde")  # type: ignore[bad-argument-type]
 
 
 def test_a_position_round_trips_through_its_fen() -> None:
@@ -88,7 +88,7 @@ def test_a_move_carries_its_own_facts() -> None:
     assert capture.origin == "e4"
     assert capture.is_capture
     assert capture.kind == "capture"
-    assert capture.uci == "e4d5"
+    assert capture.uci() == "e4d5"
     assert game.move_to_san(capture) == "exd5"
     assert pickle.loads(pickle.dumps(capture)) == capture
 
@@ -102,7 +102,7 @@ def test_castling_is_spelled_as_the_game_asks() -> None:
     assert game.move_to_uci(castling) == "e1g1"
     assert game.move_to_san(castling) == "O-O"
     with pytest.raises(ValueError, match="castling output"):
-        game.castling_output = "nonsense"
+        game.castling_output = "nonsense"  # type: ignore[bad-assignment]
 
 
 def test_a_chess960_game_starts_from_its_seed() -> None:

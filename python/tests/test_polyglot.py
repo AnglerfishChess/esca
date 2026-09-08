@@ -72,7 +72,7 @@ def move_of(fen: str, uci: str, variant: esca.Variant = esca.CLASSIC) -> esca.Mo
     """The one legal move of `fen` written `uci`, castling king-to-rook."""
     game = esca.Game.from_fen(fen, variant=variant)
     for mv in game.legal_moves():
-        if mv.uci == uci:
+        if mv.uci() == uci:
             return mv
     raise AssertionError(f"{uci} is not a legal move of {fen}")
 
@@ -113,7 +113,7 @@ def test_the_en_passant_file_is_keyed_when_a_pawn_stands_beside_the_target() -> 
 
 def test_a_capture_that_would_uncover_the_king_is_still_a_pawn_standing_beside() -> None:
     game = esca.Game.from_fen(PINNED_CAPTURE)
-    assert [mv.uci for mv in game.legal_moves() if mv.uci == "e5d6"] == []
+    assert [mv.uci() for mv in game.legal_moves() if mv.uci() == "e5d6"] == []
     assert game.position.polyglot_key != with_field(PINNED_CAPTURE, 3, "-").polyglot_key
 
 
@@ -184,7 +184,7 @@ def test_an_index_past_the_end_is_no_entry() -> None:
 
 def test_the_entries_of_a_position_keep_the_order_the_file_gives_them() -> None:
     entries = tiny().entries(position(START))
-    assert [entry.move.uci for entry in entries] == ["e2e4", "d2d4", "g1f3"]
+    assert [entry.move.uci() for entry in entries] == ["e2e4", "d2d4", "g1f3"]
 
 
 def test_an_entry_naming_no_legal_move_of_the_position_is_refused() -> None:
@@ -214,7 +214,7 @@ def test_a_key_the_book_does_not_hold_has_no_entries() -> None:
 def test_the_heaviest_entry_is_the_best_one() -> None:
     best = tiny().best(position(START))
     assert best is not None
-    assert best.move.uci == "e2e4"
+    assert best.move.uci() == "e2e4"
     assert best.weight == 100
 
 
@@ -234,7 +234,7 @@ def test_a_pick_is_the_entry_the_seed_falls_in(seed: int, uci: str) -> None:
     # move weighed nothing is never drawn.
     picked = tiny().pick(position(START), seed)
     assert picked is not None
-    assert picked.move.uci == uci
+    assert picked.move.uci() == uci
 
 
 def test_a_book_written_reads_back_what_was_written(tmp_path: Path) -> None:
@@ -324,11 +324,11 @@ def test_a_builder_weighs_a_move_by_how_many_games_played_it(tmp_path: Path) -> 
 
     book = polyglot.Book(path)
     opening = book.entries(position(START))
-    assert [entry.move.uci for entry in opening] == ["e2e4"]
+    assert [entry.move.uci() for entry in opening] == ["e2e4"]
     assert opening[0].weight == 2
 
     replies = book.entries(played("e2e4").position)
-    assert [entry.move.uci for entry in replies] == ["d7d5", "e7e5"]
+    assert [entry.move.uci() for entry in replies] == ["d7d5", "e7e5"]
     assert [entry.weight for entry in replies] == [1, 1]
 
 

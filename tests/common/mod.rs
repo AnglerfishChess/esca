@@ -3,7 +3,10 @@
 
 #![allow(dead_code)]
 
-use esca::{ByColour, CLASSIC, Facts, FileSet, MoveFacts, Position, Square, SquareSet, Variant};
+use esca::{
+    ByColour, CLASSIC, CastlingOutput, Facts, FileSet, MoveFacts, Position, Square, SquareSet,
+    Variant,
+};
 
 /// The facts of `fen` under classic chess.
 pub fn facts_of(fen: &str) -> Facts {
@@ -12,9 +15,12 @@ pub fn facts_of(fen: &str) -> Facts {
 
 /// The facts of `fen` under `variant`.
 pub fn facts_under(variant: &dyn Variant, fen: &str) -> Facts {
-    Position::from_fen(fen)
-        .expect("a test FEN is a legal position")
-        .facts(variant)
+    position_of(fen).facts(variant)
+}
+
+/// The position `fen` describes.
+pub fn position_of(fen: &str) -> Position {
+    Position::from_fen(fen).expect("a test FEN is a legal position")
 }
 
 /// The pair `[white, black]`, the order every case writes a per-side fact in.
@@ -47,10 +53,10 @@ pub fn move_facts(fen: &str, uci: &str) -> MoveFacts {
 /// The facts of the move `uci` in `fen`, under `variant`. Castling is written
 /// king-to-rook, so `"e1h1"` is the classic short castling.
 pub fn move_facts_under(variant: &dyn Variant, fen: &str, uci: &str) -> MoveFacts {
-    facts_under(variant, fen)
-        .moves
+    position_of(fen)
+        .annotated_moves(variant)
         .iter()
-        .find(|annotated| annotated.mv.to_string() == uci)
+        .find(|annotated| annotated.mv.uci(CastlingOutput::KingToRook) == uci)
         .unwrap_or_else(|| panic!("{uci} is a legal move of the position"))
         .facts
 }

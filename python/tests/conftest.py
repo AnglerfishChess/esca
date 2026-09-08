@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 import esca
 import pytest
 
+if TYPE_CHECKING:
+    from esca._esca import FileName
+
 
 def _facts_of(fen: str, variant: esca.Variant | None = None) -> esca.Facts:
-    return esca.Position.from_fen(fen).facts(variant if variant is not None else esca.CLASSIC)
+    return esca.Position.from_fen(fen).facts(variant=variant if variant is not None else esca.CLASSIC)
 
 
 def _squares(names: str) -> set[str]:
@@ -17,7 +21,7 @@ def _squares(names: str) -> set[str]:
 
 
 def _files(letters: str) -> esca.FileSet:
-    return esca.FileSet(list(letters))
+    return esca.FileSet(cast("list[FileName]", list(letters)))
 
 
 @pytest.fixture(scope="session")
@@ -39,8 +43,9 @@ def files() -> Callable[[str], esca.FileSet]:
 
 
 def _move_facts(fen: str, uci: str, variant: esca.Variant | None = None) -> esca.MoveFacts:
-    for annotated in _facts_of(fen, variant).moves:
-        if annotated.move.uci == uci:
+    rules = variant if variant is not None else esca.CLASSIC
+    for annotated in esca.Position.from_fen(fen).annotated_moves(variant=rules):
+        if annotated.move.uci() == uci:
             return annotated.facts
     raise AssertionError(f"{uci} is not a legal move of {fen}")
 

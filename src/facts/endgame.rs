@@ -16,8 +16,9 @@ const ROOK_FILES: SquareSet = SquareSet::from_bits(0x8181_8181_8181_8181);
 pub(super) fn endgame_facts(scan: &Scan, pawns: &PawnFacts, pieces: &PieceFacts) -> EndgameFacts {
     let mut facts = EndgameFacts::default();
     for colour in Colour::ALL {
-        facts.king_centralisation[colour] = centralisation(scan.kings.of(colour));
-        facts.race_plies[colour] = race_plies(pawns.passer_lead_rank.of(colour), colour == scan.us);
+        facts.king_centralisation[colour] = centralisation(*scan.kings.of(colour));
+        facts.race_plies[colour] =
+            race_plies(*pawns.passer_lead_rank.of(colour), colour == scan.us);
         facts.key_square_occupied[colour] = on_own_key_square(scan, pawns, colour);
         facts.wrong_colour_bishop[colour] = wrong_colour_bishop(scan, colour);
     }
@@ -65,7 +66,7 @@ fn on_own_key_square(scan: &Scan, pawns: &PawnFacts, colour: Colour) -> bool {
         .passed
         .of(colour)
         .into_iter()
-        .any(|pawn| key_squares(scan, pawn, colour).contains(king))
+        .any(|pawn| key_squares(scan, pawn, colour).contains(*king))
 }
 
 /// The key squares of `colour`'s pawn on `square`: the three squares two ranks
@@ -123,7 +124,7 @@ fn drawish_material(
         {
             return Some(DrawishMaterial::TwoKnights);
         }
-        if wrong_colour_bishop.of(colour)
+        if *wrong_colour_bishop.of(colour)
             && count(Role::Knight) == 0
             && count(Role::Rook) == 0
             && count(Role::Queen) == 0
@@ -144,5 +145,5 @@ fn drawish_material(
 
 /// Whether `colour` has no unit but its king.
 fn bare_king(scan: &Scan, colour: Colour) -> bool {
-    scan.units.of(colour) == scan.role_units.of(colour)[Role::King.index()]
+    *scan.units.of(colour) == scan.role_units.of(colour)[Role::King.index()]
 }

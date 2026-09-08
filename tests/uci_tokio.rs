@@ -12,8 +12,8 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use esca::uci::tokio::Engine;
-use esca::uci::{Error, Limits, OptionKind, OptionValue, Progress, State};
-use esca::{Game, chess960, classic};
+use esca::uci::{Error, Limits, OptionKind, OptionValue, State};
+use esca::{CastlingOutput, Game, chess960, classic};
 use rstest::rstest;
 use tokio::time::{sleep, timeout};
 
@@ -90,10 +90,7 @@ async fn a_search_reports_and_then_answers() {
         .expect("the start position");
 
     let answer = {
-        let mut search = engine
-            .go(&Limits::depth(2), TIMEOUT)
-            .await
-            .expect("a search");
+        let mut search = engine.go(&Limits::depth(2)).await.expect("a search");
         let mut reports = Vec::new();
         while let Some(info) = search.next_info().await.expect("the reports arrive") {
             reports.push(info);
@@ -111,7 +108,10 @@ async fn a_search_reports_and_then_answers() {
     let best = answer.best.expect("a move");
     assert_eq!(game.move_to_san(best), "e4");
     assert_eq!(
-        answer.ponder.map(|mv| mv.to_string()).as_deref(),
+        answer
+            .ponder
+            .map(|mv| mv.uci(CastlingOutput::KingToRook))
+            .as_deref(),
         Some("e7e5")
     );
     assert_eq!(engine.state(), State::Idle);
@@ -142,7 +142,7 @@ async fn the_moves_played_go_out_with_the_position() {
 async fn an_engine_with_no_move_answers_with_none() {
     let mut engine = identified(&["--no-move"]).await;
     let answer = engine
-        .play(&Game::new(classic()), &Limits::depth(1), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(1))
         .await
         .expect("an answer");
     assert_eq!(answer.best, None);
@@ -156,10 +156,7 @@ async fn a_search_that_waits_is_ended_by_stop() {
         .set_position(&Game::new(classic()))
         .await
         .expect("a position");
-    let mut search = engine
-        .go(&Limits::infinite(), TIMEOUT)
-        .await
-        .expect("a search");
+    let mut search = engine.go(&Limits::infinite()).await.expect("a search");
     search.stop().await.expect("stop goes out");
     assert!(search.answer().await.expect("an answer").best.is_some());
 }
@@ -172,7 +169,7 @@ async fn a_ponder_becomes_a_search_on_a_ponderhit() {
         .await
         .expect("a position");
     let mut search = engine
-        .go(&Limits::infinite().pondering(), TIMEOUT)
+        .go(&Limits::infinite().pondering())
         .await
         .expect("a search");
     assert_eq!(search.state(), State::Pondering);
@@ -189,12 +186,7 @@ async fn letting_a_search_go_settles_the_engine_on_the_next_call() {
         .set_position(&Game::new(classic()))
         .await
         .expect("a position");
-    drop(
-        engine
-            .go(&Limits::infinite(), TIMEOUT)
-            .await
-            .expect("a search"),
-    );
+    drop(engine.go(&Limits::infinite()).await.expect("a search"));
     engine.is_ready().await.expect("the engine still answers");
     assert_eq!(engine.state(), State::Idle);
 }
@@ -254,19 +246,17 @@ async fn an_engine_that_never_ends_its_identification_times_out() {
     );
 }
 
-/// A slow engine is a timeout on this search, not a hung client.
+/// A silent engine is a timeout on this search, not a hung client.
 #[tokio::test]
-async fn a_search_that_outlasts_its_budget_is_a_timeout() {
+async fn a_search_that_says_nothing_for_too_long_is_a_timeout() {
     let mut engine = identified(&["--slow"]).await;
     engine
         .set_position(&Game::new(classic()))
         .await
         .expect("a position");
+    engine.set_timeout(Duration::from_millis(50));
     let error = {
-        let mut search = engine
-            .go(&Limits::depth(2), Duration::from_millis(50))
-            .await
-            .expect("a search");
+        let mut search = engine.go(&Limits::depth(2)).await.expect("a search");
         search
             .answer()
             .await
@@ -289,7 +279,7 @@ async fn a_search_that_outlasts_its_budget_is_a_timeout() {
 async fn a_slow_engine_answers_within_a_budget_that_fits() {
     let mut engine = identified(&["--slow"]).await;
     let answer = engine
-        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(2))
         .await
         .expect("an answer");
     assert!(answer.best.is_some());
@@ -300,7 +290,7 @@ async fn a_slow_engine_answers_within_a_budget_that_fits() {
 async fn garbage_never_derails_a_search() {
     let mut engine = identified(&["--garbage"]).await;
     let answer = engine
-        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(2))
         .await
         .expect("an answer");
     assert!(answer.best.is_some());
@@ -315,7 +305,7 @@ async fn garbage_never_derails_a_search() {
 async fn an_answer_too_many_is_ignored() {
     let mut engine = identified(&["--twice"]).await;
     engine
-        .play(&Game::new(classic()), &Limits::depth(1), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(1))
         .await
         .expect("an answer");
     engine
@@ -333,10 +323,7 @@ async fn an_engine_that_dies_mid_search_is_reported_as_dead() {
         .await
         .expect("a position");
     let error = {
-        let mut search = engine
-            .go(&Limits::depth(2), TIMEOUT)
-            .await
-            .expect("a search");
+        let mut search = engine.go(&Limits::depth(2)).await.expect("a search");
         search.answer().await.expect_err("the double exits instead")
     };
     assert!(matches!(error, Error::Died { code: Some(3) }), "{error}");
@@ -347,12 +334,23 @@ async fn an_engine_that_dies_mid_search_is_reported_as_dead() {
     assert!(!engine.is_alive());
 }
 
-/// There is nothing to stop, so the command never reaches the engine.
+/// The search is not pondering, so the command never reaches the engine.
 #[tokio::test]
 async fn a_command_the_conversation_has_no_room_for_is_refused() {
     let mut engine = identified(&[]).await;
-    let error = engine.stop().await.expect_err("no search is running");
-    assert!(matches!(error, Error::Protocol(_)), "{error}");
+    engine
+        .set_position(&Game::new(classic()))
+        .await
+        .expect("a position");
+    {
+        let mut search = engine.go(&Limits::depth(2)).await.expect("a search");
+        let error = search
+            .ponderhit()
+            .await
+            .expect_err("the search is not pondering");
+        assert!(matches!(error, Error::Protocol(_)), "{error}");
+        search.answer().await.expect("the search answers");
+    }
     engine.is_ready().await.expect("the engine is untouched");
 }
 
@@ -366,7 +364,7 @@ async fn a_wait_given_up_on_leaves_the_engine_usable() {
     let game = Game::new(classic());
     let given_up = timeout(
         Duration::from_millis(50),
-        engine.play(&game, &Limits::depth(2), TIMEOUT),
+        engine.play(&game, &Limits::depth(2)),
     )
     .await;
     assert!(given_up.is_err(), "the double is slower than that");
@@ -374,7 +372,7 @@ async fn a_wait_given_up_on_leaves_the_engine_usable() {
     engine.is_ready().await.expect("the engine still answers");
     assert_eq!(engine.state(), State::Idle);
     let answer = engine
-        .play(&game, &Limits::depth(2), TIMEOUT)
+        .play(&game, &Limits::depth(2))
         .await
         .expect("an answer");
     assert!(answer.best.is_some());
@@ -389,10 +387,7 @@ async fn a_search_given_up_on_is_stopped() {
         .await
         .expect("a position");
     {
-        let mut search = engine
-            .go(&Limits::infinite(), TIMEOUT)
-            .await
-            .expect("a search");
+        let mut search = engine.go(&Limits::infinite()).await.expect("a search");
         let given_up = timeout(Duration::from_millis(50), search.answer()).await;
         assert!(given_up.is_err(), "nothing comes until the search is told");
     }
@@ -411,27 +406,16 @@ async fn a_flood_of_reports_drops_the_oldest_and_keeps_the_answer() {
         .set_position(&Game::new(classic()))
         .await
         .expect("a position");
-    engine
-        .start_search(&Limits::depth(2))
-        .await
-        .expect("the search starts");
+    let answer = {
+        let mut search = engine.go(&Limits::depth(2)).await.expect("a search");
 
-    // Let the double outrun the client, which reads nothing until it does.
-    let until = Instant::now() + TIMEOUT;
-    while engine.dropped_lines() == 0 && Instant::now() < until {
-        sleep(Duration::from_millis(10)).await;
-    }
-    assert!(engine.dropped_lines() > 0, "the double floods the client");
-
-    let answer = loop {
-        match engine
-            .next_progress(TIMEOUT)
-            .await
-            .expect("the search goes on")
-        {
-            Progress::Done(answer) => break answer,
-            Progress::Info(_) => {}
+        // Let the double outrun the client, which reads nothing until it does.
+        let until = Instant::now() + TIMEOUT;
+        while search.dropped_lines() == 0 && Instant::now() < until {
+            sleep(Duration::from_millis(10)).await;
         }
+        assert!(search.dropped_lines() > 0, "the double floods the client");
+        search.answer().await.expect("the search answers")
     };
     assert!(answer.best.is_some(), "the answer is never dropped");
     assert_eq!(engine.state(), State::Idle);
@@ -442,7 +426,7 @@ async fn a_flood_of_reports_drops_the_oldest_and_keeps_the_answer() {
 async fn a_client_that_keeps_up_drops_nothing() {
     let mut engine = identified(&[]).await;
     engine
-        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(2))
         .await
         .expect("an answer");
     assert_eq!(engine.dropped_lines(), 0);

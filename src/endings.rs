@@ -10,7 +10,7 @@ use crate::explain::{colour_word, english_list};
 use crate::facts::scan::{between, distance};
 use crate::game::Game;
 use crate::position::Position;
-use crate::types::{Colour, File, Rank, Role, Square, SquareSet};
+use crate::types::{ByColour, Colour, File, PerRole, Rank, Role, Square, SquareSet};
 
 /// The conventional value of a role: pawn 1, knight and bishop 3, rook 5,
 /// queen 9, king 0.
@@ -48,17 +48,16 @@ pub struct Signature {
     /// tie the one whose pieces are worth more one by one, queen before rook
     /// before bishop before knight before pawn; White when even that is even.
     pub stronger: Colour,
-    /// Units per role per colour, indexed by [`Colour::index`] and
-    /// [`Role::index`].
-    pub counts: [[u8; 6]; 2],
+    /// Units per role, per colour.
+    pub counts: ByColour<PerRole<u8>>,
     /// Conventional material per colour, the king counting nothing.
-    pub value: [u32; 2],
+    pub value: ByColour<u32>,
 }
 
 impl Signature {
     /// How many units of `role` `colour` has.
     pub fn count(&self, colour: Colour, role: Role) -> u8 {
-        self.counts[colour.index()][role.index()]
+        *self.counts.of(colour).of(role)
     }
 
     /// The pieces of `colour`: everything that is neither a king nor a pawn.
@@ -656,27 +655,27 @@ pub struct Evidence {
 }
 
 impl Evidence {
-    /// One plain sentence per group that applies, and a sentence saying so
-    /// when none does.
+    /// One plain sentence naming which groups bear on the ending. Each group
+    /// says for itself what it holds.
     pub fn describe(&self) -> String {
-        let mut parts = Vec::new();
-        if let Some(pawn) = &self.pawn {
-            parts.push(pawn.describe());
+        let mut parts: Vec<String> = Vec::new();
+        if self.pawn.is_some() {
+            parts.push("the pawn race".to_string());
         }
-        if let Some(bishops) = &self.bishops {
-            parts.push(bishops.describe());
+        if self.bishops.is_some() {
+            parts.push("the bishops".to_string());
         }
         if self.opposition {
-            parts.push(
-                "The kings stand in opposition, so the side not to move has to be given way to."
-                    .to_string(),
-            );
+            parts.push("the opposition the kings stand in".to_string());
         }
         if parts.is_empty() {
             return "Nothing in this position changes what theory says about the ending."
                 .to_string();
         }
-        parts.join(" ")
+        format!(
+            "What theory says about this ending is read here against {}.",
+            english_list(&parts)
+        )
     }
 }
 
@@ -697,21 +696,21 @@ pub struct Ending {
 }
 
 impl Ending {
-    /// The material, the ending, the result and the method, in plain
-    /// sentences.
+    /// One plain sentence naming the ending. The material, the class, the
+    /// result, the method and the evidence each say for themselves what they
+    /// hold.
     pub fn describe(&self) -> String {
-        if self.class == Class::NotAnEnding {
-            return format!("{} {}", self.signature.describe(), self.class.describe());
+        match self.class {
+            Class::NotAnEnding => format!(
+                "The material is {}, which is more than an ending has.",
+                self.signature.text
+            ),
+            Class::Other => format!(
+                "The material is {}, an ending the catalogue has no name for.",
+                self.signature.text
+            ),
+            _ => format!("This is the {} ending.", self.signature.text),
         }
-        let mut parts = vec![
-            self.signature.describe(),
-            self.class.describe().to_string(),
-            self.verdict.describe(),
-        ];
-        if self.technique != Technique::None {
-            parts.push(self.technique.describe().to_string());
-        }
-        parts.join(" ")
     }
 }
 
@@ -753,20 +752,20 @@ pub fn classify(position: &Position) -> Ending {
 
 /// The material of `position`, stronger side first.
 fn signature(position: &Position) -> Signature {
-    let mut counts = [[0u8; 6]; 2];
-    let mut value_of = [0u32; 2];
+    let mut counts = ByColour::<PerRole<u8>>::default();
+    let mut value_of = ByColour::<u32>::default();
     for colour in Colour::ALL {
         for role in Role::ALL {
             let count = (position.by_colour(colour) & position.by_role(role)).len();
-            counts[colour.index()][role.index()] = count as u8;
-            value_of[colour.index()] += count * value(role);
+            counts[colour][role] = count as u8;
+            value_of[colour] += count * value(role);
         }
     }
     let stronger = stronger_side(&counts, &value_of);
     let text = format!(
         "{}v{}",
-        side_text(&counts[stronger.index()]),
-        side_text(&counts[(!stronger).index()])
+        side_text(counts.of(stronger)),
+        side_text(counts.of(!stronger))
     );
     Signature {
         text,
@@ -777,9 +776,9 @@ fn signature(position: &Position) -> Signature {
 }
 
 /// The side a signature writes first.
-fn stronger_side(counts: &[[u8; 6]; 2], value_of: &[u32; 2]) -> Colour {
-    if value_of[0] != value_of[1] {
-        return if value_of[0] > value_of[1] {
+fn stronger_side(counts: &ByColour<PerRole<u8>>, value_of: &ByColour<u32>) -> Colour {
+    if value_of.white != value_of.black {
+        return if value_of.white > value_of.black {
             Colour::White
         } else {
             Colour::Black
@@ -792,8 +791,8 @@ fn stronger_side(counts: &[[u8; 6]; 2], value_of: &[u32; 2]) -> Colour {
         Role::Knight,
         Role::Pawn,
     ] {
-        let white = counts[Colour::White.index()][role.index()];
-        let black = counts[Colour::Black.index()][role.index()];
+        let white = counts.white[role];
+        let black = counts.black[role];
         if white != black {
             return if white > black {
                 Colour::White
@@ -806,10 +805,10 @@ fn stronger_side(counts: &[[u8; 6]; 2], value_of: &[u32; 2]) -> Colour {
 }
 
 /// One side of a signature: `KRP`.
-fn side_text(counts: &[u8; 6]) -> String {
+fn side_text(counts: &PerRole<u8>) -> String {
     let mut text = String::new();
     for role in SIGNATURE_ORDER {
-        for _ in 0..counts[role.index()] {
+        for _ in 0..counts[role] {
             text.push(role.to_char().to_ascii_uppercase());
         }
     }

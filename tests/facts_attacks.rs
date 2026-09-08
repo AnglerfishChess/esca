@@ -130,8 +130,8 @@ fn the_map_is_kept_per_role_as_well() {
             attacks.by_kings,
         ]
         .into_iter()
-        .fold(SquareSet::EMPTY, |all, set| all | set.of(colour));
-        assert_eq!(union, attacks.controlled.of(colour));
+        .fold(SquareSet::EMPTY, |all, set| all | *set.of(colour));
+        assert_eq!(union, *attacks.controlled.of(colour));
     }
 }
 

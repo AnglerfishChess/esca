@@ -8,9 +8,13 @@ Every expectation is worked out from the definitions in `docs/features.md`
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import esca
 import pytest
+
+if TYPE_CHECKING:
+    from esca._esca import Square
 
 #: A rook takes an undefended pawn.
 FREE_PAWN = "4k3/8/8/3p4/8/8/3R4/4K3 w - - 0 1"
@@ -116,8 +120,8 @@ FactsOf = Callable[..., esca.Facts]
 def see_of(fen: str, uci: str) -> int:
     """The SEE of the move `uci` in `fen`, under classic chess."""
     position = esca.Position.from_fen(fen)
-    for annotated in position.facts().moves:
-        if annotated.move.uci == uci:
+    for annotated in position.annotated_moves():
+        if annotated.move.uci() == uci:
             return position.see_capture(annotated.move)
     raise AssertionError(f"{uci} is not a legal move of {fen}")
 
@@ -214,7 +218,7 @@ def test_an_exchange_is_played_out_with_the_least_valuable_attacker_each_time(fe
         "an_empty_square",
     ],
 )
-def test_the_see_of_a_unit_is_what_the_other_side_wins_by_taking_it(fen: str, square: str, see: int) -> None:
+def test_the_see_of_a_unit_is_what_the_other_side_wins_by_taking_it(fen: str, square: Square, see: int) -> None:
     assert esca.Position.from_fen(fen).see(square) == see
 
 
@@ -355,7 +359,11 @@ def test_the_three_counts_partition_the_captures(fen: str, facts_of: FactsOf) ->
     position = esca.Position.from_fen(fen)
     mover = facts.side_to_move
     exchange = facts.exchange
-    captures = [position.see_capture(annotated.move) for annotated in facts.moves if annotated.facts.victim is not None]
+    captures = [
+        position.see_capture(annotated.move)
+        for annotated in position.annotated_moves()
+        if annotated.facts.victim is not None
+    ]
 
     negative = sum(1 for see in captures if see < 0)
     assert exchange.see_positive_capture_count.of(mover) + exchange.see_equal_capture_count.of(mover) + negative == len(

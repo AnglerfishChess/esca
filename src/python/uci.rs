@@ -14,6 +14,7 @@ use pyo3::types::PyDict;
 
 use crate::game::Game;
 use crate::uci::{self, Info, Limits, Message, OptionKind, OptionSpec, OptionValue, Progress};
+use crate::variant::CastlingOutput;
 
 use super::board::{PyGame, PyMove};
 use super::convert::castling_output_from;
@@ -529,7 +530,7 @@ impl PyInfo {
             self.depth.map_or("-".to_owned(), |depth| depth.to_string()),
             self.pv
                 .iter()
-                .map(|mv| mv.inner.to_string())
+                .map(|mv| mv.inner.uci(CastlingOutput::KingToRook))
                 .collect::<Vec<_>>()
                 .join(" ")
         )
@@ -561,7 +562,7 @@ impl PyAnswer {
     fn __repr__(&self) -> String {
         match self.best {
             None => "<Answer (none)>".to_owned(),
-            Some(best) => format!("<Answer {}>", best.inner),
+            Some(best) => format!("<Answer {:?}>", best.inner),
         }
     }
 }
@@ -1067,7 +1068,11 @@ impl PyEngine {
         let budget = self.budget(timeout)?;
         let game = game.played().clone();
         let answer = on_engine(py, &self.shared, move |engine| {
-            engine.play(&game, &limits, budget)
+            let kept = engine.timeout();
+            engine.set_timeout(budget);
+            let answer = engine.play(&game, &limits);
+            engine.set_timeout(kept);
+            answer
         })?;
         Ok(PyAnswer::of(answer))
     }
@@ -1095,7 +1100,9 @@ impl PyEngine {
         let searched = game.played().clone();
         let reports = on_engine(py, &self.shared, move |engine| {
             engine.set_position(&searched)?;
-            let mut search = engine.go(&limits, budget)?;
+            let kept = engine.timeout();
+            engine.set_timeout(budget);
+            let mut search = engine.go(&limits)?;
             let mut reports: Vec<Info> = Vec::new();
             while let Some(info) = search.next_info()? {
                 if info.score.is_none() {
@@ -1110,22 +1117,14 @@ impl PyEngine {
                     None => reports.push(info),
                 }
             }
+            drop(search);
+            engine.set_timeout(kept);
             Ok(reports)
         })?;
         let game = game.played();
         let mut reports: Vec<PyInfo> = reports.iter().map(|info| PyInfo::of(info, game)).collect();
         reports.sort_by_key(|info| info.multipv.unwrap_or(1));
         Ok(reports)
-    }
-
-    /// Asks the search in flight to finish now.
-    fn stop(&self, py: Python<'_>) -> PyResult<()> {
-        on_engine(py, &self.shared, |engine| engine.stop())
-    }
-
-    /// Tells the engine the move it is pondering on was played.
-    fn ponderhit(&self, py: Python<'_>) -> PyResult<()> {
-        on_engine(py, &self.shared, |engine| engine.ponderhit())
     }
 
     /// Writes one line, bypassing the order of the conversation.

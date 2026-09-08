@@ -16,7 +16,7 @@ pub fn json_schema() -> String {
     let mut groups = Map::new();
     for group in super::catalogue() {
         let mut node = object_of(group.fields);
-        node["description"] = Value::String(group.meaning());
+        node["description"] = Value::String(group.meaning().to_string());
         groups.insert(group.name.to_string(), node);
     }
     let mut moves = object_of(MoveFacts::FIELDS);
@@ -48,7 +48,7 @@ fn object_of(fields: &[Field]) -> Value {
     let mut properties = Map::new();
     for field in fields {
         let mut node = node_of(&field.kind());
-        node["description"] = Value::String(field.meaning());
+        node["description"] = Value::String(field.meaning().to_string());
         properties.insert(field.name.to_string(), node);
     }
     json!({

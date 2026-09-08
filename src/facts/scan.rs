@@ -149,7 +149,7 @@ impl Scan {
     /// The units of `colour` that attack `square`.
     #[inline]
     pub fn attackers_of(&self, square: Square, colour: Colour) -> SquareSet {
-        attackers(square, colour, &self.role_units.of(colour), self.occupied)
+        attackers(square, colour, self.role_units.of(colour), self.occupied)
     }
 
     /// The rank of `square` counted from `colour`'s own back rank, from 1.

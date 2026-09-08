@@ -10,8 +10,8 @@
 use std::path::Path;
 use std::time::Duration;
 
-use esca::uci::{Engine, Error, Launch, Limits, OptionKind, OptionValue, Progress, State};
-use esca::{Game, chess960, classic};
+use esca::uci::{Engine, Error, Launch, Limits, OptionKind, OptionValue, State};
+use esca::{CastlingOutput, Game, chess960, classic};
 
 mod double;
 
@@ -70,7 +70,7 @@ fn a_search_reports_and_then_answers() {
     engine.set_position(&game).expect("the start position");
 
     let answer = {
-        let mut search = engine.go(&Limits::depth(2), TIMEOUT).expect("a search");
+        let mut search = engine.go(&Limits::depth(2)).expect("a search");
         let reports: Vec<_> = (&mut search)
             .collect::<Result<Vec<_>, _>>()
             .expect("the reports arrive");
@@ -87,7 +87,10 @@ fn a_search_reports_and_then_answers() {
     let best = answer.best.expect("a move");
     assert_eq!(game.move_to_san(best), "e4");
     assert_eq!(
-        answer.ponder.map(|mv| mv.to_string()).as_deref(),
+        answer
+            .ponder
+            .map(|mv| mv.uci(CastlingOutput::KingToRook))
+            .as_deref(),
         Some("e7e5")
     );
     assert_eq!(engine.state(), State::Idle);
@@ -116,7 +119,7 @@ fn the_moves_played_go_out_with_the_position() {
 fn an_engine_with_no_move_answers_with_none() {
     let mut engine = identified(&["--no-move"]);
     let answer = engine
-        .play(&Game::new(classic()), &Limits::depth(1), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(1))
         .expect("an answer");
     assert_eq!(answer.best, None);
     assert_eq!(answer.ponder, None);
@@ -128,7 +131,7 @@ fn a_search_that_waits_is_ended_by_stop() {
     engine
         .set_position(&Game::new(classic()))
         .expect("a position");
-    let mut search = engine.go(&Limits::infinite(), TIMEOUT).expect("a search");
+    let mut search = engine.go(&Limits::infinite()).expect("a search");
     search.stop().expect("stop goes out");
     assert!(search.answer().expect("an answer").best.is_some());
 }
@@ -140,7 +143,7 @@ fn a_ponder_becomes_a_search_on_a_ponderhit() {
         .set_position(&Game::new(classic()))
         .expect("a position");
     let mut search = engine
-        .go(&Limits::infinite().pondering(), TIMEOUT)
+        .go(&Limits::infinite().pondering())
         .expect("a search");
     assert_eq!(search.state(), State::Pondering);
     search.ponderhit().expect("ponderhit goes out");
@@ -154,7 +157,7 @@ fn dropping_a_search_leaves_the_engine_idle() {
     engine
         .set_position(&Game::new(classic()))
         .expect("a position");
-    drop(engine.go(&Limits::infinite(), TIMEOUT).expect("a search"));
+    drop(engine.go(&Limits::infinite()).expect("a search"));
     assert_eq!(engine.state(), State::Idle);
     engine.is_ready().expect("the engine still answers");
 }
@@ -215,17 +218,16 @@ fn an_engine_that_never_ends_its_identification_times_out() {
     );
 }
 
-/// A slow engine is a timeout on this search, not a hung client.
+/// A silent engine is a timeout on this search, not a hung client.
 #[test]
-fn a_search_that_outlasts_its_budget_is_a_timeout() {
+fn a_search_that_says_nothing_for_too_long_is_a_timeout() {
     let mut engine = identified(&["--slow"]);
     engine
         .set_position(&Game::new(classic()))
         .expect("a position");
+    engine.set_timeout(Duration::from_millis(50));
     let error = {
-        let mut search = engine
-            .go(&Limits::depth(2), Duration::from_millis(50))
-            .expect("a search");
+        let mut search = engine.go(&Limits::depth(2)).expect("a search");
         search.answer().expect_err("the double is slower than that")
     };
     assert!(
@@ -245,7 +247,7 @@ fn a_search_that_outlasts_its_budget_is_a_timeout() {
 fn a_slow_engine_answers_within_a_budget_that_fits() {
     let mut engine = identified(&["--slow"]);
     let answer = engine
-        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(2))
         .expect("an answer");
     assert!(answer.best.is_some());
 }
@@ -255,7 +257,7 @@ fn a_slow_engine_answers_within_a_budget_that_fits() {
 fn garbage_never_derails_a_search() {
     let mut engine = identified(&["--garbage"]);
     let answer = engine
-        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(2))
         .expect("an answer");
     assert!(answer.best.is_some());
     engine.is_ready().expect("the engine is still answerable");
@@ -266,7 +268,7 @@ fn garbage_never_derails_a_search() {
 fn an_answer_too_many_is_ignored() {
     let mut engine = identified(&["--twice"]);
     engine
-        .play(&Game::new(classic()), &Limits::depth(1), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(1))
         .expect("an answer");
     engine.is_ready().expect("the engine is still answerable");
     assert_eq!(engine.state(), State::Idle);
@@ -279,7 +281,7 @@ fn an_engine_that_dies_mid_search_is_reported_as_dead() {
         .set_position(&Game::new(classic()))
         .expect("a position");
     let error = {
-        let mut search = engine.go(&Limits::depth(2), TIMEOUT).expect("a search");
+        let mut search = engine.go(&Limits::depth(2)).expect("a search");
         search.answer().expect_err("the double exits instead")
     };
     assert!(matches!(error, Error::Died { code: Some(3) }), "{error}");
@@ -290,12 +292,19 @@ fn an_engine_that_dies_mid_search_is_reported_as_dead() {
     assert!(!engine.is_alive());
 }
 
-/// There is nothing to stop, so the command never reaches the engine.
+/// The search is not pondering, so the command never reaches the engine.
 #[test]
 fn a_command_the_conversation_has_no_room_for_is_refused() {
     let mut engine = identified(&[]);
-    let error = engine.stop().expect_err("no search is running");
-    assert!(matches!(error, Error::Protocol(_)), "{error}");
+    engine
+        .set_position(&Game::new(classic()))
+        .expect("a position");
+    {
+        let mut search = engine.go(&Limits::depth(2)).expect("a search");
+        let error = search.ponderhit().expect_err("the search is not pondering");
+        assert!(matches!(error, Error::Protocol(_)), "{error}");
+        search.answer().expect("the search answers");
+    }
     engine.is_ready().expect("the engine is untouched");
 }
 
@@ -469,22 +478,16 @@ fn a_flood_of_reports_drops_the_oldest_and_keeps_the_answer() {
     engine
         .set_position(&Game::new(classic()))
         .expect("a position");
-    engine
-        .start_search(&Limits::depth(2))
-        .expect("the search starts");
+    let answer = {
+        let mut search = engine.go(&Limits::depth(2)).expect("a search");
 
-    // Let the double outrun the client, which reads nothing until it does.
-    let until = std::time::Instant::now() + TIMEOUT;
-    while engine.dropped_lines() == 0 && std::time::Instant::now() < until {
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    assert!(engine.dropped_lines() > 0, "the double floods the client");
-
-    let answer = loop {
-        match engine.next_progress(TIMEOUT).expect("the search goes on") {
-            Progress::Done(answer) => break answer,
-            Progress::Info(_) => {}
+        // Let the double outrun the client, which reads nothing until it does.
+        let until = std::time::Instant::now() + TIMEOUT;
+        while search.dropped_lines() == 0 && std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(10));
         }
+        assert!(search.dropped_lines() > 0, "the double floods the client");
+        search.answer().expect("the search answers")
     };
     assert!(answer.best.is_some(), "the answer is never dropped");
     assert_eq!(engine.state(), State::Idle);
@@ -495,7 +498,7 @@ fn a_flood_of_reports_drops_the_oldest_and_keeps_the_answer() {
 fn a_client_that_keeps_up_drops_nothing() {
     let mut engine = identified(&[]);
     engine
-        .play(&Game::new(classic()), &Limits::depth(2), TIMEOUT)
+        .play(&Game::new(classic()), &Limits::depth(2))
         .expect("an answer");
     assert_eq!(engine.dropped_lines(), 0);
 }
@@ -520,11 +523,7 @@ fn a_real_engine_identifies_itself_and_plays() {
 
         let game = Game::new(classic());
         let answer = engine
-            .play(
-                &game,
-                &Limits::movetime(Duration::from_millis(200)),
-                Duration::from_secs(20),
-            )
+            .play(&game, &Limits::movetime(Duration::from_millis(200)))
             .expect("a real engine answers");
         let best = answer.best.expect("a legal move from the start position");
         assert!(
@@ -553,11 +552,7 @@ fn a_real_engine_plays_chess960() {
         }
         let game = Game::from_fen(chess960(), BESIDE_ROOK).expect("the FEN is a legal position");
         let answer = engine
-            .play(
-                &game,
-                &Limits::movetime(Duration::from_millis(200)),
-                Duration::from_secs(20),
-            )
+            .play(&game, &Limits::movetime(Duration::from_millis(200)))
             .expect("a real engine answers");
         let best = answer.best.expect("a legal move");
         assert!(

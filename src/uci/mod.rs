@@ -7,7 +7,6 @@
 //! wait, and both kill the process when they are dropped.
 //!
 //! ```no_run
-//! use std::time::Duration;
 //! use esca::uci::{Engine, Limits};
 //! use esca::{Game, classic};
 //!
@@ -17,7 +16,7 @@
 //!
 //! let mut game = Game::new(classic());
 //! game.play_san("e4").unwrap();
-//! let answer = engine.play(&game, &Limits::depth(12), Duration::from_secs(30))?;
+//! let answer = engine.play(&game, &Limits::depth(12))?;
 //! if let Some(mv) = answer.best {
 //!     game.play(mv).unwrap();
 //! }
@@ -27,12 +26,15 @@
 
 pub mod protocol;
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub mod tokio;
 
 mod engine;
 mod lines;
 
-pub use engine::{Answer, DEFAULT_TIMEOUT, Engine, Error, Identity, Launch, Progress, Search};
+#[cfg(feature = "python")]
+pub(crate) use engine::Progress;
+pub use engine::{Answer, DEFAULT_TIMEOUT, Engine, Error, Identity, Launch, Search};
 pub use protocol::{
     BestMove, Bound, CHESS960_OPTION, Command, CurrLine, Info, Limits, Message, OptionKind,
     OptionSpec, OptionValue, ProtocolError, Register, Session, Setup, State, Status, Wdl,

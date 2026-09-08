@@ -116,17 +116,29 @@ class _Lines:
 class AsyncSearch:
     """A search in flight, read as an async iterator over its reports.
 
-    A search that is neither finished nor stopped leaves the engine searching;
-    `async with` stops it. Giving up on an awaited report — cancelling the
-    task, or letting a timeout do it — asks the engine to stop, and the
-    engine's next call waits that search out.
+    `AsyncEngine.go` hands one back without a wait of its own; the `go` line
+    goes out when the search is first read, so the shape is
+
+        search = engine.go(Limits(depth=12))
+        async for report in search:
+            print(report.depth, report.cp)
+        answer = await search.answer()
+
+    and `await search.answer()` alone is the whole of it when only the move
+    matters. A search that is neither finished nor stopped leaves the engine
+    searching; `async with` stops it. Giving up on an awaited report —
+    cancelling the task, or letting a timeout do it — asks the engine to stop,
+    and the engine's next call waits that search out.
     """
 
-    def __init__(self, engine: AsyncEngine, game: Game, deadline: float, budget: float) -> None:
+    def __init__(self, engine: AsyncEngine, limits: Limits | None, timeout: float | None) -> None:
         self._engine = engine
-        self._game = game
-        self._deadline = deadline
-        self._budget = budget
+        self._limits = limits
+        self._timeout = timeout
+        self._game: Game | None = None
+        self._deadline = 0.0
+        self._budget = 0.0
+        self._sent = False
         self._answer: Answer | None = None
 
     @property
@@ -136,17 +148,30 @@ class AsyncSearch:
 
     async def answer(self) -> Answer:
         """The engine's answer, with the reports still to come dropped."""
+        await self._start()
         while self._answer is None:
             await self._progress()
         return self._answer
 
     async def stop(self) -> None:
         """Asks the engine to finish the search now."""
-        await self._engine.stop()
+        if self._sent:
+            await self._engine._stop()
 
     async def ponderhit(self) -> None:
         """Tells the engine the move it is pondering on was played."""
-        await self._engine.ponderhit()
+        await self._start()
+        await self._engine._ponderhit()
+
+    async def _start(self) -> None:
+        """Sends the `go` line, once."""
+        if self._sent:
+            return
+        self._sent = True
+        await self._engine._issue(Command.go(self._limits))
+        self._game = self._engine._searched
+        self._deadline = self._engine._deadline(self._timeout)
+        self._budget = self._timeout if self._timeout is not None else self._engine.timeout
 
     async def _progress(self) -> Info | None:
         """The next report, or `None` when the answer arrived instead."""
@@ -164,6 +189,7 @@ class AsyncSearch:
         return self
 
     async def __anext__(self) -> Info:
+        await self._start()
         while not self.done:
             report = await self._progress()
             if report is not None:
@@ -171,10 +197,11 @@ class AsyncSearch:
         raise StopAsyncIteration
 
     async def __aenter__(self) -> AsyncSearch:
+        await self._start()
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
-        if not self.done:
+        if self._sent and not self.done:
             await self.stop()
             await self.answer()
 
@@ -278,7 +305,7 @@ class AsyncEngine:
                 self._options[message.option.name] = message.option
         self._identified = True
 
-    async def set_option(self, name: str, value: object = None) -> None:
+    async def set_option(self, name: str, value: bool | int | str | None = None) -> None:
         """Sets one option to a value of the option's own type."""
         await self._started()
         if not self._identified:
@@ -324,17 +351,18 @@ class AsyncEngine:
         await self._issue(Command.position(game, castling))
         self._game = game
 
-    async def go(self, limits: Limits | None = None, *, timeout: float | None = None) -> AsyncSearch:
-        """Starts a search on the position last set."""
-        await self._issue(Command.go(limits))
-        budget = timeout if timeout is not None else self._timeout
-        return AsyncSearch(self, self._searched, self._deadline(timeout), budget)
+    def go(self, limits: Limits | None = None, *, timeout: float | None = None) -> AsyncSearch:
+        """A search on the position last set, started when it is first read.
+
+        Not a coroutine: `async for report in engine.go(...)` and
+        `await engine.go(...).answer()` are both whole calls.
+        """
+        return AsyncSearch(self, limits, timeout)
 
     async def play(self, game: Game, limits: Limits | None = None, *, timeout: float | None = None) -> Answer:
         """Sets the position, searches it, and answers."""
         await self.set_position(game)
-        search = await self.go(limits, timeout=timeout)
-        return await search.answer()
+        return await self.go(limits, timeout=timeout).answer()
 
     async def analyse(
         self,
@@ -348,7 +376,7 @@ class AsyncEngine:
         if multipv is not None:
             await self.set_option("MultiPV", multipv)
         await self.set_position(game)
-        search = await self.go(limits, timeout=timeout)
+        search = self.go(limits, timeout=timeout)
         deepest: dict[int, Info] = {}
         async for report in search:
             if report.cp is None and report.mate is None:
@@ -356,11 +384,11 @@ class AsyncEngine:
             deepest[report.multipv or 1] = report
         return [deepest[line] for line in sorted(deepest)]
 
-    async def stop(self) -> None:
+    async def _stop(self) -> None:
         """Asks the search in flight to finish now."""
         await self._issue(Command.stop())
 
-    async def ponderhit(self) -> None:
+    async def _ponderhit(self) -> None:
         """Tells the engine the move it is pondering on was played."""
         await self._issue(Command.ponderhit())
 
