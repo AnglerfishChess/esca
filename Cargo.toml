@@ -1,7 +1,7 @@
 [package]
 name = "esca"
 version = "0.3.0"
-exclude = [".github/", "docs/", "python/", "benches/", "examples/", "tests/", "mcp/"]
+exclude = ["/.github/", "/docs/", "/python/", "/benches/", "/examples/", "/tests/", "/mcp/"]
 description = "Rust/Python MIT chess library: rules, facts, explanations, PGN, opening books and names, UCI client, and an MCP server over it; one API, Chess960 throughout."
 keywords = ["chess", "chess960", "fen", "san", "position"]
 categories = ["games", "game-development"]
@@ -89,3 +89,14 @@ required-features = ["tensors"]
 [[example]]
 name = "catalogue"
 required-features = ["tensors"]
+
+[[example]]
+name = "pgn_report"
+required-features = ["pgn", "openings"]
+
+[[example]]
+name = "why_illegal"
+
+[[example]]
+name = "engine_game"
+required-features = ["uci", "serde", "tensors"]

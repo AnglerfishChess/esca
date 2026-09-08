@@ -22,6 +22,12 @@ jobs:
       - run: uv sync --all-groups
       # `-n auto` overrides the local `-n 4` of the pytest addopts.
       - run: uv run --no-sync pytest -n auto
+      # No engine is installed here, so `engine_game.py` takes its graceful exit.
+      - name: The examples run
+        run: |
+          uv run --no-sync python python/examples/read_games.py examples/games.pgn
+          uv run --no-sync python python/examples/legal_moves.py
+          uv run --no-sync python python/examples/engine_game.py
       - run: uvx ruff check .
       - run: uvx ruff format --check .
       - run: uvx pyrefly check
@@ -50,6 +56,13 @@ jobs:
       - run: cargo test --features uci
       - run: cargo test --features tokio
       - run: cargo test --all-features
+      - run: cargo build --examples --all-features
+      # No engine is installed here, so `engine_game` takes its graceful exit.
+      - name: The examples run
+        run: |
+          cargo run --all-features --example pgn_report -- examples/games.pgn
+          cargo run --all-features --example why_illegal
+          cargo run --all-features --example engine_game
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo clippy --all-targets --all-features -- -D warnings

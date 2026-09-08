@@ -15,6 +15,8 @@ are Rust.
 - **A Python reader** starts at [§11, the Python surface](#11-python-surface),
   which is the whole of it in one place, and comes back to a numbered section
   for what a name means.
+- **A reader who would rather run something first** starts at `examples/` and
+  `python/examples/`: three short programs a side, each answering one question.
 
 Four things exist on the Python surface only: `uci.Engine.analyse`,
 `uci.AsyncEngine` (`uci::tokio::Engine` is the Rust counterpart, not the same

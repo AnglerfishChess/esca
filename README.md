@@ -69,6 +69,17 @@ print(facts.to_dict()["material"])  # every group in the one JSON form
 Wheels are abi3 for Python 3.12 and up. `pip install esca[tensors]` adds NumPy and
 `esca.tensors`, which turns a run of positions into one typed array per fact.
 
+## Examples
+
+Three short programs a side, reading the same `examples/games.pgn`, in
+[`examples/`](https://github.com/AnglerfishChess/esca/tree/main/examples) and
+[`python/examples/`](https://github.com/AnglerfishChess/esca/tree/main/python/examples):
+
+- `pgn_report` / `read_games.py` — per game of a PGN file: opening, final position, ending, passers.
+- `why_illegal` / `legal_moves.py` — every legal move and what it does, then why one other is not.
+- `engine_game` / `engine_game.py` — a UCI engine against itself, its ending as English, JSON and
+  arrays. Takes the engine's path; without one it says so and stops.
+
 ## What it covers
 
 - Classic chess and Chess960, behind one `Variant` trait.
