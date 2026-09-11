@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+The largest release so far, and a breaking one: nearly every public name
+changed shape between 0.3.0 and here. It is also the first release whose API
+we would call decent and convenient — typed facts read by colour, one JSON
+form, typed tensors, rules questions answered by a `Position`, a vocabulary
+that parses and prints as text, and an MCP server over all of it. 0.3.x code
+does not compile or import against it unchanged; every rename is listed
+below, old → new, so a dependent can follow them one by one. Treat 0.4.0 as
+the version to start from.
+
 ### Breaking
 
 Each line is `old` → `new`, against 0.3.0. Where the name it renames is itself
