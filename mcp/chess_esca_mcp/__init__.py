@@ -6,4 +6,4 @@ and no search — nothing here says how good a move is.
 """
 
 #: The esca release this server serves; the two are versioned together.
-__version__ = "0.3.0"
+__version__ = "0.4.0"

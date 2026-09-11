@@ -23,7 +23,7 @@ it, and told about White and Black by name.
 
 ```toml
 [dependencies]
-esca = "0.3"
+esca = "0.4"
 ```
 
 ```rust

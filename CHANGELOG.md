@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-11)
 
 The largest release so far, and a breaking one: nearly every public name
 changed shape between 0.3.0 and here. It is also the first release whose API
