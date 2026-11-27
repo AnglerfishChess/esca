@@ -1,4 +1,4 @@
-//! The facts of many positions as one typed array per fact.
+//! The facts of many positions, or of many moves, as one typed array per fact.
 //!
 //! A fact keeps the type it was declared with: a count is an integer of its own
 //! width, a flag is a `bool`, a set of squares is 64 flags. Nothing is scaled,
@@ -6,24 +6,29 @@
 //! view — the leading axis of a per-colour fact is White then Black, always.
 //!
 //! [`layout`] says what every array is called, what it holds and how to read
-//! its axes; [`Batch`] is the arrays themselves. A batch is written in the
+//! its axes; [`Batch`] is the arrays themselves, filled from each fact's own
+//! value. A batch holds positions or moves, never both. A batch is written in the
 //! safetensors format — a JSON header naming each array, then the raw bytes —
 //! which NumPy, PyTorch and `esca.tensors` all read.
 
+use std::slice::IterMut;
 use std::sync::OnceLock;
 
 use serde_json::Value;
 
 use super::catalogue::{Field, shape_text};
-use super::types::{Dtype, FieldType, Named, Packing, Run};
+use super::types::{Dtype, FieldType, Packing, Run};
+use super::{AnnotatedMove, CastledSide, DrawishMaterial, Facts, MoveFacts, Opposition};
 use crate::game::Game;
 use crate::position::Position;
+use crate::types::{ByColour, Colour, File, FileSet, PerFile, PerRank, Role, Square, SquareSet};
 use crate::variant::Variant;
 
 /// What one array of a batch holds.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Entry {
-    /// The array's name: the group and the field, `pawns.passed`.
+    /// The array's name: the group and the field, `pawns.passed` or
+    /// `move.see`.
     pub name: &'static str,
     /// The group the fact belongs to.
     pub group: &'static str,
@@ -33,18 +38,18 @@ pub struct Entry {
     pub declared: &'static str,
     /// The element type, expanded.
     pub dtype: Dtype,
-    /// The shape of one position's value, the batch axis left off.
+    /// The shape of one item's value, the batch axis left off.
     pub shape: &'static [usize],
     /// What each axis means, numbered the way [`Batch::shape_of`] numbers
-    /// them: axis 0 is the run of positions, so these start at 1. Empty for a
+    /// them: axis 0 is the run of items, so these start at 1. Empty for a
     /// fact that is one value.
     pub order: &'static str,
     /// How to read the values themselves, where the shape does not say.
     pub encoding: Option<&'static str>,
     /// The element type of the packed form.
     pub packed_dtype: Dtype,
-    /// The shape of one position's packed value, or `None` where the packing
-    /// runs across the batch and there is no per-position shape.
+    /// The shape of one item's packed value, or `None` where the packing
+    /// runs across the batch and there is no per-item shape.
     pub packed_shape: Option<Vec<usize>>,
     /// The fact's own meaning, as the catalogue states it.
     pub meaning: &'static str,
@@ -52,7 +57,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// How many values of one position the expanded array holds.
+    /// How many values of one item the expanded array holds.
     pub fn width(&self) -> usize {
         self.shape.iter().product::<usize>().max(1)
     }
@@ -119,7 +124,8 @@ fn kind_json(kind: &FieldType) -> Value {
     }
 }
 
-/// Every fact of every group, in the order they are declared.
+/// Every fact of every group, in the order they are declared: the position
+/// groups first, then the `move` group.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Layout {
     /// One entry per fact.
@@ -127,6 +133,23 @@ pub struct Layout {
 }
 
 impl Layout {
+    /// The entries of the position groups: the arrays of a batch of positions.
+    pub fn positions(&self) -> &[Entry] {
+        &self.entries[..self.split()]
+    }
+
+    /// The entries of the `move` group: the arrays of a batch of moves.
+    pub fn moves(&self) -> &[Entry] {
+        &self.entries[self.split()..]
+    }
+
+    fn split(&self) -> usize {
+        self.entries
+            .iter()
+            .position(|entry| entry.group == MoveFacts::GROUP)
+            .unwrap_or(self.entries.len())
+    }
+
     /// The entry of that name, `group.field`.
     pub fn entry(&self, name: &str) -> Option<&Entry> {
         self.entries.iter().find(|entry| entry.name == name)
@@ -164,7 +187,7 @@ pub fn layout() -> &'static Layout {
     static LAYOUT: OnceLock<Layout> = OnceLock::new();
     LAYOUT.get_or_init(|| {
         let mut entries = Vec::new();
-        for group in super::catalogue() {
+        for group in super::catalogue().iter().chain([&MoveFacts::ENTRY]) {
             for field in group.fields {
                 entries.push(entry_of(group.name, field));
             }
@@ -321,11 +344,13 @@ pub enum Form {
     Packed,
 }
 
-/// The facts of a run of positions, one array per fact, batch axis first.
+/// The facts of a run of positions or of a run of moves, one array per fact,
+/// batch axis first.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Batch {
     count: usize,
     form: Form,
+    entries: &'static [Entry],
     buffers: Vec<Buffer>,
 }
 
@@ -333,7 +358,7 @@ impl Batch {
     /// The facts of every position of `positions` under `variant`.
     pub fn from_positions(positions: &[Position], variant: &dyn Variant) -> Batch {
         let mut scratch = super::Scratch::new();
-        let mut batch = Batch::empty();
+        let mut batch = Batch::of_positions();
         for position in positions {
             let facts = position.facts_in(variant, &mut scratch);
             batch.push_facts(&facts);
@@ -343,40 +368,94 @@ impl Batch {
 
     /// The facts of every game's current position, history and all.
     pub fn from_games(games: &[Game]) -> Batch {
-        let mut batch = Batch::empty();
+        let mut batch = Batch::of_positions();
         for game in games {
             batch.push_facts(&game.facts());
         }
         batch
     }
 
-    /// An empty batch in the expanded form.
-    fn empty() -> Batch {
+    /// The position facts already computed, one position each.
+    pub fn from_facts<'a>(facts: impl IntoIterator<Item = &'a Facts>) -> Batch {
+        let mut batch = Batch::of_positions();
+        for facts in facts {
+            batch.push_facts(facts);
+        }
+        batch
+    }
+
+    /// The facts of every move of `moves`, one move each: the `move` arrays of
+    /// the layout.
+    pub fn from_moves(moves: &[AnnotatedMove]) -> Batch {
+        Batch::from_move_facts(moves.iter().map(|annotated| &annotated.facts))
+    }
+
+    /// The move facts already computed, one move each.
+    pub fn from_move_facts<'a>(facts: impl IntoIterator<Item = &'a MoveFacts>) -> Batch {
+        let mut batch = Batch::of_moves();
+        for facts in facts {
+            batch.push_move_facts(facts);
+        }
+        batch
+    }
+
+    /// An empty batch of positions in the expanded form.
+    pub(crate) fn of_positions() -> Batch {
+        Batch::over(layout().positions())
+    }
+
+    /// An empty batch of moves in the expanded form.
+    pub(crate) fn of_moves() -> Batch {
+        Batch::over(layout().moves())
+    }
+
+    fn over(entries: &'static [Entry]) -> Batch {
         Batch {
             count: 0,
             form: Form::Expanded,
-            buffers: layout()
-                .entries
+            entries,
+            buffers: entries
                 .iter()
                 .map(|entry| Buffer::empty(entry.dtype))
                 .collect(),
         }
     }
 
-    /// One position's facts appended to every array.
-    fn push_facts(&mut self, facts: &super::Facts) {
-        let json = serde_json::to_value(facts).expect("the facts serialise");
-        for (entry, buffer) in layout().entries.iter().zip(self.buffers.iter_mut()) {
-            let value = json
-                .get(entry.group)
-                .and_then(|group| group.get(entry.field))
-                .unwrap_or_else(|| panic!("{} is missing from the facts", entry.name));
-            push(value, &entry.kind, buffer);
-        }
+    /// One position's facts appended to every array of an expanded batch of
+    /// positions.
+    pub(crate) fn push_facts(&mut self, facts: &Facts) {
+        debug_assert!(
+            self.form == Form::Expanded && std::ptr::eq(self.entries, layout().positions())
+        );
+        let mut out = self.buffers.iter_mut();
+        facts.placement.encode_fields(&mut out);
+        facts.state.encode_fields(&mut out);
+        facts.history.encode_fields(&mut out);
+        facts.material.encode_fields(&mut out);
+        facts.pawns.encode_fields(&mut out);
+        facts.pieces.encode_fields(&mut out);
+        facts.king.encode_fields(&mut out);
+        facts.mobility.encode_fields(&mut out);
+        facts.attacks.encode_fields(&mut out);
+        facts.exchange.encode_fields(&mut out);
+        facts.threats.encode_fields(&mut out);
+        facts.tactics.encode_fields(&mut out);
+        facts.endgame.encode_fields(&mut out);
+        facts.maps.encode_fields(&mut out);
+        debug_assert!(out.next().is_none(), "a group is missing from the encoding");
         self.count += 1;
     }
 
-    /// How many positions it holds.
+    /// One move's facts appended to every array of an expanded batch of moves.
+    pub(crate) fn push_move_facts(&mut self, facts: &MoveFacts) {
+        debug_assert!(self.form == Form::Expanded && std::ptr::eq(self.entries, layout().moves()));
+        let mut out = self.buffers.iter_mut();
+        facts.encode_fields(&mut out);
+        debug_assert!(out.next().is_none(), "a field is missing from the encoding");
+        self.count += 1;
+    }
+
+    /// How many items it holds.
     pub fn len(&self) -> usize {
         self.count
     }
@@ -391,21 +470,24 @@ impl Batch {
         self.form
     }
 
-    /// What every array is called and holds.
+    /// The layout its entries come from.
     pub fn layout(&self) -> &'static Layout {
         layout()
     }
 
+    /// What each of its arrays is called and holds, in the order of
+    /// [`Batch::buffers`]: [`Layout::positions`] or [`Layout::moves`].
+    pub fn entries(&self) -> &'static [Entry] {
+        self.entries
+    }
+
     /// The array of the fact named `group.field`.
     pub fn buffer(&self, name: &str) -> Option<&Buffer> {
-        let index = layout()
-            .entries
-            .iter()
-            .position(|entry| entry.name == name)?;
+        let index = self.entries.iter().position(|entry| entry.name == name)?;
         self.buffers.get(index)
     }
 
-    /// Its arrays, in the layout's order.
+    /// Its arrays, in the order of [`Batch::entries`].
     pub fn buffers(&self) -> &[Buffer] {
         &self.buffers
     }
@@ -439,48 +521,48 @@ impl Batch {
         if self.form == Form::Packed {
             return self.clone();
         }
-        let buffers = layout()
-            .entries
-            .iter()
-            .zip(self.buffers.iter())
-            .map(|(entry, buffer)| match (entry.packing(), buffer.flags()) {
-                (Packing::Bitboard, Some(flags)) => Buffer::U64(
-                    flags
-                        .chunks(64)
-                        .map(|chunk| {
-                            chunk.iter().enumerate().fold(0u64, |bits, (index, &flag)| {
-                                bits | (u64::from(flag) << index)
+        let buffers =
+            self.entries
+                .iter()
+                .zip(self.buffers.iter())
+                .map(|(entry, buffer)| match (entry.packing(), buffer.flags()) {
+                    (Packing::Bitboard, Some(flags)) => Buffer::U64(
+                        flags
+                            .chunks(64)
+                            .map(|chunk| {
+                                chunk.iter().enumerate().fold(0u64, |bits, (index, &flag)| {
+                                    bits | (u64::from(flag) << index)
+                                })
                             })
-                        })
-                        .collect(),
-                ),
-                (Packing::FileMask, Some(flags)) => Buffer::U8(
-                    flags
-                        .chunks(8)
-                        .map(|chunk| {
-                            chunk
-                                .iter()
-                                .enumerate()
-                                .fold(0u8, |bits, (index, &flag)| bits | (u8::from(flag) << index))
-                        })
-                        .collect(),
-                ),
-                (Packing::Bits, Some(flags)) => Buffer::U8(
-                    flags
-                        .chunks(8)
-                        .map(|chunk| {
-                            chunk.iter().enumerate().fold(0u8, |bits, (index, &flag)| {
-                                bits | (u8::from(flag) << (7 - index))
+                            .collect(),
+                    ),
+                    (Packing::FileMask, Some(flags)) => Buffer::U8(
+                        flags
+                            .chunks(8)
+                            .map(|chunk| {
+                                chunk.iter().enumerate().fold(0u8, |bits, (index, &flag)| {
+                                    bits | (u8::from(flag) << index)
+                                })
                             })
-                        })
-                        .collect(),
-                ),
-                _ => buffer.clone(),
-            })
-            .collect();
+                            .collect(),
+                    ),
+                    (Packing::Bits, Some(flags)) => Buffer::U8(
+                        flags
+                            .chunks(8)
+                            .map(|chunk| {
+                                chunk.iter().enumerate().fold(0u8, |bits, (index, &flag)| {
+                                    bits | (u8::from(flag) << (7 - index))
+                                })
+                            })
+                            .collect(),
+                    ),
+                    _ => buffer.clone(),
+                })
+                .collect();
         Batch {
             count: self.count,
             form: Form::Packed,
+            entries: self.entries,
             buffers,
         }
     }
@@ -491,7 +573,7 @@ impl Batch {
         if self.form == Form::Expanded {
             return self.clone();
         }
-        let buffers = layout()
+        let buffers = self
             .entries
             .iter()
             .zip(self.buffers.iter())
@@ -524,6 +606,7 @@ impl Batch {
         Batch {
             count: self.count,
             form: Form::Expanded,
+            entries: self.entries,
             buffers,
         }
     }
@@ -546,7 +629,7 @@ impl Batch {
         header.push_str("\"}");
 
         let mut data: Vec<u8> = Vec::new();
-        for (entry, buffer) in layout().entries.iter().zip(self.buffers.iter()) {
+        for (entry, buffer) in self.entries.iter().zip(self.buffers.iter()) {
             let bytes = buffer.bytes();
             let start = data.len();
             data.extend_from_slice(&bytes);
@@ -576,71 +659,190 @@ impl Batch {
     }
 }
 
-/// One value of the JSON form appended to `buffer`, following `kind`.
-fn push(value: &Value, kind: &FieldType, buffer: &mut Buffer) {
-    match kind {
-        FieldType::Bool => buffer.push_int(i64::from(value.as_bool().expect("a flag"))),
-        FieldType::Int { .. } => buffer.push_int(value.as_i64().expect("a whole number")),
-        FieldType::Float => match buffer {
-            Buffer::F32(values) => values.push(value.as_f64().expect("a number") as f32),
-            other => other.push_int(value.as_i64().unwrap_or_default()),
-        },
-        FieldType::Named(named) => buffer.push_int(code_of(*named, value) as i64),
-        FieldType::SquareSet => {
-            let members = value.as_array().expect("a list of square names");
-            let mut held = [false; 64];
-            for name in members {
-                held[index_in(Named::Square, name)] = true;
+/// A fact's own type, written into the array of its fact the way the layout
+/// says. Implemented for every type a fact is declared with.
+pub(crate) trait Encode {
+    fn encode(&self, out: &mut Buffer);
+}
+
+/// A value one tensor element holds: a whole number, or the code of a named
+/// value.
+pub(crate) trait Code {
+    fn code(&self) -> i64;
+}
+
+/// The fields of one facts group, each written into the next array of `out`,
+/// in the order the group declares them. Implemented by `facts_group!`.
+pub(crate) trait EncodeFields {
+    fn encode_fields(&self, out: &mut IterMut<'_, Buffer>);
+}
+
+macro_rules! int_codes {
+    ($($ty:ty),*) => {
+        $(impl Code for $ty {
+            #[inline]
+            fn code(&self) -> i64 {
+                i64::from(*self)
             }
-            for flag in held {
-                buffer.push_int(i64::from(flag));
+        })*
+    };
+}
+
+int_codes!(u8, i8, u16, i16, u32, i32);
+
+macro_rules! index_codes {
+    ($($ty:ty),*) => {
+        $(impl Code for $ty {
+            #[inline]
+            fn code(&self) -> i64 {
+                self.index() as i64
             }
+        })*
+    };
+}
+
+index_codes!(Role, File, Square);
+
+impl Code for Colour {
+    #[inline]
+    fn code(&self) -> i64 {
+        match self {
+            Colour::White => 0,
+            Colour::Black => 1,
         }
-        FieldType::FileSet => {
-            let members = value.as_array().expect("a list of file letters");
-            let mut held = [false; 8];
-            for name in members {
-                held[index_in(Named::File, name)] = true;
-            }
-            for flag in held {
-                buffer.push_int(i64::from(flag));
-            }
+    }
+}
+
+impl Code for CastledSide {
+    #[inline]
+    fn code(&self) -> i64 {
+        match self {
+            CastledSide::Short => 0,
+            CastledSide::Long => 1,
         }
-        FieldType::Optional(item) => {
-            if value.is_null() {
-                buffer.push_int(-1);
-            } else {
-                match item.as_ref() {
-                    FieldType::Named(named) => buffer.push_int(code_of(*named, value) as i64),
-                    _ => buffer.push_int(value.as_i64().expect("a whole number")),
-                }
-            }
+    }
+}
+
+impl Code for Opposition {
+    #[inline]
+    fn code(&self) -> i64 {
+        match self {
+            Opposition::Direct => 0,
+            Opposition::Distant => 1,
         }
-        FieldType::Fixed { len, item, .. } => {
-            let values = value.as_array().expect("a fixed run of values");
-            assert_eq!(values.len(), *len, "a run of the wrong length");
-            for value in values {
-                push(value, item, buffer);
-            }
+    }
+}
+
+impl Code for DrawishMaterial {
+    #[inline]
+    fn code(&self) -> i64 {
+        match self {
+            DrawishMaterial::TwoKnights => 0,
+            DrawishMaterial::WrongBishop => 1,
+            DrawishMaterial::OppositeBishops => 2,
         }
-        FieldType::ByColour(item) => {
-            for side in ["white", "black"] {
-                push(&value[side], item, buffer);
+    }
+}
+
+macro_rules! coded {
+    ($($ty:ty),*) => {
+        $(impl Encode for $ty {
+            #[inline]
+            fn encode(&self, out: &mut Buffer) {
+                out.push_int(self.code());
+            }
+        })*
+    };
+}
+
+coded!(u8, i8, u16, i16, u32, i32, Role, File, Square, Colour);
+coded!(CastledSide, Opposition, DrawishMaterial);
+
+impl Encode for bool {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        match out {
+            Buffer::Bool(values) => values.push(*self),
+            other => other.push_int(i64::from(*self)),
+        }
+    }
+}
+
+impl Encode for f32 {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        match out {
+            Buffer::F32(values) => values.push(*self),
+            other => other.push_int(*self as i64),
+        }
+    }
+}
+
+/// `width` flags, bit 0 of `bits` first.
+#[inline]
+fn push_flags(out: &mut Buffer, bits: u64, width: u32) {
+    match out {
+        Buffer::Bool(values) => values.extend((0..width).map(|bit| (bits >> bit) & 1 == 1)),
+        other => {
+            for bit in 0..width {
+                other.push_int(((bits >> bit) & 1) as i64);
             }
         }
     }
 }
 
-/// The code of a named value, its position in the list the catalogue gives.
-fn code_of(named: Named, value: &Value) -> usize {
-    index_in(named, value)
+impl Encode for SquareSet {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        push_flags(out, self.bits(), 64);
+    }
 }
 
-fn index_in(named: Named, value: &Value) -> usize {
-    let name = value.as_str().expect("a name");
-    named
-        .codes()
-        .iter()
-        .position(|code| *code == name)
-        .unwrap_or_else(|| panic!("{name} is not a {}", named.type_name()))
+impl Encode for FileSet {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        push_flags(out, u64::from(self.bits()), 8);
+    }
+}
+
+impl<T: Code> Encode for Option<T> {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        out.push_int(self.as_ref().map_or(-1, Code::code));
+    }
+}
+
+impl<T: Encode> Encode for ByColour<T> {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        self.white.encode(out);
+        self.black.encode(out);
+    }
+}
+
+impl<T: Encode> Encode for PerFile<T> {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        for value in self.iter() {
+            value.encode(out);
+        }
+    }
+}
+
+impl<T: Encode> Encode for PerRank<T> {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        for value in self.iter() {
+            value.encode(out);
+        }
+    }
+}
+
+impl<T: Encode, const N: usize> Encode for [T; N] {
+    #[inline]
+    fn encode(&self, out: &mut Buffer) {
+        for value in self {
+            value.encode(out);
+        }
+    }
 }

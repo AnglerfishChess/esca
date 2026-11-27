@@ -2,10 +2,11 @@
 
 mod common;
 
-use esca::facts::tensors::{Batch, Buffer, Form, layout};
+use esca::facts::tensors::{Batch, Buffer, Entry, Form, layout};
 use esca::facts::types::{Dtype, Packing};
-use esca::{CLASSIC, Position, Square};
+use esca::{AnnotatedMove, CHESS960, CLASSIC, MoveFacts, Position, Square, Variant};
 use rstest::rstest;
+use serde_json::Value;
 
 /// One position with a white passer on d5 and nothing but kings and pawns.
 const PASSER: &str = "8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1";
@@ -13,6 +14,36 @@ const PASSER: &str = "8/pp3ppk/8/3P4/8/8/PP3PPK/8 w - - 0 1";
 const START: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 /// A middlegame busy with attacks, pins and castling rights.
 const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+/// White may take on f6 en passant.
+const EN_PASSANT: &str = "rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3";
+/// Both sides have a pawn one step from promotion.
+const PROMOTIONS: &str = "8/1P4k1/8/8/8/8/6p1/K7 w - - 0 1";
+/// Black to move with all four castlings open.
+const CASTLINGS: &str = "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1";
+/// Bishop and knight against a bare king.
+const BISHOP_AND_KNIGHT: &str = "8/8/8/4k3/8/8/8/4KBN1 w - - 0 1";
+/// One bishop each, on opposite square colours.
+const OPPOSITE_BISHOPS: &str = "8/5k2/8/3b4/8/8/2B5/4K3 w - - 0 1";
+/// White is mated.
+const FOOLS_MATE: &str = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3";
+/// Kings in direct opposition.
+const OPPOSITION: &str = "8/8/4k3/8/4K3/8/8/8 w - - 0 1";
+/// A Chess960 start, where the back rank is not the classic one.
+const CHESS960_START: &str = "bqnbnrkr/pppppppp/8/8/8/8/PPPPPPPP/BQNBNRKR w HFhf - 0 1";
+
+/// The classic positions the agreement tests read.
+const VARIED: [&str; 10] = [
+    START,
+    PASSER,
+    KIWIPETE,
+    EN_PASSANT,
+    PROMOTIONS,
+    CASTLINGS,
+    BISHOP_AND_KNIGHT,
+    OPPOSITE_BISHOPS,
+    FOOLS_MATE,
+    OPPOSITION,
+];
 
 fn batch_of(fens: &[&str]) -> Batch {
     let positions: Vec<Position> = fens
@@ -22,23 +53,38 @@ fn batch_of(fens: &[&str]) -> Batch {
     Batch::from_positions(&positions, &CLASSIC)
 }
 
+fn moves_of(fens: &[&str]) -> Vec<AnnotatedMove> {
+    fens.iter()
+        .flat_map(|fen| common::position_of(fen).annotated_moves(&CLASSIC).to_vec())
+        .collect()
+}
+
+fn names(entries: &[Entry]) -> Vec<String> {
+    entries.iter().map(|entry| entry.name.to_string()).collect()
+}
+
 #[test]
-fn the_layout_names_every_fact_of_every_group() {
-    let mut named: Vec<String> = Vec::new();
+fn every_fact_of_every_group_has_a_layout_entry() {
+    let mut positions: Vec<String> = Vec::new();
     for group in esca::catalogue() {
-        named.extend(
+        positions.extend(
             group
                 .fields
                 .iter()
                 .map(|field| format!("{}.{}", group.name, field.name)),
         );
     }
-    let entries: Vec<String> = layout()
-        .entries
+    let moves: Vec<String> = MoveFacts::FIELDS
         .iter()
-        .map(|entry| entry.name.to_string())
+        .map(|field| format!("move.{}", field.name))
         .collect();
-    assert_eq!(entries, named);
+    assert_eq!(names(layout().positions()), positions);
+    assert_eq!(names(layout().moves()), moves);
+    assert_eq!(
+        names(&layout().entries),
+        [positions, moves].concat(),
+        "the position groups come first, then the move group"
+    );
 }
 
 #[test]
@@ -46,7 +92,8 @@ fn every_array_holds_what_the_layout_says() {
     let batch = batch_of(&[START, PASSER, KIWIPETE]);
     assert_eq!(batch.len(), 3);
     assert_eq!(batch.form(), Form::Expanded);
-    for (entry, buffer) in layout().entries.iter().zip(batch.buffers()) {
+    assert_eq!(batch.entries(), layout().positions());
+    for (entry, buffer) in batch.entries().iter().zip(batch.buffers()) {
         assert_eq!(
             buffer.dtype(),
             entry.dtype,
@@ -212,7 +259,7 @@ fn the_safetensors_header_names_every_array() {
     assert!(header.starts_with("{\"__metadata__\":"));
     assert!(header.contains("\"form\":\"expanded\""));
     assert!(header.contains("\"count\":\"2\""));
-    for entry in &layout().entries {
+    for entry in batch.entries() {
         assert!(
             header.contains(&format!("\"{}\":", entry.name)),
             "{} is missing from the header",
@@ -238,4 +285,202 @@ fn the_golden_batch_is_what_the_positions_answer() {
         include_bytes!("data/facts/batch.packed.safetensors"),
         "tests/data/facts/batch.packed.safetensors is stale: run `cargo run --example catalogue --all-features`"
     );
+}
+
+#[test]
+fn every_move_array_holds_what_the_layout_says() {
+    let moves = moves_of(&[START, KIWIPETE]);
+    // 20 legal moves at the start, 48 in Kiwipete.
+    assert_eq!(moves.len(), 68);
+    let batch = Batch::from_moves(&moves);
+    assert_eq!(batch.len(), 68);
+    assert_eq!(batch.entries(), layout().moves());
+    for (entry, buffer) in batch.entries().iter().zip(batch.buffers()) {
+        assert_eq!(buffer.dtype(), entry.dtype, "{}", entry.name);
+        assert_eq!(buffer.len(), batch.len() * entry.width(), "{}", entry.name);
+        assert_eq!(batch.shape_of(entry), vec![68], "{}", entry.name);
+    }
+}
+
+#[rstest]
+#[case::a_flag("move.gives_check", Dtype::Bool)]
+#[case::a_value("move.see", Dtype::Int(32))]
+#[case::a_named_value("move.mover", Dtype::Uint(8))]
+#[case::an_absent_value("move.victim", Dtype::Int(16))]
+fn a_move_fact_keeps_the_type_it_was_declared_with(#[case] name: &str, #[case] dtype: Dtype) {
+    let entry = layout().entry(name).expect("a fact of that name");
+    assert_eq!(entry.dtype, dtype);
+    assert_eq!(entry.shape, &[] as &[usize]);
+}
+
+#[test]
+fn a_move_batch_writes_each_move_in_turn() {
+    // Black to move, the g2 pawn one step from promotion.
+    let promotions = "8/1P4k1/8/8/8/8/6p1/K7 b - - 0 1";
+    let facts: Vec<MoveFacts> = ["g2g1q", "g2g1n", "g7f6"]
+        .iter()
+        .map(|uci| common::move_facts(promotions, uci))
+        .collect();
+    let batch = Batch::from_move_facts(&facts);
+    let Buffer::U8(movers) = batch.buffer("move.mover").expect("the movers") else {
+        panic!("a role is an unsigned byte")
+    };
+    // p = 0, k = 5.
+    assert_eq!(movers, &[0, 0, 5]);
+    let Buffer::I16(promotions) = batch.buffer("move.promotion").expect("the promotions") else {
+        panic!("an optional role is a signed 16-bit value")
+    };
+    // q = 4, n = 1, and the king move promotes nothing.
+    assert_eq!(promotions, &[4, 1, -1]);
+    let Buffer::I16(victims) = batch.buffer("move.victim").expect("the victims") else {
+        panic!("an optional role is a signed 16-bit value")
+    };
+    assert_eq!(victims, &[-1, -1, -1]);
+}
+
+#[test]
+fn the_packed_move_form_holds_the_same_facts() {
+    let batch = Batch::from_moves(&moves_of(&[START, KIWIPETE, PASSER]));
+    let packed = batch.packed();
+    assert_eq!(packed.entries(), layout().moves());
+    assert_eq!(packed.expanded(), batch);
+}
+
+#[test]
+fn the_golden_move_batch_is_what_the_moves_answer() {
+    let batch = Batch::from_moves(&moves_of(&[
+        START,
+        &START.replace(" w ", " b "),
+        KIWIPETE,
+        PASSER,
+    ]));
+    assert_eq!(
+        batch.to_safetensors(),
+        include_bytes!("data/facts/moves.safetensors"),
+        "tests/data/facts/moves.safetensors is stale: run `cargo run --example catalogue --all-features`"
+    );
+    assert_eq!(
+        batch.packed().to_safetensors(),
+        include_bytes!("data/facts/moves.packed.safetensors"),
+        "tests/data/facts/moves.packed.safetensors is stale: run `cargo run --example catalogue --all-features`"
+    );
+}
+
+/// One value of the JSON form, as the values its tensor holds: the reading of
+/// `docs/features.md` the native filler has to agree with.
+fn walked(value: &Value, kind: &Value, out: &mut Vec<f64>) {
+    let codes = |kind: &Value| -> Vec<String> {
+        kind["codes"]
+            .as_array()
+            .expect("the codes of a named value")
+            .iter()
+            .map(|code| code.as_str().expect("a code").to_string())
+            .collect()
+    };
+    let code_of = |kind: &Value, value: &Value| -> f64 {
+        let name = value.as_str().expect("a name");
+        codes(kind)
+            .iter()
+            .position(|code| code == name)
+            .expect("a known name") as f64
+    };
+    let flags = |names: &[String], value: &Value, out: &mut Vec<f64>| {
+        let held: Vec<&str> = value
+            .as_array()
+            .expect("a list of names")
+            .iter()
+            .map(|name| name.as_str().expect("a name"))
+            .collect();
+        out.extend(
+            names
+                .iter()
+                .map(|name| f64::from(u8::from(held.contains(&name.as_str())))),
+        );
+    };
+    match kind["kind"].as_str().expect("a kind") {
+        "by_colour" => {
+            walked(&value["white"], &kind["item"], out);
+            walked(&value["black"], &kind["item"], out);
+        }
+        "fixed" => {
+            for item in value.as_array().expect("a run") {
+                walked(item, &kind["item"], out);
+            }
+        }
+        "square_set" => {
+            let names: Vec<String> = Square::ALL.iter().map(Square::to_string).collect();
+            flags(&names, value, out);
+        }
+        "file_set" => {
+            let names: Vec<String> = "abcdefgh".chars().map(String::from).collect();
+            flags(&names, value, out);
+        }
+        "optional" if value.is_null() => out.push(-1.0),
+        "optional" if kind["item"]["kind"] == "named" => out.push(code_of(&kind["item"], value)),
+        "named" => out.push(code_of(kind, value)),
+        "bool" => out.push(f64::from(u8::from(value.as_bool().expect("a flag")))),
+        _ => out.push(value.as_f64().expect("a number")),
+    }
+}
+
+/// The bytes the JSON form of `items` gives the array of `entry`.
+fn walked_bytes(items: &[Value], entry: &Entry) -> Vec<u8> {
+    let kind = &entry.to_json()["kind"];
+    let mut values = Vec::new();
+    for item in items {
+        walked(&item[entry.group][entry.field], kind, &mut values);
+    }
+    values
+        .into_iter()
+        .flat_map(|value| match entry.dtype {
+            Dtype::Bool | Dtype::Uint(8) => vec![value as u8],
+            Dtype::Int(8) => vec![value as i8 as u8],
+            Dtype::Uint(16) => (value as u16).to_le_bytes().to_vec(),
+            Dtype::Int(16) => (value as i16).to_le_bytes().to_vec(),
+            Dtype::Uint(32) => (value as u32).to_le_bytes().to_vec(),
+            Dtype::Int(32) => (value as i32).to_le_bytes().to_vec(),
+            Dtype::Float32 => (value as f32).to_le_bytes().to_vec(),
+            other => panic!("no fact is {other}"),
+        })
+        .collect()
+}
+
+fn agrees_with_the_json_form(batch: &Batch, items: &[Value]) {
+    for (entry, buffer) in batch.entries().iter().zip(batch.buffers()) {
+        assert_eq!(
+            buffer.bytes(),
+            walked_bytes(items, entry),
+            "{} disagrees with its JSON form",
+            entry.name
+        );
+    }
+}
+
+#[rstest]
+#[case::classic(&CLASSIC, &VARIED)]
+#[case::chess960(&CHESS960, &[CHESS960_START, START])]
+fn every_position_array_agrees_with_the_json_form(
+    #[case] variant: &dyn Variant,
+    #[case] fens: &[&str],
+) {
+    let positions: Vec<Position> = fens.iter().map(|fen| common::position_of(fen)).collect();
+    let batch = Batch::from_positions(&positions, variant);
+    let items: Vec<Value> = positions
+        .iter()
+        .map(|position| serde_json::to_value(position.facts(variant)).expect("the facts serialise"))
+        .collect();
+    agrees_with_the_json_form(&batch, &items);
+}
+
+#[test]
+fn every_move_array_agrees_with_the_json_form() {
+    let moves = moves_of(&VARIED);
+    let batch = Batch::from_moves(&moves);
+    let items: Vec<Value> = moves
+        .iter()
+        .map(|annotated| {
+            serde_json::json!({ "move": serde_json::to_value(annotated.facts).expect("the facts serialise") })
+        })
+        .collect();
+    agrees_with_the_json_form(&batch, &items);
 }

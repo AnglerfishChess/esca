@@ -1,7 +1,7 @@
 """The compiled extension. Its public names are re-exported by `esca`."""
 
 import os
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, Final, Literal, TypedDict, final, overload
 
 __version__: Final[str]
@@ -2189,6 +2189,19 @@ class PgnReader:
 def facts_catalogue() -> list[GroupEntry]: ...
 def facts_layout() -> list[dict[str, Any]]: ...
 def move_facts_catalogue() -> list[FieldEntry]: ...
+def _facts_tensors(
+    positions: Iterable[str | Position | Game | Facts],
+    *,
+    names: Sequence[str],
+    packed: bool,
+    variant: Variant | None = None,
+) -> list[tuple[str, bytearray, str, list[int]]]: ...
+def _move_tensors(
+    moves: Iterable[AnnotatedMove | MoveFacts],
+    *,
+    names: Sequence[str],
+    packed: bool,
+) -> list[tuple[str, bytearray, str, list[int]]]: ...
 def pgn_read(
     path: str | os.PathLike[str],
     *,

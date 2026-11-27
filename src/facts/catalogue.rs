@@ -345,6 +345,18 @@ macro_rules! facts_group {
                 }
             }
         }
+
+        #[cfg(feature = "tensors")]
+        impl $crate::facts::tensors::EncodeFields for $name {
+            #[inline]
+            fn encode_fields(
+                &self,
+                out: &mut ::std::slice::IterMut<'_, $crate::facts::tensors::Buffer>,
+            ) {
+                use $crate::facts::tensors::Encode;
+                $(self.$field.encode(out.next().expect("an array per field"));)*
+            }
+        }
     };
 }
 
@@ -356,33 +368,26 @@ pub fn markdown() -> String {
     let mut out = String::from(PREAMBLE);
     for group in super::catalogue() {
         out.push_str(&format!("## `{}`\n\n{}\n\n", group.name, group.meaning()));
-        out.push_str(&table(Some(group.name), group.fields));
+        out.push_str(&table(group.name, group.fields));
         out.push('\n');
     }
     out.push_str(MOVES);
-    out.push_str(&table(None, super::MoveFacts::FIELDS));
+    out.push_str(&table(super::MoveFacts::GROUP, super::MoveFacts::FIELDS));
     out
 }
 
-/// One group's fields as a Markdown table. A group name gives every row the
-/// name its tensor array carries.
-fn table(group: Option<&str>, fields: &[Field]) -> String {
-    let mut out = match group {
-        Some(_) => String::from(
-            "| field | array | type | dtype | shape | meaning |\n\
-             | --- | --- | --- | --- | --- | --- |\n",
-        ),
-        None => String::from(
-            "| field | type | dtype | shape | meaning |\n| --- | --- | --- | --- | --- |\n",
-        ),
-    };
+/// One group's fields as a Markdown table, each row naming the tensor array
+/// the field carries.
+fn table(group: &str, fields: &[Field]) -> String {
+    let mut out = String::from(
+        "| field | array | type | dtype | shape | meaning |\n\
+         | --- | --- | --- | --- | --- | --- |\n",
+    );
     for field in fields {
-        out.push_str(&format!("| `{}` | ", field.name));
-        if let Some(group) = group {
-            out.push_str(&format!("`{group}.{}` | ", field.name));
-        }
         out.push_str(&format!(
-            "`{}` | `{}` | `{}` | {} |\n",
+            "| `{}` | `{group}.{}` | `{}` | `{}` | `{}` | {} |\n",
+            field.name,
+            field.name,
             field.type_name(),
             field.dtype(),
             shape_text(field.shape()),
@@ -454,8 +459,9 @@ format as a JSON Schema.
 ## The tensor form
 
 `esca::facts::tensors` (Rust) and `esca.tensors` (Python, with the `tensors`
-extra) turn a run of positions into one typed array per fact. The `dtype` and
-`shape` columns below are that layout, batch axis left off; nothing is scaled,
+extra) turn a run of positions, or a run of annotated moves, into one typed
+array per fact. The `dtype` and `shape` columns below are that layout, batch
+axis left off; nothing is scaled,
 normalised or cast to float. The rules, from the type alone:
 
 | fact type | dtype | shape |
@@ -477,9 +483,10 @@ bits: a `SquareSet` is one `uint64` bitboard with a1 as bit 0, a `FileSet` one
 a byte.
 
 The `array` column is the name that array carries in a batch and in a
-safetensors file: the group and the field, joined by a dot. `esca.tensors`
-lists them at runtime as `names()`, and Rust's
-`facts::tensors::layout().entries()` does the same.
+safetensors file: the group and the field, joined by a dot. A batch holds the
+arrays of the position groups or those of the `move` group, never both.
+`esca.tensors` lists them at runtime as `names()` and `names([\"move\"])`, and
+Rust's `facts::tensors::layout()` as `positions()` and `moves()`.
 
 Every group is an attribute of `Facts` in both languages, listed by
 `Facts::groups()` and read by `facts.group(name)`; `to_dict()` walks one group
@@ -494,8 +501,9 @@ const MOVES: &str = "\
 
 What one legal move does, beyond what the move itself says. The mover is the
 side to move; the enemy is the other side. Every annotated move of
-`annotated_moves()` carries these. They are not part of `Facts`, of the JSON
-form or of the tensor form, all of which describe one position rather than one
-move.
+`annotated_moves()` carries these, and its `to_dict()` is their JSON form. They
+are not part of `Facts`, which describes one position rather than one move; a
+batch of moves (`Batch::from_moves`, `esca.tensors.moves()`) holds their
+arrays, one row per move.
 
 ";

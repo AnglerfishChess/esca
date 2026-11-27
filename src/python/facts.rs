@@ -1890,7 +1890,7 @@ impl PyTacticsFacts {
 /// What one legal move does, beyond what the move itself says. The mover is the side to move; the enemy is the other side.
 #[pyclass(frozen, skip_from_py_object, module = "esca", name = "MoveFacts")]
 pub struct PyMoveFacts {
-    inner: facts::MoveFacts,
+    pub(crate) inner: facts::MoveFacts,
     /// The role captured, the pawn for an en-passant capture.
     #[pyo3(get)]
     victim: Option<String>,
@@ -2036,7 +2036,7 @@ impl PyMoveFacts {
 /// A legal move and its facts.
 #[pyclass(frozen, module = "esca", name = "AnnotatedMove")]
 pub struct PyAnnotatedMove {
-    inner: facts::AnnotatedMove,
+    pub(crate) inner: facts::AnnotatedMove,
 }
 
 impl PyAnnotatedMove {

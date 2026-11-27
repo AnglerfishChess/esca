@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased (0.4.1)
+
+Additive: nothing that compiled or imported against 0.4.0 changes meaning.
+
+### Added
+
+- Tensors for the move facts. `facts::tensors::layout()` carries a `move.*`
+  entry for each of the 27 fields of `MoveFacts`, after the position groups;
+  `Layout::positions()` and `Layout::moves()` split it.
+  `Batch::from_moves(&[AnnotatedMove])` and `Batch::from_move_facts` fill one
+  row per move, with the same dtypes, packing and safetensors form as a batch
+  of positions; Python's `esca.tensors.moves(annotated_moves)` answers with
+  the arrays `names(["move"])` lists. Every fact, position or move, is now
+  encodable.
+- `Batch::from_facts`, a batch of position facts already computed, and
+  `Batch::entries()`, the entries of the arrays a batch holds.
+- `docs/features.md` gives the `move` table the same `array` column as every
+  position group.
+
+### Changed
+
+- `esca.tensors.facts()` fills its arrays in the extension from each fact's
+  own value, where it walked the JSON form in Python: some fifteen times the
+  positions per second, at nearly the rate `Position.facts()` itself runs.
+  The arrays are the same, byte for byte. `Batch` in Rust fills the same way.
+- `esca.tensors.layout()` lists the `move` entries after the position ones;
+  `names()` without groups still lists the position arrays alone, the keys
+  `facts()` answers with.
+
 ## 0.4.0 (2026-09-11)
 
 The largest release so far, and a breaking one: nearly every public name

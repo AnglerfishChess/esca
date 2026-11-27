@@ -41,7 +41,7 @@ Cargo features:
 | `polyglot` | no | The `polyglot` module: opening books read, picked from and built. |
 | `openings` | no | The `openings` module: the bundled ECO code and name of a position. |
 | `serde` | no | `Serialize` for the facts and the board vocabulary, `Serialize`/`Deserialize` for `Position` and `Move`, and `facts::schema::json_schema()`. |
-| `tensors` | no | `facts::tensors`: a run of positions as one typed array per fact. Implies `serde`. |
+| `tensors` | no | `facts::tensors`: a run of positions, or of annotated moves, as one typed array per fact. Implies `serde`. |
 
 `Position::polyglot_key` needs no feature: the key is part of the position,
 and the `polyglot` and `openings` modules are indexed by it.
@@ -821,7 +821,10 @@ facts.pawns.to_dict()["count_by_file"]  # {"white": [1, 1, 0, 1, 0, 1, 1, 0], �
 
 One typed array per fact, batch axis first. A fact keeps the width and sign it
 was declared with; nothing is scaled, normalised or cast to a float, and no
-value is written in the mover's view.
+value is written in the mover's view. A batch holds positions, one array per
+fact of the position groups, or annotated moves, one array per fact of the
+`move` group; never both. Each array is filled from the fact's own value, not
+from its JSON form.
 
 | fact type | dtype | shape |
 |---|---|---|
@@ -846,8 +849,13 @@ use esca::facts::tensors::{Batch, Form, layout};
 
 pub fn layout() -> &'static Layout;      // one Entry per fact, in declaration order
 
+impl Layout {
+    pub fn positions(&self) -> &[Entry];  // the position groups' entries
+    pub fn moves(&self) -> &[Entry];      // the `move` group's, after them
+}
+
 pub struct Entry {
-    pub name: &'static str,        // "pawns.passed"
+    pub name: &'static str,        // "pawns.passed", "move.see"
     pub group: &'static str,
     pub field: &'static str,
     pub declared: &'static str,    // "ByColour<SquareSet>"
@@ -863,9 +871,14 @@ pub struct Entry {
 impl Batch {
     pub fn from_positions(positions: &[Position], variant: &dyn Variant) -> Batch;
     pub fn from_games(games: &[Game]) -> Batch;
+    pub fn from_facts<'a>(facts: impl IntoIterator<Item = &'a Facts>) -> Batch;
+    pub fn from_moves(moves: &[AnnotatedMove]) -> Batch;
+    pub fn from_move_facts<'a>(facts: impl IntoIterator<Item = &'a MoveFacts>) -> Batch;
     pub fn len(&self) -> usize;
     pub fn form(&self) -> Form;
     pub fn layout(&self) -> &'static Layout;
+    /// `layout().positions()` or `layout().moves()`, in the order of `buffers()`.
+    pub fn entries(&self) -> &'static [Entry];
     pub fn buffer(&self, name: &str) -> Option<&Buffer>;
     /// The shape one array has in this form, batch axis included.
     pub fn shape_of(&self, entry: &Entry) -> Vec<usize>;
@@ -875,20 +888,21 @@ impl Batch {
 }
 ```
 
-**The batch axis.** `Entry::shape` is one position's value, batch axis left
+**The batch axis.** `Entry::shape` is one item's value, batch axis left
 off; `Batch::shape_of` is the array as it is stored, batch axis included. A
 `ByColour<SquareSet>` is `shape` `(2, 64)` and `shape_of` `(n, 2, 64)`.
 `Entry::order` names the axes of the stored array, so it counts the batch axis
 as axis 0 and starts at 1: "axis 1: white, black; axis 2: the 64 squares".
 The Python `layout()` entries carry the same `shape` and `order`, and the
-arrays `facts()` answers with are the `shape_of` ones.
+arrays `facts()` and `moves()` answer with are the `shape_of` ones.
 
 ```python
 import esca.tensors as tensors
 
-tensors.names()  # every array name, "group.field", in declaration order
+tensors.names()  # every position array name, "group.field", in declaration order
 tensors.names(["pawns"])  # the names of one group
-tensors.layout()  # the same entries, as dicts, each with its `kind` type tree
+tensors.names(["move"])  # the move array names, "move.field"
+tensors.layout()  # every entry, positions then moves, as dicts with a `kind` type tree
 arrays = tensors.facts(fens_or_games, groups=["pawns"], layout="expanded")
 arrays["pawns.passed"].shape  # (n, 2, 64), dtype bool
 arrays["pawns.count_by_file"][0, 0]  # array([1, 1, 0, 1, 0, 1, 1, 0], dtype=uint8)
@@ -896,6 +910,10 @@ arrays["pawns.count_by_file"][0, 0]  # array([1, 1, 0, 1, 0, 1, 1, 0], dtype=uin
 packed = tensors.facts(fens, layout="packed")
 packed["pawns.passed"].dtype  # uint64, one bitboard per side
 tensors.expand(packed, len(fens))  # back to one value per element
+
+moves = [m for fen in fens for m in esca.Position.from_fen(fen).annotated_moves()]
+per_move = tensors.moves(moves)  # AnnotatedMoves or MoveFacts, one row each
+per_move["move.see"].shape  # (len(moves),), dtype int32
 
 tensors.save(arrays, path, metadata={"count": "2", "form": "expanded"})
 tensors.load(path)  # {name: ndarray}
@@ -905,8 +923,9 @@ tensors.metadata(path)
 The safetensors writing and reading are the format itself — an eight-byte
 header length, a JSON header, then the raw bytes — written by hand on both
 sides, so neither the crate nor the wheel takes a dependency for it. A Rust
-test writes `tests/data/facts/batch.safetensors` and the Python suite reads it
-back and recomputes it, so the two agree on every byte.
+test writes `tests/data/facts/batch.safetensors` and `moves.safetensors` and
+the Python suite reads them back and recomputes them, so the two agree on every
+byte.
 
 ---
 

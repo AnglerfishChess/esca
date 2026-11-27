@@ -11,6 +11,8 @@
 //!   `tests/data/facts/positions.json`.
 //! - `tests/data/facts/batch.safetensors` and `batch.packed.safetensors`, the
 //!   same positions as tensors.
+//! - `tests/data/facts/moves.safetensors` and `moves.packed.safetensors`, the
+//!   annotated moves of those positions as tensors.
 //!
 //! Tests in both languages fail whenever a committed file and the live
 //! catalogue disagree.
@@ -54,6 +56,20 @@ fn main() {
     );
     write_bytes(
         &root.join("tests/data/facts/batch.packed.safetensors"),
+        batch.packed().to_safetensors(),
+    );
+
+    let moves: Vec<esca::AnnotatedMove> = positions
+        .iter()
+        .flat_map(|position| position.annotated_moves(esca::classic().as_ref()).to_vec())
+        .collect();
+    let batch = tensors::Batch::from_moves(&moves);
+    write_bytes(
+        &root.join("tests/data/facts/moves.safetensors"),
+        batch.to_safetensors(),
+    );
+    write_bytes(
+        &root.join("tests/data/facts/moves.packed.safetensors"),
         batch.packed().to_safetensors(),
     );
 }

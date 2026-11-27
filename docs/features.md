@@ -43,8 +43,9 @@ format as a JSON Schema.
 ## The tensor form
 
 `esca::facts::tensors` (Rust) and `esca.tensors` (Python, with the `tensors`
-extra) turn a run of positions into one typed array per fact. The `dtype` and
-`shape` columns below are that layout, batch axis left off; nothing is scaled,
+extra) turn a run of positions, or a run of annotated moves, into one typed
+array per fact. The `dtype` and `shape` columns below are that layout, batch
+axis left off; nothing is scaled,
 normalised or cast to float. The rules, from the type alone:
 
 | fact type | dtype | shape |
@@ -66,9 +67,10 @@ bits: a `SquareSet` is one `uint64` bitboard with a1 as bit 0, a `FileSet` one
 a byte.
 
 The `array` column is the name that array carries in a batch and in a
-safetensors file: the group and the field, joined by a dot. `esca.tensors`
-lists them at runtime as `names()`, and Rust's
-`facts::tensors::layout().entries()` does the same.
+safetensors file: the group and the field, joined by a dot. A batch holds the
+arrays of the position groups or those of the `move` group, never both.
+`esca.tensors` lists them at runtime as `names()` and `names(["move"])`, and
+Rust's `facts::tensors::layout()` as `positions()` and `moves()`.
 
 Every group is an attribute of `Facts` in both languages, listed by
 `Facts::groups()` and read by `facts.group(name)`; `to_dict()` walks one group
@@ -398,36 +400,37 @@ The square sets a reader most often wants side by side: what each side attacks, 
 
 What one legal move does, beyond what the move itself says. The mover is the
 side to move; the enemy is the other side. Every annotated move of
-`annotated_moves()` carries these. They are not part of `Facts`, of the JSON
-form or of the tensor form, all of which describe one position rather than one
-move.
+`annotated_moves()` carries these, and its `to_dict()` is their JSON form. They
+are not part of `Facts`, which describes one position rather than one move; a
+batch of moves (`Batch::from_moves`, `esca.tensors.moves()`) holds their
+arrays, one row per move.
 
-| field | type | dtype | shape | meaning |
-| --- | --- | --- | --- | --- |
-| `victim` | `Option<Role>` | `int16` | `()` | The role captured, the pawn for an en-passant capture. |
-| `mover` | `Role` | `uint8` | `()` | The role that moves. |
-| `promotion` | `Option<Role>` | `int16` | `()` | The role a promoting pawn becomes. |
-| `gives_check` | `bool` | `bool` | `()` | The move gives check. |
-| `gives_safe_check` | `bool` | `bool` | `()` | The move gives check and its destination is safe. |
-| `is_safe` | `bool` | `bool` | `()` | The destination is a safe destination. |
-| `captures_hanging` | `bool` | `bool` | `()` | The move captures a hanging unit. |
-| `escapes_attack` | `bool` | `bool` | `()` | The origin is attacked by the enemy and the destination is safe. |
-| `to_attacked_by_pawn` | `bool` | `bool` | `()` | The destination is attacked by an enemy pawn. |
-| `is_castling` | `bool` | `bool` | `()` | The move is a castling. |
-| `is_en_passant` | `bool` | `bool` | `()` | The move is an en-passant capture. |
-| `see` | `i32` | `int32` | `()` | The static exchange evaluation of the move, signed. |
-| `threat_created_max` | `i32` | `int32` | `()` | The largest static exchange evaluation of one of the enemy's units after the move; 0 when the move threatens nothing. |
-| `moves_attacked_unit` | `bool` | `bool` | `()` | The origin is attacked by the enemy. |
-| `blocks_check` | `bool` | `bool` | `()` | The destination interposes on the ray of the one unit giving check. |
-| `advances_passer` | `bool` | `bool` | `()` | The moved unit is a passed pawn. |
-| `creates_passer` | `bool` | `bool` | `()` | The mover has more passers after the move than before. |
-| `creates_isolated` | `bool` | `bool` | `()` | The mover has more isolated pawns after the move than before. |
-| `creates_doubled` | `bool` | `bool` | `()` | The mover has more doubled pawns after the move than before. |
-| `creates_backward` | `bool` | `bool` | `()` | The mover has more backward pawns after the move than before. |
-| `opens_file_at_enemy_king` | `bool` | `bool` | `()` | One of the enemy king's shield files carried a pawn of the mover's and carries none after. |
-| `enemy_king_attackers_delta` | `i32` | `int32` | `()` | Change in the number of the mover's units attacking the enemy king ring. |
-| `mover_king_attackers_delta` | `i32` | `int32` | `()` | Change in the number of the enemy's units attacking the mover's king ring. |
-| `mover_hanging_delta` | `i32` | `int32` | `()` | Change in the number of the mover's hanging units. |
-| `enemy_hanging_delta` | `i32` | `int32` | `()` | Change in the number of the enemy's hanging units. |
-| `leaves_unit_hanging` | `bool` | `bool` | `()` | A square carries a hanging unit of the mover's worth 3 or more after the move and carried none before. |
-| `gives_discovered_attack` | `bool` | `bool` | `()` | A slider of the mover's that the move leaves standing gains an attack on an enemy unit worth 3 or more. |
+| field | array | type | dtype | shape | meaning |
+| --- | --- | --- | --- | --- | --- |
+| `victim` | `move.victim` | `Option<Role>` | `int16` | `()` | The role captured, the pawn for an en-passant capture. |
+| `mover` | `move.mover` | `Role` | `uint8` | `()` | The role that moves. |
+| `promotion` | `move.promotion` | `Option<Role>` | `int16` | `()` | The role a promoting pawn becomes. |
+| `gives_check` | `move.gives_check` | `bool` | `bool` | `()` | The move gives check. |
+| `gives_safe_check` | `move.gives_safe_check` | `bool` | `bool` | `()` | The move gives check and its destination is safe. |
+| `is_safe` | `move.is_safe` | `bool` | `bool` | `()` | The destination is a safe destination. |
+| `captures_hanging` | `move.captures_hanging` | `bool` | `bool` | `()` | The move captures a hanging unit. |
+| `escapes_attack` | `move.escapes_attack` | `bool` | `bool` | `()` | The origin is attacked by the enemy and the destination is safe. |
+| `to_attacked_by_pawn` | `move.to_attacked_by_pawn` | `bool` | `bool` | `()` | The destination is attacked by an enemy pawn. |
+| `is_castling` | `move.is_castling` | `bool` | `bool` | `()` | The move is a castling. |
+| `is_en_passant` | `move.is_en_passant` | `bool` | `bool` | `()` | The move is an en-passant capture. |
+| `see` | `move.see` | `i32` | `int32` | `()` | The static exchange evaluation of the move, signed. |
+| `threat_created_max` | `move.threat_created_max` | `i32` | `int32` | `()` | The largest static exchange evaluation of one of the enemy's units after the move; 0 when the move threatens nothing. |
+| `moves_attacked_unit` | `move.moves_attacked_unit` | `bool` | `bool` | `()` | The origin is attacked by the enemy. |
+| `blocks_check` | `move.blocks_check` | `bool` | `bool` | `()` | The destination interposes on the ray of the one unit giving check. |
+| `advances_passer` | `move.advances_passer` | `bool` | `bool` | `()` | The moved unit is a passed pawn. |
+| `creates_passer` | `move.creates_passer` | `bool` | `bool` | `()` | The mover has more passers after the move than before. |
+| `creates_isolated` | `move.creates_isolated` | `bool` | `bool` | `()` | The mover has more isolated pawns after the move than before. |
+| `creates_doubled` | `move.creates_doubled` | `bool` | `bool` | `()` | The mover has more doubled pawns after the move than before. |
+| `creates_backward` | `move.creates_backward` | `bool` | `bool` | `()` | The mover has more backward pawns after the move than before. |
+| `opens_file_at_enemy_king` | `move.opens_file_at_enemy_king` | `bool` | `bool` | `()` | One of the enemy king's shield files carried a pawn of the mover's and carries none after. |
+| `enemy_king_attackers_delta` | `move.enemy_king_attackers_delta` | `i32` | `int32` | `()` | Change in the number of the mover's units attacking the enemy king ring. |
+| `mover_king_attackers_delta` | `move.mover_king_attackers_delta` | `i32` | `int32` | `()` | Change in the number of the enemy's units attacking the mover's king ring. |
+| `mover_hanging_delta` | `move.mover_hanging_delta` | `i32` | `int32` | `()` | Change in the number of the mover's hanging units. |
+| `enemy_hanging_delta` | `move.enemy_hanging_delta` | `i32` | `int32` | `()` | Change in the number of the enemy's hanging units. |
+| `leaves_unit_hanging` | `move.leaves_unit_hanging` | `bool` | `bool` | `()` | A square carries a hanging unit of the mover's worth 3 or more after the move and carried none before. |
+| `gives_discovered_attack` | `move.gives_discovered_attack` | `bool` | `bool` | `()` | A slider of the mover's that the move leaves standing gains an attack on an enemy unit worth 3 or more. |

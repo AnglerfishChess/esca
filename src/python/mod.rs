@@ -15,6 +15,7 @@ mod openings;
 mod pgn;
 #[cfg(feature = "polyglot")]
 mod polyglot;
+mod tensors;
 #[cfg(feature = "uci")]
 mod uci;
 mod values;
@@ -79,6 +80,8 @@ fn esca_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(facts::facts_catalogue, module)?)?;
     module.add_function(wrap_pyfunction!(facts::move_facts_catalogue, module)?)?;
     module.add_function(wrap_pyfunction!(facts::facts_layout, module)?)?;
+    module.add_function(wrap_pyfunction!(tensors::facts_tensors, module)?)?;
+    module.add_function(wrap_pyfunction!(tensors::move_tensors, module)?)?;
 
     #[cfg(feature = "pgn")]
     {

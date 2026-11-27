@@ -1,4 +1,4 @@
-"""The facts of many positions as one typed array per fact.
+"""The facts of many positions, or of many moves, as one typed array per fact.
 
 Every fact keeps the type it was declared with: a count is an integer of its
 own width, a flag is a `bool`, a set of squares is 64 flags. Nothing is scaled,
@@ -6,8 +6,9 @@ normalised or cast to a float, and nothing is written in the mover's view — th
 leading axis of a per-colour fact is White then Black, always.
 
 `names()` is every array name, `layout()` says what each array is called, what
-it holds and how to read its axes, and `facts()` is the arrays themselves,
-batch axis first. `save()` and
+it holds and how to read its axes, `facts()` is the arrays of a run of
+positions and `moves()` those of a run of annotated moves, batch axis first.
+`save()` and
 `load()` write and read the safetensors format — a JSON header naming each
 array, then the raw bytes — which NumPy and PyTorch both read.
 
@@ -21,7 +22,9 @@ import os
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Literal
 
-from ._esca import Facts, Game, Position, Variant, facts_layout
+from ._esca import AnnotatedMove, Facts, Game, MoveFacts, Position, Variant, facts_layout
+from ._esca import _facts_tensors as _native_facts
+from ._esca import _move_tensors as _native_moves
 
 try:
     import numpy as np
@@ -37,6 +40,7 @@ __all__ = [
     "layout",
     "load",
     "metadata",
+    "moves",
     "names",
     "pack",
     "save",
@@ -76,14 +80,15 @@ SQUARES: tuple[str, ...] = tuple(f"{file}{rank}" for rank in "12345678" for file
 #: Every file, a first: the order a file-set plane is written in.
 FILES: tuple[str, ...] = tuple("abcdefgh")
 
-_SQUARE_INDEX = {name: index for index, name in enumerate(SQUARES)}
-_FILE_INDEX = {name: index for index, name in enumerate(FILES)}
+#: The group of the per-move facts.
+_MOVE = "move"
 
 _LAYOUT: list[dict[str, Any]] | None = None
 
 
 def layout() -> list[dict[str, Any]]:
-    """One entry per fact, in the order the groups declare them.
+    """One entry per fact, in the order the groups declare them: the position
+    groups first, then the `move` group.
 
     Each entry carries the array's `name` (`group.field`), its `dtype` and
     `shape` with the batch axis left off, an `order` note naming every axis,
@@ -97,18 +102,20 @@ def layout() -> list[dict[str, Any]]:
 
 
 def names(groups: Sequence[str] | None = None) -> list[str]:
-    """Every array name, `group.field`, in the order the groups declare them.
+    """The array names of the named groups, `group.field`, in the order the
+    groups declare them; every position group's where `groups` is `None`.
 
-    These are the keys `facts()` answers with and the names a safetensors file
-    carries. `docs/features.md` lists them in its `array` column.
+    These are the keys `facts()` answers with, `["move"]` naming the keys of
+    `moves()`, and the names a safetensors file carries. `docs/features.md`
+    lists them in its `array` column.
     """
     return [entry["name"] for entry in _entries(groups)]
 
 
 def _entries(groups: Sequence[str] | None) -> list[dict[str, Any]]:
-    """The layout entries of the named groups, or of every group."""
+    """The layout entries of the named groups, or of every position group."""
     if groups is None:
-        return layout()
+        return [entry for entry in layout() if entry["group"] != _MOVE]
     wanted = set(groups)
     named = {entry["group"] for entry in layout()}
     unknown = sorted(wanted - named)
@@ -117,49 +124,12 @@ def _entries(groups: Sequence[str] | None) -> list[dict[str, Any]]:
     return [entry for entry in layout() if entry["group"] in wanted]
 
 
-def _facts_of(item: str | Position | Game | Facts, variant: Variant | None) -> Facts:
-    """The facts of one position, however it was named."""
-    if isinstance(item, Facts):
-        return item
-    if isinstance(item, str):
-        item = Position.from_fen(item)
-    if isinstance(item, Position):
-        return item.facts(variant=variant) if variant is not None else item.facts()
-    if isinstance(item, Game):
-        return item.facts()
-    raise TypeError(f"not a position, game or facts: {item!r}")
-
-
-def _push(value: Any, kind: Mapping[str, Any], out: list[Any]) -> None:
-    """One value of the JSON form appended to `out`, following its type."""
-    what = kind["kind"]
-    if what == "by_colour":
-        _push(value["white"], kind["item"], out)
-        _push(value["black"], kind["item"], out)
-    elif what == "fixed":
-        for item in value:
-            _push(item, kind["item"], out)
-    elif what == "square_set":
-        held = [False] * 64
-        for square in value:
-            held[_SQUARE_INDEX[square]] = True
-        out.extend(held)
-    elif what == "file_set":
-        held = [False] * 8
-        for file in value:
-            held[_FILE_INDEX[file]] = True
-        out.extend(held)
-    elif what == "optional":
-        if value is None:
-            out.append(-1)
-        elif kind["item"]["kind"] == "named":
-            out.append(kind["item"]["codes"].index(value))
-        else:
-            out.append(value)
-    elif what == "named":
-        out.append(kind["codes"].index(value))
-    else:
-        out.append(value)
+def _arrays(raw: list[tuple[str, bytearray, str, list[int]]]) -> dict[str, np.ndarray]:
+    """The arrays the extension filled, as NumPy arrays, in the order given."""
+    return {
+        name: np.frombuffer(data, dtype=np.dtype(_DTYPES[dtype]).newbyteorder("<")).reshape(shape)
+        for name, data, dtype, shape in raw
+    }
 
 
 def facts(
@@ -169,33 +139,39 @@ def facts(
     layout: Literal["expanded", "packed"] = "expanded",
     variant: Variant | None = None,
 ) -> dict[str, np.ndarray]:
-    """One array per fact over `positions`, batch axis first.
+    """One array per position fact over `positions`, batch axis first.
 
     `positions` holds FEN strings, `Position`s, `Game`s or `Facts`, in any
     mixture; a `Game` brings the history facts its plies give it. `groups`
-    narrows the answer to the named groups, `variant` names the rules a FEN or
-    a position is read under, and `layout` chooses the form: `"expanded"` is
-    one value per element, `"packed"` the same facts as bits.
+    narrows the answer to the named position groups, `variant` names the rules
+    a FEN or a position is read under, and `layout` chooses the form:
+    `"expanded"` is one value per element, `"packed"` the same facts as bits.
 
     The keys are the array names `names()` lists: the group and the field,
     joined by a dot, as in `"pawns.passed"`.
     """
     if layout not in ("expanded", "packed"):
         raise ValueError(f'a layout is "expanded" or "packed", not {layout!r}')
-    entries = _entries(groups)
-    columns: dict[str, list[Any]] = {entry["name"]: [] for entry in entries}
-    count = 0
-    for item in positions:
-        written: dict[str, Any] = dict(_facts_of(item, variant).to_dict())
-        for entry in entries:
-            _push(written[entry["group"]][entry["field"]], entry["kind"], columns[entry["name"]])
-        count += 1
+    if groups is not None and _MOVE in groups:
+        raise ValueError("the move group is per move, not per position: tensors.moves()")
+    wanted = names(groups)
+    return _arrays(_native_facts(positions, names=wanted, packed=layout == "packed", variant=variant))
 
-    arrays = {
-        entry["name"]: np.array(columns[entry["name"]], dtype=_DTYPES[entry["dtype"]]).reshape((count, *entry["shape"]))
-        for entry in entries
-    }
-    return pack(arrays) if layout == "packed" else arrays
+
+def moves(
+    moves: Iterable[AnnotatedMove | MoveFacts],
+    *,
+    layout: Literal["expanded", "packed"] = "expanded",
+) -> dict[str, np.ndarray]:
+    """One array per move fact over `moves`, batch axis first.
+
+    `moves` holds `AnnotatedMove`s, as `annotated_moves()` gives them, or
+    `MoveFacts`, in any mixture, one row each. `layout` chooses the form as
+    `facts()` does. The keys are `names(["move"])`, as in `"move.see"`.
+    """
+    if layout not in ("expanded", "packed"):
+        raise ValueError(f'a layout is "expanded" or "packed", not {layout!r}')
+    return _arrays(_native_moves(moves, names=names([_MOVE]), packed=layout == "packed"))
 
 
 def _packing(entry: Mapping[str, Any]) -> str:
@@ -234,7 +210,8 @@ def pack(arrays: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
 
 
 def expand(arrays: Mapping[str, np.ndarray], count: int) -> dict[str, np.ndarray]:
-    """The packed arrays of `count` positions back to one value per element."""
+    """The packed arrays of `count` positions, or of `count` moves, back to one
+    value per element."""
     known = {entry["name"]: entry for entry in layout()}
     out: dict[str, np.ndarray] = {}
     for name, array in arrays.items():

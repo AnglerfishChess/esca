@@ -654,7 +654,7 @@ type Pickled<'py> = (
 /// A variant, a start position and the moves played from it.
 #[pyclass(module = "esca", name = "Game")]
 pub struct PyGame {
-    inner: Game,
+    pub(crate) inner: Game,
     variant: PyVariant,
 }
 
