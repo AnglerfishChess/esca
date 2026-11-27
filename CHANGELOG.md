@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.4.1)
+## 0.4.1 (2026-11-27)
 
 Additive: nothing that compiled or imported against 0.4.0 changes meaning.
 

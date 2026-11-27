@@ -1,6 +1,6 @@
 [project]
 name = "chess-esca-mcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "An MCP server over the esca chess library: rules, facts, explanations, openings and PGN, with no engine"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     # The version this server is released with; one tag ships both.
-    "esca==0.4.0",
+    "esca==0.4.1",
     "mcp>=1.28.1,<2.0.0",
 ]
 
