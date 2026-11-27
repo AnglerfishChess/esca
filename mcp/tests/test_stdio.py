@@ -1,12 +1,15 @@
 """The server as a client meets it: a stdio handshake, then a tool listing."""
 
 import json
+import platform
 import subprocess
 import sys
+from importlib.metadata import version
 
+import esca
 import pytest
 
-from chess_esca_mcp import server
+from chess_esca_mcp import __version__, server
 
 #: What the server must offer once it is up. A listing promises no order, so
 #: the names are compared as a set.
@@ -83,7 +86,7 @@ def test_the_server_completes_a_handshake_and_lists_its_tools(client):
             "clientInfo": {"name": "chess-esca-mcp tests", "version": "0"},
         },
     )
-    assert initialised["result"]["serverInfo"]["name"] == "chess-esca"
+    assert initialised["result"]["serverInfo"] == {"name": "chess-esca", "version": __version__}
     client.notify("notifications/initialized")
 
     listed = client.send("tools/list")["result"]["tools"]
@@ -115,13 +118,34 @@ def test_the_facts_catalogue_is_served_as_a_resource(client):
     client.notify("notifications/initialized")
 
     listed = client.send("resources/list")
-    assert [resource["uri"] for resource in listed["result"]["resources"]] == ["esca://facts-catalogue"]
+    assert sorted(resource["uri"] for resource in listed["result"]["resources"]) == [
+        "esca://about",
+        "esca://facts-catalogue",
+    ]
 
     read = client.send("resources/read", {"uri": "esca://facts-catalogue"})
     # One resource read, one content block.
     assert len(read["result"]["contents"]) == 1
     catalogue = json.loads(read["result"]["contents"][0]["text"])
     assert catalogue == server.facts_catalogue()
+
+
+def test_the_versions_are_served_as_a_resource(client):
+    client.send(
+        "initialize",
+        {"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}},
+    )
+    client.notify("notifications/initialized")
+
+    read = client.send("resources/read", {"uri": "esca://about"})
+    [content] = read["result"]["contents"]
+    assert content["mimeType"] == "application/json"
+    assert json.loads(content["text"]) == {
+        "chess_esca_mcp": __version__,
+        "esca": esca.__version__,
+        "mcp": version("mcp"),
+        "python": platform.python_version(),
+    }
 
 
 def test_the_analysis_prompt_is_served(client):

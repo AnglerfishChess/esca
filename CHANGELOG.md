@@ -18,6 +18,9 @@ Additive: nothing that compiled or imported against 0.4.0 changes meaning.
   `Batch::entries()`, the entries of the arrays a batch holds.
 - `docs/features.md` gives the `move` table the same `array` column as every
   position group.
+- chess-esca-mcp: `initialize` reports the server's own version, and the
+  `esca://about` resource names the versions of the server, of esca, of the
+  MCP SDK and of Python.
 
 ### Changed
 

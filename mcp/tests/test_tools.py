@@ -3,6 +3,7 @@
 import esca
 import pytest
 
+import chess_esca_mcp
 from chess_esca_mcp import server
 from tests import positions
 
@@ -704,6 +705,12 @@ class TestCatalogueAndPrompt:
         assert "see" in names
         assert "gives_check" in names
         assert catalogue["types"]["ByColour"]
+
+    def test_about_names_every_version_it_runs_with(self):
+        about = server.about()
+        assert list(about) == ["chess_esca_mcp", "esca", "mcp", "python"]
+        assert about["chess_esca_mcp"] == chess_esca_mcp.__version__
+        assert about["esca"] == esca.__version__
 
     def test_the_prompt_names_the_position_and_the_tools(self):
         text = server.analyse_position(fen=positions.START, moves="e4 e5")

@@ -1,13 +1,15 @@
-"""The tools, the facts-catalogue resource and the analysis prompt.
+"""The tools, the facts-catalogue and about resources, and the analysis prompt.
 
 Every tool reads: nothing on the machine is written and nothing off it is
 fetched. An answer is a JSON object, and a call that names no position, no
 move or no game answers `{"error": {...}}` carrying the evidence to fix it.
 """
 
+import platform
 import re
 from collections.abc import Callable
 from functools import wraps
+from importlib.metadata import version as installed_version
 from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import esca
@@ -15,6 +17,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from chess_esca_mcp import __version__
 from chess_esca_mcp import facts as facts_module
 from chess_esca_mcp import rendering as render
 from chess_esca_mcp.positions import (
@@ -30,6 +33,9 @@ if TYPE_CHECKING:
     from esca._esca import ColourName, Square
 
 mcp = FastMCP("chess-esca")
+# FastMCP 1.x takes no version and reports the mcp SDK's own; the low-level
+# server it wraps carries the one `initialize` answers with.
+mcp._mcp_server.version = __version__
 
 #: The categories `legal_moves` sorts a position's moves into.
 MOVE_CATEGORIES = ("captures", "checks", "castling", "promotions", "en_passant", "quiet")
@@ -783,6 +789,23 @@ def facts_catalogue() -> dict:
     definitions, so it says what the tool actually answers.
     """
     return facts_module.catalogue()
+
+
+@mcp.resource(
+    "esca://about",
+    name="about chess-esca-mcp",
+    description="The versions of this server, of the esca library it serves, of the MCP SDK and of Python.",
+    mime_type="application/json",
+)
+def about() -> dict[str, str]:
+    """The versions this server runs with: `chess_esca_mcp`, `esca`, `mcp` and
+    `python`."""
+    return {
+        "chess_esca_mcp": __version__,
+        "esca": esca.__version__,
+        "mcp": installed_version("mcp"),
+        "python": platform.python_version(),
+    }
 
 
 @mcp.prompt(
